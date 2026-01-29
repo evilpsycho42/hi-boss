@@ -11,6 +11,7 @@ import {
   setAgentSessionPolicy,
   bindAgent,
   unbindAgent,
+  runBackground,
   runSetup,
 } from "./commands/index.js";
 
@@ -189,6 +190,18 @@ agent
       sessionIdleTimeout: options.sessionIdleTimeout,
       sessionMaxTokens: options.sessionMaxTokens,
       clear: options.clear,
+    });
+  });
+
+agent
+  .command("background")
+  .description("Run a non-interactive background task as this agent")
+  .requiredOption("--token <token>", "Agent token")
+  .requiredOption("--task <text>", "Task text")
+  .action((options) => {
+    return runBackground({
+      token: options.token,
+      task: options.task,
     });
   });
 

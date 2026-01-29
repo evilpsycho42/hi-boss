@@ -98,6 +98,21 @@ export interface AgentRefreshParams {
   agentName: string;
 }
 
+export interface AgentSelfParams {
+  token: string;
+}
+
+export interface AgentSelfResult {
+  agent: {
+    name: string;
+    provider: 'claude' | 'codex';
+    workspace: string;
+    model?: string;
+    reasoningEffort: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
+    autoLevel: 'low' | 'medium' | 'high';
+  };
+}
+
 export interface AgentSessionPolicySetParams {
   agentName: string;
   sessionDailyResetAt?: string;

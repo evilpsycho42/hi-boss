@@ -50,6 +50,7 @@ Agents:
 - `agent.bind`
 - `agent.unbind`
 - `agent.refresh` (requests a session refresh)
+- `agent.self` (resolve `token` → current agent config)
 - `agent.session-policy.set`
 
 Daemon:
@@ -65,4 +66,3 @@ Setup:
 Boss:
 
 - `boss.verify`
-
