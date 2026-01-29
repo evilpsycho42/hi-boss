@@ -225,6 +225,31 @@ export class HiBossDatabase {
   }
 
   /**
+   * Set agent permission level stored in metadata.permissionLevel.
+   *
+   * Notes:
+   * - Preserves existing metadata fields.
+   * - Uses the canonical agent name (case-insensitive lookup).
+   */
+  setAgentPermissionLevel(
+    name: string,
+    permissionLevel: "restricted" | "standard" | "privileged"
+  ): { success: true; agentName: string; permissionLevel: string } {
+    const agent = this.getAgentByNameCaseInsensitive(name);
+    if (!agent) {
+      throw new Error("Agent not found");
+    }
+
+    const existing = agent.metadata;
+    const base =
+      typeof existing === "object" && existing !== null ? (existing as Record<string, unknown>) : {};
+    const next: Record<string, unknown> = { ...base, permissionLevel };
+
+    this.updateAgentMetadata(agent.name, next);
+    return { success: true, agentName: agent.name, permissionLevel };
+  }
+
+  /**
    * Update agent session policy stored in metadata.sessionPolicy.
    *
    * Notes:

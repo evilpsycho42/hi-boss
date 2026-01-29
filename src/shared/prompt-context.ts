@@ -91,6 +91,14 @@ interface ChannelMetadata {
   chat: { id: string; name?: string };
 }
 
+function getFromNameOverride(metadata: unknown): string | undefined {
+  if (typeof metadata !== "object" || metadata === null) return undefined;
+  const m = metadata as Record<string, unknown>;
+  if (typeof m.fromName !== "string") return undefined;
+  const trimmed = m.fromName.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 function isChannelMetadata(metadata: unknown): metadata is ChannelMetadata {
   if (typeof metadata !== "object" || metadata === null) return false;
   const m = metadata as Record<string, unknown>;
@@ -109,6 +117,8 @@ function isChannelMetadata(metadata: unknown): metadata is ChannelMetadata {
 
 function buildSemanticFrom(envelope: Envelope): string | undefined {
   const metadata = envelope.metadata;
+  const override = getFromNameOverride(metadata);
+  if (override) return override;
   if (!isChannelMetadata(metadata)) return undefined;
 
   const { author, chat } = metadata;

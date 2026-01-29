@@ -1,6 +1,6 @@
 import { getDefaultConfig, getSocketPath } from "../../daemon/daemon.js";
 import { IpcClient } from "../ipc-client.js";
-import { resolveAgentToken } from "../token.js";
+import { resolveToken } from "../token.js";
 import type { Envelope } from "../../envelope/types.js";
 import { formatEnvelopeInstruction } from "../instructions/format-envelope.js";
 import * as fs from "fs";
@@ -19,8 +19,11 @@ interface GetEnvelopeResult {
 }
 
 export interface SendEnvelopeOptions {
+  from?: string;
   to: string;
   token?: string;
+  fromBoss?: boolean;
+  fromName?: string;
   text?: string;
   textFile?: string;
   attachment?: string[];
@@ -29,6 +32,7 @@ export interface SendEnvelopeOptions {
 
 export interface ListEnvelopesOptions {
   token?: string;
+  address?: string;
   box?: "inbox" | "outbox";
   status?: "pending" | "done";
   limit?: number;
@@ -147,11 +151,14 @@ export async function sendEnvelope(options: SendEnvelopeOptions): Promise<void> 
   const client = new IpcClient(getSocketPath(config));
 
   try {
-    const token = resolveAgentToken(options.token);
+    const token = resolveToken(options.token);
     const text = await resolveText(options.text, options.textFile);
     const result = await client.call<SendEnvelopeResult>("envelope.send", {
       token,
+      from: options.from,
       to: options.to,
+      fromBoss: options.fromBoss,
+      fromName: options.fromName,
       text,
       attachments: options.attachment?.map((source) => ({
         source: normalizeAttachmentSource(source),
@@ -174,9 +181,10 @@ export async function listEnvelopes(options: ListEnvelopesOptions): Promise<void
   const client = new IpcClient(getSocketPath(config));
 
   try {
-    const token = resolveAgentToken(options.token);
+    const token = resolveToken(options.token);
     const result = await client.call<ListEnvelopesResult>("envelope.list", {
       token,
+      address: options.address,
       box: options.box,
       status: options.status,
       limit: options.limit,
@@ -205,7 +213,7 @@ export async function getEnvelope(options: GetEnvelopeOptions): Promise<void> {
   const client = new IpcClient(getSocketPath(config));
 
   try {
-    const token = resolveAgentToken(options.token);
+    const token = resolveToken(options.token);
     const result = await client.call<GetEnvelopeResult>("envelope.get", {
       token,
       id: options.id,
@@ -217,4 +225,3 @@ export async function getEnvelope(options: GetEnvelopeOptions): Promise<void> {
     process.exit(1);
   }
 }
-

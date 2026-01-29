@@ -3,6 +3,10 @@ import { IpcClient } from "../ipc-client.js";
 import type { Agent } from "../../agent/types.js";
 import { formatUtcIsoAsLocalOffset } from "../../shared/time.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../shared/validation.js";
+import { authorizeCliOperation } from "../authz.js";
+import { resolveToken } from "../token.js";
+import { HiBossDatabase } from "../../daemon/db/database.js";
+import * as path from "path";
 
 interface RegisterAgentResult {
   agent: Omit<Agent, "token">;
@@ -27,6 +31,7 @@ interface BindAgentResult {
 }
 
 export interface RegisterAgentOptions {
+  token?: string;
   name: string;
   description?: string;
   workspace?: string;
@@ -36,22 +41,35 @@ export interface RegisterAgentOptions {
 }
 
 export interface BindAgentOptions {
+  token?: string;
   name: string;
   adapterType: string;
   adapterToken: string;
 }
 
 export interface UnbindAgentOptions {
+  token?: string;
   name: string;
   adapterType: string;
 }
 
+export interface ListAgentsOptions {
+  token?: string;
+}
+
 export interface SetAgentSessionPolicyOptions {
+  token?: string;
   name: string;
   sessionDailyResetAt?: string;
   sessionIdleTimeout?: string;
   sessionMaxTokens?: number;
   clear?: boolean;
+}
+
+export interface SetAgentPermissionLevelOptions {
+  token?: string;
+  name: string;
+  permissionLevel: string;
 }
 
 interface SetAgentSessionPolicyResult {
@@ -72,7 +90,9 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
       throw new Error(AGENT_NAME_ERROR_MESSAGE);
     }
 
+    const token = resolveToken(options.token);
     const result = await client.call<RegisterAgentResult>("agent.register", {
+      token,
       name: options.name,
       description: options.description,
       workspace: options.workspace,
@@ -98,12 +118,14 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
 /**
  * List all agents.
  */
-export async function listAgents(): Promise<void> {
+export async function listAgents(options: ListAgentsOptions): Promise<void> {
   const config = getDefaultConfig();
   const client = new IpcClient(getSocketPath(config));
 
   try {
-    const result = await client.call<ListAgentsResult>("agent.list");
+    const result = await client.call<ListAgentsResult>("agent.list", {
+      token: resolveToken(options.token),
+    });
 
     if (result.agents.length === 0) {
       console.log("no-agents: true");
@@ -129,6 +151,15 @@ export async function listAgents(): Promise<void> {
       }
       if (agent.autoLevel) {
         console.log(`auto-level: ${agent.autoLevel}`);
+      }
+      const permissionLevel = (agent.metadata as { permissionLevel?: unknown } | undefined)
+        ?.permissionLevel;
+      if (
+        permissionLevel === "restricted" ||
+        permissionLevel === "standard" ||
+        permissionLevel === "privileged"
+      ) {
+        console.log(`permission-level: ${permissionLevel}`);
       }
       const sessionPolicy = (agent.metadata as { sessionPolicy?: unknown } | undefined)
         ?.sessionPolicy as Record<string, unknown> | undefined;
@@ -168,9 +199,11 @@ export async function setAgentSessionPolicy(
   const client = new IpcClient(getSocketPath(config));
 
   try {
+    const token = resolveToken(options.token);
     const result = await client.call<SetAgentSessionPolicyResult>(
       "agent.session-policy.set",
       {
+        token,
         agentName: options.name,
         sessionDailyResetAt: options.sessionDailyResetAt,
         sessionIdleTimeout: options.sessionIdleTimeout,
@@ -208,7 +241,9 @@ export async function bindAgent(options: BindAgentOptions): Promise<void> {
   const client = new IpcClient(getSocketPath(config));
 
   try {
+    const token = resolveToken(options.token);
     const result = await client.call<BindAgentResult>("agent.bind", {
+      token,
       agentName: options.name,
       adapterType: options.adapterType,
       adapterToken: options.adapterToken,
@@ -233,6 +268,7 @@ export async function unbindAgent(options: UnbindAgentOptions): Promise<void> {
 
   try {
     await client.call("agent.unbind", {
+      token: resolveToken(options.token),
       agentName: options.name,
       adapterType: options.adapterType,
     });
@@ -240,6 +276,41 @@ export async function unbindAgent(options: UnbindAgentOptions): Promise<void> {
     console.log(`agent-name: ${options.name}`);
     console.log(`adapter-type: ${options.adapterType}`);
     console.log("unbound: true");
+  } catch (err) {
+    console.error("error:", (err as Error).message);
+    process.exit(1);
+  }
+}
+
+function getDbPath(): string {
+  const config = getDefaultConfig();
+  return path.join(config.dataDir, "hiboss.db");
+}
+
+export async function setAgentPermissionLevel(
+  options: SetAgentPermissionLevelOptions
+): Promise<void> {
+  try {
+    const token = resolveToken(options.token);
+    authorizeCliOperation("agent.permission.set", token);
+
+    if (
+      options.permissionLevel !== "restricted" &&
+      options.permissionLevel !== "standard" &&
+      options.permissionLevel !== "privileged"
+    ) {
+      throw new Error("Invalid permission-level (expected restricted, standard, privileged)");
+    }
+
+    const db = new HiBossDatabase(getDbPath());
+    try {
+      const result = db.setAgentPermissionLevel(options.name, options.permissionLevel);
+      console.log(`success: ${result.success ? "true" : "false"}`);
+      console.log(`agent-name: ${result.agentName}`);
+      console.log(`permission-level: ${result.permissionLevel}`);
+    } finally {
+      db.close();
+    }
   } catch (err) {
     console.error("error:", (err as Error).message);
     process.exit(1);

@@ -162,6 +162,7 @@ metadata: {
 
 ```bash
 hiboss agent bind \
+  --token <boss-token> \
   --name <agent-name> \
   --adapter-type telegram \
   --adapter-token <telegram-bot-token>

@@ -30,6 +30,14 @@ import { TelegramAdapter } from "../adapters/telegram.adapter.js";
 import { parseDateTimeInputToUtcIso, nowLocalIso } from "../shared/time.js";
 import { parseDailyResetAt, parseDurationToMs } from "../shared/session-policy.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../shared/validation.js";
+import {
+  DEFAULT_PERMISSION_POLICY,
+  type PermissionLevel,
+  type PermissionPolicyV1,
+  getRequiredPermissionLevel,
+  isAtLeastPermissionLevel,
+  parsePermissionPolicyV1OrDefault,
+} from "../shared/permissions.js";
 
 /**
  * Hi-Boss daemon configuration.
@@ -75,6 +83,7 @@ export class Daemon {
   private running = false;
   private startTime: Date | null = null;
   private pidPath: string;
+  private defaultPermissionPolicy: PermissionPolicyV1 = DEFAULT_PERMISSION_POLICY;
 
   constructor(private config: DaemonConfig = getDefaultConfig()) {
     const dbPath = path.join(config.dataDir, "hiboss.db");
@@ -91,6 +100,42 @@ export class Daemon {
     });
 
     this.registerRpcMethods();
+  }
+
+  private getPermissionPolicy(): PermissionPolicyV1 {
+    const raw = this.db.getConfig("permission_policy");
+    return parsePermissionPolicyV1OrDefault(raw, this.defaultPermissionPolicy);
+  }
+
+  private getAgentPermissionLevel(agent: Agent): PermissionLevel {
+    const raw = (agent.metadata as { permissionLevel?: unknown } | undefined)?.permissionLevel;
+    if (raw === "restricted" || raw === "standard" || raw === "privileged") {
+      return raw;
+    }
+    return "standard";
+  }
+
+  private resolvePrincipal(token: string):
+    | { kind: "boss"; level: "boss" }
+    | { kind: "agent"; level: PermissionLevel; agent: Agent } {
+    if (this.db.verifyBossToken(token)) {
+      return { kind: "boss", level: "boss" };
+    }
+
+    const agent = this.db.findAgentByToken(token);
+    if (!agent) {
+      rpcError(RPC_ERRORS.UNAUTHORIZED, "Invalid token");
+    }
+
+    return { kind: "agent", level: this.getAgentPermissionLevel(agent), agent };
+  }
+
+  private assertOperationAllowed(operation: string, principal: { level: PermissionLevel }): void {
+    const policy = this.getPermissionPolicy();
+    const required = getRequiredPermissionLevel(policy, operation);
+    if (!isAtLeastPermissionLevel(principal.level, required)) {
+      rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+    }
   }
 
   /**
@@ -297,24 +342,86 @@ export class Daemon {
   }
 
   private registerRpcMethods(): void {
-    const envelopeSend = async (params: Record<string, unknown>) => {
+    const requireToken = (value: unknown): string => {
+      if (typeof value !== "string" || !value.trim()) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Token is required");
+      }
+      return value.trim();
+    };
+
+    const createEnvelopeSend = (operation: string) => async (params: Record<string, unknown>) => {
       const p = params as unknown as EnvelopeSendParams;
-      const agent = this.db.findAgentByToken(p.token);
-      if (!agent) {
-        rpcError(RPC_ERRORS.UNAUTHORIZED, "Invalid token");
+      const token = requireToken(p.token);
+      const principal = this.resolvePrincipal(token);
+      this.assertOperationAllowed(operation, principal);
+
+      if (typeof p.to !== "string" || !p.to.trim()) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to");
       }
 
-      this.db.updateAgentLastSeen(agent.name);
+      let destination: ReturnType<typeof parseAddress>;
+      try {
+        destination = parseAddress(p.to);
+      } catch (err) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, err instanceof Error ? err.message : "Invalid to");
+      }
 
-      // Check permission for channel destinations
-      const destination = parseAddress(p.to);
+      let from: string;
+      let fromBoss = false;
+      let metadata: Record<string, unknown> | undefined;
+
+      if (principal.kind === "boss") {
+        if (typeof p.from !== "string" || !p.from.trim()) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Boss token requires from");
+        }
+        from = p.from.trim();
+        fromBoss = p.fromBoss === true;
+
+        if (typeof p.fromName === "string" && p.fromName.trim()) {
+          metadata = { fromName: p.fromName.trim() };
+        }
+      } else {
+        if (p.from !== undefined || p.fromBoss !== undefined || p.fromName !== undefined) {
+          rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+        }
+
+        const agent = principal.agent;
+        this.db.updateAgentLastSeen(agent.name);
+        from = formatAgentAddress(agent.name);
+
+        // Check binding for channel destinations (agent sender only)
+        if (destination.type === "channel") {
+          const binding = this.db.getAgentBindingByType(agent.name, destination.adapter);
+          if (!binding) {
+            rpcError(
+              RPC_ERRORS.UNAUTHORIZED,
+              `Agent '${agent.name}' is not bound to adapter '${destination.adapter}'`
+            );
+          }
+        }
+      }
+
+      // Validate channel delivery requirements: sending to a channel requires from=agent:*
       if (destination.type === "channel") {
-        const binding = this.db.getAgentBindingByType(agent.name, destination.adapter);
-        if (!binding) {
-          rpcError(
-            RPC_ERRORS.UNAUTHORIZED,
-            `Agent '${agent.name}' is not bound to adapter '${destination.adapter}'`
-          );
+        let sender: ReturnType<typeof parseAddress>;
+        try {
+          sender = parseAddress(from);
+        } catch (err) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, err instanceof Error ? err.message : "Invalid from");
+        }
+        if (sender.type !== "agent") {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Channel destinations require from=agent:<name>");
+        }
+
+        // Boss token can impersonate senders, but channel delivery still requires a real binding.
+        if (principal.kind === "boss") {
+          const binding = this.db.getAgentBindingByType(sender.agentName, destination.adapter);
+          if (!binding) {
+            rpcError(
+              RPC_ERRORS.INVALID_PARAMS,
+              `Sender agent '${sender.agentName}' is not bound to adapter '${destination.adapter}'`
+            );
+          }
         }
       }
 
@@ -331,31 +438,51 @@ export class Daemon {
       }
 
       const envelope = await this.router.routeEnvelope({
-        from: formatAgentAddress(agent.name),
+        from,
         to: p.to,
-        fromBoss: false,
+        fromBoss,
         content: {
           text: p.text,
           attachments: p.attachments,
         },
         deliverAt,
+        metadata,
       });
 
       this.scheduler.onEnvelopeCreated(envelope);
       return { id: envelope.id };
     };
 
-    const envelopeList = async (params: Record<string, unknown>) => {
+    const createEnvelopeList = (operation: string) => async (params: Record<string, unknown>) => {
       const p = params as unknown as EnvelopeListParams;
-      const agent = this.db.findAgentByToken(p.token);
-      if (!agent) {
-        rpcError(RPC_ERRORS.UNAUTHORIZED, "Invalid token");
+      const token = requireToken(p.token);
+      const principal = this.resolvePrincipal(token);
+      this.assertOperationAllowed(operation, principal);
+
+      let address: string;
+      if (principal.kind === "boss") {
+        if (typeof p.address !== "string" || !p.address.trim()) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Boss token requires address");
+        }
+        address = p.address.trim();
+        try {
+          parseAddress(address);
+        } catch (err) {
+          rpcError(
+            RPC_ERRORS.INVALID_PARAMS,
+            err instanceof Error ? err.message : "Invalid address"
+          );
+        }
+      } else {
+        if (p.address !== undefined) {
+          rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+        }
+        this.db.updateAgentLastSeen(principal.agent.name);
+        address = formatAgentAddress(principal.agent.name);
       }
 
-      this.db.updateAgentLastSeen(agent.name);
-
       const envelopes = this.db.listEnvelopes({
-        address: formatAgentAddress(agent.name),
+        address,
         box: p.box ?? "inbox",
         status: p.status,
         limit: p.limit,
@@ -364,24 +491,27 @@ export class Daemon {
       return { envelopes };
     };
 
-    const envelopeGet = async (params: Record<string, unknown>) => {
+    const createEnvelopeGet = (operation: string) => async (params: Record<string, unknown>) => {
       const p = params as unknown as EnvelopeGetParams;
-      const agent = this.db.findAgentByToken(p.token);
-      if (!agent) {
-        rpcError(RPC_ERRORS.UNAUTHORIZED, "Invalid token");
-      }
+      const token = requireToken(p.token);
+      const principal = this.resolvePrincipal(token);
+      this.assertOperationAllowed(operation, principal);
 
-      this.db.updateAgentLastSeen(agent.name);
+      if (principal.kind === "agent") {
+        this.db.updateAgentLastSeen(principal.agent.name);
+      }
 
       const envelope = this.db.getEnvelopeById(p.id);
       if (!envelope) {
         rpcError(RPC_ERRORS.NOT_FOUND, "Envelope not found");
       }
 
-      // Verify the agent has access to this envelope
-      const agentAddress = formatAgentAddress(agent.name);
-      if (envelope.to !== agentAddress && envelope.from !== agentAddress) {
-        rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+      if (principal.kind === "agent") {
+        // Verify the agent has access to this envelope
+        const agentAddress = formatAgentAddress(principal.agent.name);
+        if (envelope.to !== agentAddress && envelope.from !== agentAddress) {
+          rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+        }
       }
 
       return { envelope };
@@ -389,18 +519,21 @@ export class Daemon {
 
     const methods: RpcMethodRegistry = {
       // Envelope methods (canonical)
-      "envelope.send": envelopeSend,
-      "envelope.list": envelopeList,
-      "envelope.get": envelopeGet,
+      "envelope.send": createEnvelopeSend("envelope.send"),
+      "envelope.list": createEnvelopeList("envelope.list"),
+      "envelope.get": createEnvelopeGet("envelope.get"),
 
       // Message methods (backwards-compatible aliases)
-      "message.send": envelopeSend,
-      "message.list": envelopeList,
-      "message.get": envelopeGet,
+      "message.send": createEnvelopeSend("message.send"),
+      "message.list": createEnvelopeList("message.list"),
+      "message.get": createEnvelopeGet("message.get"),
 
       // Agent methods
       "agent.register": async (params) => {
         const p = params as unknown as AgentRegisterParams;
+        const token = requireToken(p.token);
+        const principal = this.resolvePrincipal(token);
+        this.assertOperationAllowed("agent.register", principal);
 
         if (typeof p.name !== "string" || !isValidAgentName(p.name)) {
           rpcError(RPC_ERRORS.INVALID_PARAMS, AGENT_NAME_ERROR_MESSAGE);
@@ -474,7 +607,12 @@ export class Daemon {
         };
       },
 
-      "agent.list": async () => {
+      "agent.list": async (params) => {
+        const p = params as unknown as { token: string };
+        const token = requireToken(p.token);
+        const principal = this.resolvePrincipal(token);
+        this.assertOperationAllowed("agent.list", principal);
+
         const agents = this.db.listAgents();
         const bindings = this.db.listBindings();
 
@@ -505,6 +643,9 @@ export class Daemon {
 
       "agent.bind": async (params) => {
         const p = params as unknown as AgentBindParams;
+        const token = requireToken(p.token);
+        const principal = this.resolvePrincipal(token);
+        this.assertOperationAllowed("agent.bind", principal);
 
         // Check if agent exists
         const agent = this.db.getAgentByNameCaseInsensitive(p.agentName);
@@ -552,6 +693,9 @@ export class Daemon {
 
       "agent.unbind": async (params) => {
         const p = params as unknown as AgentUnbindParams;
+        const token = requireToken(p.token);
+        const principal = this.resolvePrincipal(token);
+        this.assertOperationAllowed("agent.unbind", principal);
 
         const agent = this.db.getAgentByNameCaseInsensitive(p.agentName);
         if (!agent) {
@@ -576,6 +720,9 @@ export class Daemon {
 
       "agent.refresh": async (params) => {
         const p = params as unknown as AgentRefreshParams;
+        const token = requireToken(p.token);
+        const principal = this.resolvePrincipal(token);
+        this.assertOperationAllowed("agent.refresh", principal);
 
         // Check if agent exists
         const agent = this.db.getAgentByNameCaseInsensitive(p.agentName);
@@ -591,6 +738,9 @@ export class Daemon {
 
       "agent.session-policy.set": async (params) => {
         const p = params as unknown as AgentSessionPolicySetParams;
+        const token = requireToken(p.token);
+        const principal = this.resolvePrincipal(token);
+        this.assertOperationAllowed("agent.session-policy.set", principal);
 
         const agent = this.db.getAgentByNameCaseInsensitive(p.agentName);
         if (!agent) {
@@ -650,7 +800,12 @@ export class Daemon {
       },
 
       // Daemon methods
-      "daemon.status": async () => {
+      "daemon.status": async (params) => {
+        const p = params as unknown as { token: string };
+        const token = requireToken(p.token);
+        const principal = this.resolvePrincipal(token);
+        this.assertOperationAllowed("daemon.status", principal);
+
         const bindings = this.db.listBindings();
         return {
           running: this.running,
@@ -665,7 +820,12 @@ export class Daemon {
         };
       },
 
-      "daemon.ping": async () => {
+      "daemon.ping": async (params) => {
+        const p = params as unknown as { token: string };
+        const token = requireToken(p.token);
+        const principal = this.resolvePrincipal(token);
+        this.assertOperationAllowed("daemon.ping", principal);
+
         return { pong: true, timestamp: new Date().toISOString() };
       },
 

@@ -26,6 +26,16 @@ interface Agent {
 }
 ```
 
+Permission level is stored in `metadata.permissionLevel` and is used by the daemon to authorize CLI/RPC operations:
+
+- `restricted < standard < privileged < boss`
+
+Set it with:
+
+```bash
+hiboss agent permission set --name <agent-name> --permission-level <restricted|standard|privileged> --token <boss-token>
+```
+
 ### Database Schema
 
 Table: `agents` (in `src/daemon/db/schema.ts`)
@@ -50,6 +60,7 @@ Table: `agents` (in `src/daemon/db/schema.ts`)
 
 ```bash
 hiboss agent register \
+  --token <boss-token> \
   --name <name> \
   --description "Agent description" \
   --workspace "$PWD"
@@ -68,7 +79,7 @@ Located in `src/agent/auth.ts`:
 - Tokens are 6 random hex characters
 - Printed once by `hiboss agent register` (and `hiboss setup`)
 - Stored as plaintext in `~/.hiboss/hiboss.db` (table: `agents.token`) — there is no CLI “show token” command
-- Used for envelope operations via `--token` (or `HIBOSS_TOKEN`)
+- Used for authenticated `hiboss` operations via `--token` (or `HIBOSS_TOKEN`), subject to the permission policy
 
 ## Providers
 
@@ -239,12 +250,14 @@ Constraints:
 ```bash
 # Bind agent to Telegram bot
 hiboss agent bind \
+  --token <boss-token> \
   --name nex \
   --adapter-type telegram \
   --adapter-token <telegram-bot-token>
 
 # Remove binding
 hiboss agent unbind \
+  --token <boss-token> \
   --name nex \
   --adapter-type telegram
 ```
@@ -272,14 +285,15 @@ interface SessionPolicyConfig {
 
 ```bash
 # Set session policy
-hiboss agent session-policy set \
+hiboss agent session-policy \
+  --token <boss-token> \
   --name nex \
   --session-daily-reset-at 09:00 \
   --session-idle-timeout 2h \
   --session-max-tokens 100000
 
 # Clear session policy
-hiboss agent session-policy set --name nex --clear
+hiboss agent session-policy --token <boss-token> --name nex --clear
 ```
 
 ## Agent Runs (Auditing)
@@ -311,11 +325,12 @@ sqlite3 ~/.hiboss/hiboss.db \
 
 | Command | Description |
 |---------|-------------|
-| `hiboss agent register --name <n> [--description <d>] [--workspace <w>]` | Create agent |
-| `hiboss agent list` | List all agents with bindings |
-| `hiboss agent bind --name <n> --adapter-type <t> --adapter-token <tok>` | Bind adapter |
-| `hiboss agent unbind --name <n> --adapter-type <t>` | Remove binding |
-| `hiboss agent session-policy set --name <n> [options]` | Configure session policy |
+| `hiboss agent register --token <boss-token> --name <n> [--description <d>] [--workspace <w>]` | Create agent |
+| `hiboss agent list --token <boss-token>` | List all agents with bindings |
+| `hiboss agent bind --token <boss-token> --name <n> --adapter-type <t> --adapter-token <tok>` | Bind adapter |
+| `hiboss agent unbind --token <boss-token> --name <n> --adapter-type <t>` | Remove binding |
+| `hiboss agent session-policy --token <boss-token> --name <n> [options]` | Configure session policy |
+| `hiboss agent permission set --token <boss-token> --name <n> --permission-level <level>` | Set agent permission level |
 
 ## RPC Methods
 
@@ -323,12 +338,12 @@ Available via daemon IPC:
 
 | Method | Parameters | Description |
 |--------|------------|-------------|
-| `agent.register` | name, description?, workspace?, session policy options | Create agent |
-| `agent.list` | (none) | List agents with bindings |
-| `agent.bind` | agentName, adapterType, adapterToken | Bind adapter |
-| `agent.unbind` | agentName, adapterType | Remove binding |
-| `agent.refresh` | agentName | Force session refresh |
-| `agent.session-policy.set` | agentName, policy options, clear? | Update session policy |
+| `agent.register` | token, name, description?, workspace?, session policy options | Create agent |
+| `agent.list` | token | List agents with bindings |
+| `agent.bind` | token, agentName, adapterType, adapterToken | Bind adapter |
+| `agent.unbind` | token, agentName, adapterType | Remove binding |
+| `agent.refresh` | token, agentName | Force session refresh |
+| `agent.session-policy.set` | token, agentName, policy options, clear? | Update session policy |
 
 ## Key Files
 

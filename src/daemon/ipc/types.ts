@@ -51,7 +51,10 @@ export type RpcMethodRegistry = Record<string, RpcMethodHandler>;
 
 export interface EnvelopeSendParams {
   token: string;
+  from?: string;
   to: string;
+  fromBoss?: boolean;
+  fromName?: string;
   text?: string;
   attachments?: Array<{ source: string; filename?: string }>;
   deliverAt?: string;
@@ -59,6 +62,7 @@ export interface EnvelopeSendParams {
 
 export interface EnvelopeListParams {
   token: string;
+  address?: string;
   box?: "inbox" | "outbox";
   status?: "pending" | "done";
   limit?: number;
@@ -75,6 +79,7 @@ export type MessageListParams = EnvelopeListParams;
 export type MessageGetParams = EnvelopeGetParams;
 
 export interface AgentRegisterParams {
+  token: string;
   name: string;
   description?: string;
   workspace?: string;
@@ -84,21 +89,25 @@ export interface AgentRegisterParams {
 }
 
 export interface AgentBindParams {
+  token: string;
   agentName: string;
   adapterType: string;
   adapterToken: string;
 }
 
 export interface AgentUnbindParams {
+  token: string;
   agentName: string;
   adapterType: string;
 }
 
 export interface AgentRefreshParams {
+  token: string;
   agentName: string;
 }
 
 export interface AgentSessionPolicySetParams {
+  token: string;
   agentName: string;
   sessionDailyResetAt?: string;
   sessionIdleTimeout?: string;
@@ -107,7 +116,11 @@ export interface AgentSessionPolicySetParams {
 }
 
 export interface DaemonStatusParams {
-  // No params needed
+  token: string;
+}
+
+export interface DaemonPingParams {
+  token: string;
 }
 
 // ==================== Setup Parameters ====================

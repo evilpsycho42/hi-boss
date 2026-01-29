@@ -72,6 +72,12 @@ If delivery/run fails, the envelope generally remains `pending` and will be retr
 hiboss envelope send --to agent:nex --token <agent-token> --text "hello"
 ```
 
+Boss token can also send envelopes, but must provide an explicit sender address:
+
+```bash
+hiboss envelope send --to agent:nex --token <boss-token> --from channel:telegram:12345 --text "hello"
+```
+
 With scheduling:
 
 ```bash
@@ -100,6 +106,12 @@ hiboss envelope send --to agent:nex --token <agent-token> --text "see attached" 
 ```bash
 hiboss envelope list --token <agent-token> --box inbox --status pending -n 10
 hiboss envelope get --id <envelope-id> --token <agent-token>
+```
+
+Boss token can list envelopes for any address by providing `--address`:
+
+```bash
+hiboss envelope list --token <boss-token> --address agent:nex --box inbox --status pending -n 10
 ```
 
 `hiboss envelope list` and `hiboss envelope get` output an agent-facing “instruction” format (header + `text:` + `attachments:`). For the exact keys, see `docs/spec/definitions.md`.

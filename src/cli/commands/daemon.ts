@@ -4,6 +4,8 @@ import * as fs from "fs";
 import { fileURLToPath } from "url";
 import { getDefaultConfig, isDaemonRunning, getSocketPath } from "../../daemon/daemon.js";
 import { IpcClient } from "../ipc-client.js";
+import { authorizeCliOperation } from "../authz.js";
+import { resolveToken } from "../token.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -17,6 +19,15 @@ interface DaemonStatusResult {
 
 export interface StartDaemonOptions {
   debug?: boolean;
+  token?: string;
+}
+
+export interface StopDaemonOptions {
+  token?: string;
+}
+
+export interface DaemonStatusOptions {
+  token?: string;
 }
 
 /**
@@ -24,6 +35,14 @@ export interface StartDaemonOptions {
  */
 export async function startDaemon(options: StartDaemonOptions = {}): Promise<void> {
   const config = getDefaultConfig();
+
+  try {
+    const token = resolveToken(options.token);
+    authorizeCliOperation("daemon.start", token);
+  } catch (err) {
+    console.error("error:", (err as Error).message);
+    process.exit(1);
+  }
 
   // Ensure data directory exists
   if (!fs.existsSync(config.dataDir)) {
@@ -145,9 +164,17 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<voi
 /**
  * Stop the daemon.
  */
-export async function stopDaemon(): Promise<void> {
+export async function stopDaemon(options: StopDaemonOptions = {}): Promise<void> {
   const config = getDefaultConfig();
   const pidPath = path.join(config.dataDir, "daemon.pid");
+
+  try {
+    const token = resolveToken(options.token);
+    authorizeCliOperation("daemon.stop", token);
+  } catch (err) {
+    console.error("error:", (err as Error).message);
+    process.exit(1);
+  }
 
   if (!fs.existsSync(pidPath)) {
     console.log("Daemon is not running");
@@ -189,8 +216,17 @@ export async function stopDaemon(): Promise<void> {
 /**
  * Get daemon status.
  */
-export async function daemonStatus(): Promise<void> {
+export async function daemonStatus(options: DaemonStatusOptions = {}): Promise<void> {
   const config = getDefaultConfig();
+
+  let token: string;
+  try {
+    token = resolveToken(options.token);
+    authorizeCliOperation("daemon.status", token);
+  } catch (err) {
+    console.error("error:", (err as Error).message);
+    process.exit(1);
+  }
 
   if (!(await isDaemonRunning(config))) {
     console.log("running: false");
@@ -203,7 +239,7 @@ export async function daemonStatus(): Promise<void> {
 
   try {
     const client = new IpcClient(getSocketPath(config));
-    const status = await client.call<DaemonStatusResult>("daemon.status");
+    const status = await client.call<DaemonStatusResult>("daemon.status", { token });
 
     console.log(`running: ${status.running ? "true" : "false"}`);
     console.log(`start-time: ${status.startTime ?? "(none)"}`);

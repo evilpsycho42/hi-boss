@@ -11,7 +11,10 @@ import {
   setAgentSessionPolicy,
   bindAgent,
   unbindAgent,
+  setAgentPermissionLevel,
   runSetup,
+  getPermissionPolicy,
+  setPermissionPolicy,
 } from "./commands/index.js";
 
 const program = new Command();
@@ -27,20 +30,27 @@ const daemon = program.command("daemon").description("Daemon management");
 daemon
   .command("start")
   .description("Start the daemon")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .option("--debug", "Enable debug logging for messages and envelopes")
   .action((options) => {
-    startDaemon({ debug: options.debug });
+    startDaemon({ token: options.token, debug: options.debug });
   });
 
 daemon
   .command("stop")
   .description("Stop the daemon")
-  .action(stopDaemon);
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    stopDaemon({ token: options.token });
+  });
 
 daemon
   .command("status")
   .description("Show daemon status")
-  .action(daemonStatus);
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    daemonStatus({ token: options.token });
+  });
 
 // Envelope commands
 const envelope = program.command("envelope").description("Envelope operations");
@@ -52,7 +62,10 @@ envelope
     "--to <address>",
     "Destination address (agent:<name> or channel:<adapter>:<chat-id>)"
   )
-  .option("--token <token>", "Agent token (defaults to HIBOSS_TOKEN)")
+  .option("--from <address>", "Sender address (boss token only)")
+  .option("--from-boss", "Mark sender as boss (boss token only)")
+  .option("--from-name <name>", "Semantic sender name for display (boss token only)")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .option("--text <text>", "Envelope text (use - to read from stdin)")
   .option("--text-file <path>", "Read envelope text from file")
   .option("--attachment <path>", "Attachment path (can be used multiple times)", collect, [])
@@ -62,6 +75,9 @@ envelope
   )
   .action((options) => {
     sendEnvelope({
+      from: options.from,
+      fromBoss: options.fromBoss,
+      fromName: options.fromName,
       to: options.to,
       token: options.token,
       text: options.text,
@@ -74,7 +90,8 @@ envelope
 envelope
   .command("list")
   .description("List envelopes")
-  .option("--token <token>", "Agent token (defaults to HIBOSS_TOKEN)")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .option("--address <address>", "List envelopes for an address (boss token only)")
   .option("--box <box>", "inbox or outbox", "inbox")
   .option("--status <status>", "pending or done")
   .option("-n, --limit <n>", "Maximum number of results", parseInt)
@@ -82,6 +99,7 @@ envelope
   .action((options) => {
     listEnvelopes({
       token: options.token,
+      address: options.address,
       box: options.box as "inbox" | "outbox",
       status: options.status as "pending" | "done" | undefined,
       limit: options.limit ?? options.n,
@@ -92,7 +110,7 @@ envelope
   .command("get")
   .description("Get an envelope by ID")
   .requiredOption("--id <id>", "Envelope ID")
-  .option("--token <token>", "Agent token (defaults to HIBOSS_TOKEN)")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .action((options) => {
     getEnvelope({
       id: options.id,
@@ -107,6 +125,7 @@ agent
   .command("register")
   .description("Register a new agent")
   .requiredOption("--name <name>", "Agent name (alphanumeric with hyphens)")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .option("--description <description>", "Agent description")
   .option("--workspace <path>", "Workspace path for unified-agent-sdk")
   .option(
@@ -124,6 +143,7 @@ agent
   )
   .action((options) => {
     registerAgent({
+      token: options.token,
       name: options.name,
       description: options.description,
       workspace: options.workspace,
@@ -136,16 +156,21 @@ agent
 agent
   .command("list")
   .description("List all agents")
-  .action(listAgents);
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    listAgents({ token: options.token });
+  });
 
 agent
   .command("bind")
   .description("Bind an adapter (e.g., Telegram bot) to an agent")
   .requiredOption("--name <name>", "Agent name")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .requiredOption("--adapter-type <type>", "Adapter type (e.g., telegram)")
   .requiredOption("--adapter-token <token>", "Adapter token (e.g., Telegram bot token)")
   .action((options) => {
     bindAgent({
+      token: options.token,
       name: options.name,
       adapterType: options.adapterType,
       adapterToken: options.adapterToken,
@@ -156,9 +181,11 @@ agent
   .command("unbind")
   .description("Unbind an adapter from an agent")
   .requiredOption("--name <name>", "Agent name")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .requiredOption("--adapter-type <type>", "Adapter type (e.g., telegram)")
   .action((options) => {
     unbindAgent({
+      token: options.token,
       name: options.name,
       adapterType: options.adapterType,
     });
@@ -168,6 +195,7 @@ agent
   .command("session-policy")
   .description("Set session refresh policy for an agent")
   .requiredOption("--name <name>", "Agent name")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .option(
     "--session-daily-reset-at <time>",
     "Daily session reset time in local timezone (HH:MM)"
@@ -184,11 +212,33 @@ agent
   .option("--clear", "Clear session policy")
   .action((options) => {
     setAgentSessionPolicy({
+      token: options.token,
       name: options.name,
       sessionDailyResetAt: options.sessionDailyResetAt,
       sessionIdleTimeout: options.sessionIdleTimeout,
       sessionMaxTokens: options.sessionMaxTokens,
       clear: options.clear,
+    });
+  });
+
+const agentPermission = agent
+  .command("permission")
+  .description("Agent permission management");
+
+agentPermission
+  .command("set")
+  .description("Set an agent permission level")
+  .requiredOption("--name <name>", "Agent name")
+  .requiredOption(
+    "--permission-level <level>",
+    "Permission level (restricted, standard, privileged)"
+  )
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    setAgentPermissionLevel({
+      token: options.token,
+      name: options.name,
+      permissionLevel: options.permissionLevel,
     });
   });
 
@@ -218,6 +268,27 @@ setup
       adapterToken: options.adapterToken,
       adapterBossId: options.adapterBossId,
     });
+  });
+
+// Permission commands
+const permission = program.command("permission").description("Permission management");
+const policy = permission.command("policy").description("Permission policy management");
+
+policy
+  .command("get")
+  .description("Get permission policy")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    getPermissionPolicy({ token: options.token });
+  });
+
+policy
+  .command("set")
+  .description("Set permission policy from a JSON file")
+  .requiredOption("--file <path>", "Path to permission policy JSON file")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    setPermissionPolicy({ token: options.token, file: options.file });
   });
 
 // Helper to collect multiple values for an option

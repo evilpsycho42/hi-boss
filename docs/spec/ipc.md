@@ -20,12 +20,18 @@ Key files:
 
 ## Authentication model
 
-Envelope RPC methods require an **agent token**:
+Most RPC methods require a **token** (agent or boss):
 
 - the CLI passes `token` in params (or uses `HIBOSS_TOKEN` when `--token` is omitted)
-- the daemon validates it via `agents.token`
+- the daemon treats it as a **boss token** if it matches `config.boss_token_hash`, otherwise as an **agent token** (`agents.token`)
 
-Most non-envelope RPC methods are local-admin style and do not require a token (the daemon is intended to be local-only).
+Bootstrap methods do not require a token:
+
+- `setup.check`
+- `setup.execute`
+- `boss.verify`
+
+All other methods require a token and are authorized by the permission policy (see `docs/configuration.md`).
 
 ---
 
@@ -65,4 +71,3 @@ Setup:
 Boss:
 
 - `boss.verify`
-

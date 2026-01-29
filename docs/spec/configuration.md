@@ -37,13 +37,14 @@ Note: the CLI currently always uses the default location (there is no `--data-di
 
 ### `HIBOSS_TOKEN`
 
-Default agent token for envelope commands when `--token` is omitted.
+Default token (agent or boss) for commands when `--token` is omitted.
 
 Used by:
 
 - `hiboss envelope send`
 - `hiboss envelope list`
 - `hiboss envelope get`
+  - and other commands that accept `--token`
 
 Example:
 
@@ -58,7 +59,7 @@ hiboss envelope list --box inbox --status pending
 
 ### Daemon
 
-- `hiboss daemon start --debug`
+- `hiboss daemon start --token <boss-token> [--debug]`
   - Enables debug logging for message/envelope routing in the daemon process.
   - Not persisted; only affects that daemon run.
 
@@ -78,6 +79,7 @@ Setup writes to the SQLite `config` table and creates the first agent.
 ### Agents
 
 - `hiboss agent register`
+  - `--token <boss-token>`
   - `--name <name>`
   - `--description <text>`
   - `--workspace <path>`
@@ -137,6 +139,7 @@ Keys:
 - `boss_name`: boss display name used in instructions/templates
 - `boss_token_hash`: hashed admin token (not currently surfaced via CLI commands beyond setup)
 - `default_provider`: `"claude"` or `"codex"` (used by setup as a default)
+- `permission_policy`: JSON permission policy mapping operations → required permission level
 - `adapter_boss_id_<adapter-type>`: boss identity on an adapter, e.g.:
   - `adapter_boss_id_telegram = "@your_username"`
 
@@ -161,6 +164,8 @@ Per-agent settings:
 - `auto_level`: `"low" | "medium" | "high"` (set by setup for the initial agent)
 - `last_seen_at`: updated when the agent authenticates RPC calls via token (e.g., `hiboss envelope list --token ...`)
 - `metadata`: JSON blob for extended settings (see session policy below)
+  - `permissionLevel`: `"restricted" | "standard" | "privileged"` (defaults to `"standard"` when unset)
+    - Set via: `hiboss agent permission set --name <agent-name> --permission-level <level> --token <boss-token>`
 
 ### `agent_bindings` table
 
@@ -223,3 +228,24 @@ Some settings exist in the database/schema but do not yet have dedicated CLI set
 - Changing the default data directory from `~/.hiboss/`
 
 Today, changing those requires a reset + re-setup, or direct DB edits.
+
+---
+
+## Permission Policy
+
+Hi-Boss authorizes operations via a configurable policy stored at:
+
+- `config.permission_policy`
+
+The policy maps an operation name to a minimum permission level:
+
+- `restricted < standard < privileged < boss`
+
+If an operation is missing from the policy, it defaults to `boss` (safe-by-default).
+
+Manage the policy with:
+
+```bash
+hiboss permission policy get --token <boss-token>
+hiboss permission policy set --token <boss-token> --file ./permission-policy.json
+```
