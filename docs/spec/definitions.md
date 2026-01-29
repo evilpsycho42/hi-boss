@@ -112,6 +112,7 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 |--------|-------|
 | `hiboss agent register` | `--token`, `--name`, `--description`, `--workspace`, `--session-daily-reset-at`, `--session-idle-timeout`, `--session-max-tokens` |
 | `hiboss agent list` | `--token` |
+| `hiboss agent background` | `--token`, `--task` |
 | `hiboss agent session-policy` | `--token`, `--name`, `--session-daily-reset-at`, `--session-idle-timeout`, `--session-max-tokens`, `--clear` |
 | `hiboss agent bind` | `--token`, `--name`, `--adapter-type`, `--adapter-token` |
 | `hiboss agent unbind` | `--token`, `--name`, `--adapter-type` |
@@ -122,6 +123,7 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 - `hiboss agent register` prints `token:` once (there is no “show token” command).
 - `hiboss setup` / `hiboss setup default` prints `agent-token:` once.
 - `hiboss agent list` prints fields like `provider:`, `reasoning-effort:`, `auto-level:`, `permission-level:`, `created-at:` (timestamps are shown in local timezone offset).
+- `hiboss agent background` prints no output; it sends an envelope to `agent:<self>` whose text is the background run's final response.
 - Session policy is printed as:
   - `session-daily-reset-at:`
   - `session-idle-timeout:`

@@ -344,6 +344,7 @@ sqlite3 ~/.hiboss/hiboss.db \
 |---------|-------------|
 | `hiboss agent register --token <boss-token> --name <n> [--description <d>] [--workspace <w>]` | Create agent |
 | `hiboss agent list --token <boss-token>` | List all agents with bindings |
+| `hiboss agent background --token <agent-token> --task <text>` | Run a background task and send the final response to `agent:<self>` |
 | `hiboss agent bind --token <boss-token> --name <n> --adapter-type <t> --adapter-token <tok>` | Bind adapter |
 | `hiboss agent unbind --token <boss-token> --name <n> --adapter-type <t>` | Remove binding |
 | `hiboss agent session-policy --token <boss-token> --name <n> [options]` | Configure session policy |
@@ -360,6 +361,7 @@ Available via daemon IPC:
 | `agent.bind` | token, agentName, adapterType, adapterToken | Bind adapter |
 | `agent.unbind` | token, agentName, adapterType | Remove binding |
 | `agent.refresh` | token, agentName | Force session refresh |
+| `agent.self` | token | Resolve the token to the current agent config |
 | `agent.session-policy.set` | token, agentName, policy options, clear? | Update session policy |
 
 ## Key Files
