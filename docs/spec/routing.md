@@ -33,7 +33,7 @@ Adapters provide two main streams into the daemon:
 - `ChannelMessage` (chat messages)
 - `ChannelCommand` (e.g. Telegram `/new`)
 
-See `docs/adapters/telegram.md`.
+See `docs/spec/adapters/telegram.md`.
 
 ---
 
@@ -87,7 +87,7 @@ Scheduled delivery uses the same envelope record, but delays actual delivery unt
   - delivers due channel envelopes (via `router.deliverEnvelope(...)`)
   - triggers agent runs for agents with due envelopes (via `executor.checkAndRun(...)`)
 
-See `docs/scheduler.md` for the exact wake-up algorithm.
+See `docs/spec/scheduler.md` for the exact wake-up algorithm.
 
 ---
 
@@ -98,4 +98,3 @@ See `docs/scheduler.md` for the exact wake-up algorithm.
 3. `ChannelBridge` resolves which agent is bound to that bot token and enriches the command with `agentName`.
 4. `Daemon` receives the command and calls `AgentExecutor.requestSessionRefresh(agentName, "telegram:/new")`.
 5. The refresh is applied at the next safe point (before the next run, or after the current queue drains).
-

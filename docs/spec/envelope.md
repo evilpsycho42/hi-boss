@@ -53,7 +53,7 @@ New envelopes are stored as `status = pending`.
 ### Immediate vs scheduled delivery
 
 - If `deliver-at` is **missing** or **due** (`<= now`), the daemon attempts immediate delivery.
-- If `deliver-at` is in the **future**, the envelope remains `pending` until the scheduler wakes it up (see `docs/scheduler.md`).
+- If `deliver-at` is in the **future**, the envelope remains `pending` until the scheduler wakes it up (see `docs/spec/scheduler.md`).
 
 ### When does an envelope become `done`?
 
@@ -102,7 +102,7 @@ hiboss envelope list --token <agent-token> --box inbox --status pending -n 10
 hiboss envelope get --id <envelope-id> --token <agent-token>
 ```
 
-`hiboss envelope list` and `hiboss envelope get` output an agent-facing “instruction” format (header + `text:` + `attachments:`). For the exact keys, see `docs/definitions.md`.
+`hiboss envelope list` and `hiboss envelope get` output an agent-facing “instruction” format (header + `text:` + `attachments:`). For the exact keys, see `docs/spec/definitions.md`.
 
 ---
 
@@ -121,5 +121,4 @@ Sending **to a channel** (e.g. `channel:telegram:...`) is only allowed if the se
 
 The daemon parses the input and stores `deliver-at` as a UTC ISO timestamp.
 
-See `docs/scheduler.md` for delivery behavior and wake-up logic.
-
+See `docs/spec/scheduler.md` for delivery behavior and wake-up logic.

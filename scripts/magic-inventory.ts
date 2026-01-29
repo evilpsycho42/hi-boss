@@ -29,7 +29,7 @@ type MagicOccurrence = {
 
 function parseArgs(argv: string[]): { outPath: string } {
   const outIndex = argv.indexOf("--out");
-  if (outIndex === -1) return { outPath: "docs/magic-inventory.md" };
+  if (outIndex === -1) return { outPath: "docs/spec/generated/magic-inventory.md" };
   const outPath = argv[outIndex + 1];
   if (!outPath) {
     throw new Error("Missing value for --out (expected a filepath)");
