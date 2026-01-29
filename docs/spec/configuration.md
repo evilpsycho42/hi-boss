@@ -196,7 +196,6 @@ Constraints:
 | `from_boss` | INTEGER | `0` | `1` if sent by boss, `0` otherwise |
 | `content_text` | TEXT | `NULL` | Message text |
 | `content_attachments` | TEXT | `NULL` | JSON array of attachments |
-| `reply_to` | TEXT | `NULL` | Optional envelope ID being replied to |
 | `deliver_at` | TEXT | `NULL` | ISO 8601 UTC timestamp (scheduled delivery) |
 | `status` | TEXT | `'pending'` | `"pending"` or `"done"` |
 | `created_at` | TEXT | `datetime('now')` | ISO 8601 timestamp |

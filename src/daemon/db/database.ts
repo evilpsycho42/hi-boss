@@ -35,7 +35,6 @@ interface EnvelopeRow {
   from_boss: number;
   content_text: string | null;
   content_attachments: string | null;
-  reply_to: string | null;
   deliver_at: string | null;
   status: string;
   created_at: string;
@@ -374,8 +373,8 @@ export class HiBossDatabase {
     const createdAt = new Date().toISOString();
 
     const stmt = this.db.prepare(`
-      INSERT INTO envelopes (id, "from", "to", from_boss, content_text, content_attachments, reply_to, deliver_at, status, created_at, metadata)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO envelopes (id, "from", "to", from_boss, content_text, content_attachments, deliver_at, status, created_at, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -385,7 +384,6 @@ export class HiBossDatabase {
       input.fromBoss ? 1 : 0,
       input.content.text ?? null,
       input.content.attachments ? JSON.stringify(input.content.attachments) : null,
-      input.replyTo ?? null,
       input.deliverAt ?? null,
       "pending",
       createdAt,
@@ -456,7 +454,6 @@ export class HiBossDatabase {
           ? JSON.parse(row.content_attachments)
           : undefined,
       },
-      replyTo: row.reply_to ?? undefined,
       deliverAt: row.deliver_at ?? undefined,
       status: row.status as EnvelopeStatus,
       createdAt: row.created_at,
@@ -639,27 +636,6 @@ export class HiBossDatabase {
     `);
     const rows = stmt.all(address, nowIso, limit) as EnvelopeRow[];
     return rows.map((row) => this.rowToEnvelope(row));
-  }
-
-  /**
-   * Get the subset of envelope IDs that have at least one reply envelope sent by the agent.
-   *
-   * A reply is any envelope with:
-   * - from = agent:<agentName>
-   * - reply_to IN (envelopeIds)
-   */
-  getRepliedEnvelopeIdsForAgent(agentName: string, envelopeIds: string[]): string[] {
-    if (envelopeIds.length === 0) return [];
-
-    const fromAddress = `agent:${agentName}`;
-    const placeholders = envelopeIds.map(() => "?").join(", ");
-    const stmt = this.db.prepare(`
-      SELECT DISTINCT reply_to AS reply_to
-      FROM envelopes
-      WHERE "from" = ? AND reply_to IN (${placeholders})
-    `);
-    const rows = stmt.all(fromAddress, ...envelopeIds) as Array<{ reply_to: string }>;
-    return rows.map((r) => r.reply_to);
   }
 
   /**

@@ -32,7 +32,6 @@ CREATE TABLE IF NOT EXISTS envelopes (
   from_boss INTEGER DEFAULT 0,
   content_text TEXT,
   content_attachments TEXT,
-  reply_to TEXT,
   deliver_at TEXT,            -- ISO 8601 UTC timestamp (not-before delivery)
   status TEXT DEFAULT 'pending',
   created_at TEXT DEFAULT (datetime('now')),

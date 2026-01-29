@@ -31,7 +31,6 @@ export interface Envelope {
   to: Address;
   fromBoss: boolean;          // true if sender matches boss config
   content: EnvelopeContent;
-  replyTo?: string;           // envelope ID for threading
   deliverAt?: string;         // ISO 8601 UTC timestamp (not-before delivery)
   status: EnvelopeStatus;
   createdAt: string;          // ISO 8601
@@ -46,7 +45,6 @@ export interface CreateEnvelopeInput {
   to: Address;
   fromBoss?: boolean;
   content: EnvelopeContent;
-  replyTo?: string;
   deliverAt?: string;
   metadata?: Record<string, unknown>;
 }
