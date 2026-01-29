@@ -13,14 +13,6 @@ export type Principal =
   | { kind: "boss"; level: "boss" }
   | { kind: "agent"; level: PermissionLevel; agentName: string };
 
-function getAgentPermissionLevel(metadata: unknown): PermissionLevel {
-  const raw = (metadata as { permissionLevel?: unknown } | undefined)?.permissionLevel;
-  if (raw === "restricted" || raw === "standard" || raw === "privileged") {
-    return raw;
-  }
-  return "standard";
-}
-
 export function authorizeCliOperation(operation: string, token: string): Principal {
   const config = getDefaultConfig();
   const dbPath = path.join(config.dataDir, "hiboss.db");
@@ -41,7 +33,7 @@ export function authorizeCliOperation(operation: string, token: string): Princip
       }
       principal = {
         kind: "agent",
-        level: getAgentPermissionLevel(agent.metadata),
+        level: agent.permissionLevel ?? "standard",
         agentName: agent.name,
       };
     }

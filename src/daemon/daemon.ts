@@ -109,11 +109,7 @@ export class Daemon {
   }
 
   private getAgentPermissionLevel(agent: Agent): PermissionLevel {
-    const raw = (agent.metadata as { permissionLevel?: unknown } | undefined)?.permissionLevel;
-    if (raw === "restricted" || raw === "standard" || raw === "privileged") {
-      return raw;
-    }
-    return "standard";
+    return agent.permissionLevel ?? "standard";
   }
 
   private resolvePrincipal(token: string):
@@ -571,14 +567,11 @@ export class Daemon {
           sessionPolicy.maxTokens = Math.trunc(p.sessionMaxTokens);
         }
 
-        const metadata =
-          Object.keys(sessionPolicy).length > 0 ? { sessionPolicy } : undefined;
-
         const result = this.db.registerAgent({
           name: p.name,
           description: p.description,
           workspace: p.workspace,
-          metadata,
+          sessionPolicy: Object.keys(sessionPolicy).length > 0 ? sessionPolicy as any : undefined,
         });
 
         // Setup agent home directories
@@ -634,6 +627,8 @@ export class Daemon {
             model: a.model,
             reasoningEffort: a.reasoningEffort,
             autoLevel: a.autoLevel,
+            permissionLevel: a.permissionLevel,
+            sessionPolicy: a.sessionPolicy,
             createdAt: a.createdAt,
             lastSeenAt: a.lastSeenAt,
             metadata: a.metadata,
@@ -820,10 +815,7 @@ export class Daemon {
           maxTokens,
         });
 
-        const sessionPolicy = (updated.metadata as { sessionPolicy?: unknown } | undefined)
-          ?.sessionPolicy;
-
-        return { success: true, agentName: agent.name, sessionPolicy };
+        return { success: true, agentName: agent.name, sessionPolicy: updated.sessionPolicy };
       },
 
       // Daemon methods

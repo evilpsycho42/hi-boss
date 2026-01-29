@@ -9,21 +9,16 @@ This document is a high-level view of Hi-Boss. For details, see the linked spec 
 │  Chat Apps   │────▶│   Adapters    │────▶│      Daemon          │
 │ (Telegram…)  │     │ (Telegram…)   │     │  (router + scheduler │
 └──────────────┘     └───────────────┘     │   + agent executor)  │
-        ▲                                   └──────────┬──────────┘
-        │                                              │
-        │                                              │ persists
-        │                                              ▼
-        │                                      ┌───────────────┐
-        │                                      │    SQLite     │
-        │                                      │  hiboss.db    │
-        │                                      └───────────────┘
-        │
-        │ JSON-RPC (local socket)
-        ▼
-┌──────────────┐
-│   hiboss     │
-│    CLI       │
-└──────────────┘
+                                           └──────────┬───────────┘
+                                                      │
+                                           persists   │   JSON-RPC
+                                                      │   (local socket)
+                                     ┌────────────────┼────────────────┐
+                                     ▼                                 ▼
+                             ┌───────────────┐                 ┌──────────────┐
+                             │    SQLite     │                 │   hiboss     │
+                             │  hiboss.db    │                 │    CLI       │
+                             └───────────────┘                 └──────────────┘
 ```
 
 ## Components

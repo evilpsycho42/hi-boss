@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS config (
   model TEXT,
   reasoning_effort TEXT DEFAULT 'medium',
   auto_level TEXT DEFAULT 'high',
+  permission_level TEXT DEFAULT 'standard',
+  session_policy TEXT,           -- JSON blob for SessionPolicyConfig
   created_at TEXT DEFAULT (datetime('now')),
   last_seen_at TEXT,
   metadata TEXT

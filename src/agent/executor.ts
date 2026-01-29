@@ -125,8 +125,7 @@ export class AgentExecutor {
   }
 
   private getSessionPolicy(agent: Agent) {
-    const policy = (agent.metadata as { sessionPolicy?: unknown } | undefined)?.sessionPolicy;
-    return parseSessionPolicyConfig(policy, { strict: false });
+    return parseSessionPolicyConfig(agent.sessionPolicy, { strict: false });
   }
 
   private getMostRecentDailyResetBoundaryMs(

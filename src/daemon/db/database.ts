@@ -2,8 +2,9 @@ import Database from "better-sqlite3";
 import * as fs from "fs";
 import * as path from "path";
 import { SCHEMA_SQL } from "./schema.js";
-import type { Agent, RegisterAgentInput } from "../../agent/types.js";
+import type { Agent, AgentPermissionLevel, RegisterAgentInput } from "../../agent/types.js";
 import type { Envelope, CreateEnvelopeInput, EnvelopeStatus } from "../../envelope/types.js";
+import type { SessionPolicyConfig } from "../../shared/session-policy.js";
 import { generateToken, hashToken, verifyToken } from "../../agent/auth.js";
 import { generateUUID } from "../../shared/uuid.js";
 import { assertValidAgentName } from "../../shared/validation.js";
@@ -20,6 +21,8 @@ interface AgentRow {
   model: string | null;
   reasoning_effort: string | null;
   auto_level: string | null;
+  permission_level: string | null;
+  session_policy: string | null;
   created_at: string;
   last_seen_at: string | null;
   metadata: string | null;
@@ -110,13 +113,41 @@ export class HiBossDatabase {
     const envelopeColumns = this.db.prepare("PRAGMA table_info(envelopes)").all() as Array<{
       name: string;
     }>;
-    if (envelopeColumns.length === 0) {
-      // Fresh DB: schema will create the table with the latest columns.
-      return;
+    if (envelopeColumns.length > 0) {
+      const hasDeliverAt = envelopeColumns.some((c) => c.name === "deliver_at");
+      if (!hasDeliverAt) {
+        this.db.exec("ALTER TABLE envelopes ADD COLUMN deliver_at TEXT");
+      }
     }
-    const hasDeliverAt = envelopeColumns.some((c) => c.name === "deliver_at");
-    if (!hasDeliverAt) {
-      this.db.exec("ALTER TABLE envelopes ADD COLUMN deliver_at TEXT");
+
+    // Migrate agents.permission_level and agents.session_policy columns
+    const agentColumns = this.db.prepare("PRAGMA table_info(agents)").all() as Array<{
+      name: string;
+    }>;
+    if (agentColumns.length > 0) {
+      const hasPermissionLevel = agentColumns.some((c) => c.name === "permission_level");
+      if (!hasPermissionLevel) {
+        this.db.exec("ALTER TABLE agents ADD COLUMN permission_level TEXT DEFAULT 'standard'");
+      }
+      const hasSessionPolicy = agentColumns.some((c) => c.name === "session_policy");
+      if (!hasSessionPolicy) {
+        this.db.exec("ALTER TABLE agents ADD COLUMN session_policy TEXT");
+      }
+
+      // Migrate existing data from metadata to new columns
+      if (!hasPermissionLevel || !hasSessionPolicy) {
+        this.db.exec(`
+          UPDATE agents
+          SET permission_level = json_extract(metadata, '$.permissionLevel')
+          WHERE json_extract(metadata, '$.permissionLevel') IS NOT NULL
+            AND (permission_level IS NULL OR permission_level = 'standard');
+
+          UPDATE agents
+          SET session_policy = json_extract(metadata, '$.sessionPolicy')
+          WHERE json_extract(metadata, '$.sessionPolicy') IS NOT NULL
+            AND session_policy IS NULL;
+        `);
+      }
     }
   }
 
@@ -149,8 +180,8 @@ export class HiBossDatabase {
     const createdAt = new Date().toISOString();
 
     const stmt = this.db.prepare(`
-      INSERT INTO agents (name, token, description, workspace, provider, model, reasoning_effort, auto_level, created_at, metadata)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO agents (name, token, description, workspace, provider, model, reasoning_effort, auto_level, permission_level, session_policy, created_at, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -162,6 +193,8 @@ export class HiBossDatabase {
       input.model ?? null,
       input.reasoningEffort ?? 'medium',
       input.autoLevel ?? 'high',
+      input.permissionLevel ?? 'standard',
+      input.sessionPolicy ? JSON.stringify(input.sessionPolicy) : null,
       createdAt,
       input.metadata ? JSON.stringify(input.metadata) : null
     );
@@ -225,32 +258,28 @@ export class HiBossDatabase {
   }
 
   /**
-   * Set agent permission level stored in metadata.permissionLevel.
+   * Set agent permission level stored in permission_level column.
    *
    * Notes:
-   * - Preserves existing metadata fields.
    * - Uses the canonical agent name (case-insensitive lookup).
    */
   setAgentPermissionLevel(
     name: string,
-    permissionLevel: "restricted" | "standard" | "privileged"
+    permissionLevel: AgentPermissionLevel
   ): { success: true; agentName: string; permissionLevel: string } {
     const agent = this.getAgentByNameCaseInsensitive(name);
     if (!agent) {
       throw new Error("Agent not found");
     }
 
-    const existing = agent.metadata;
-    const base =
-      typeof existing === "object" && existing !== null ? (existing as Record<string, unknown>) : {};
-    const next: Record<string, unknown> = { ...base, permissionLevel };
+    const stmt = this.db.prepare("UPDATE agents SET permission_level = ? WHERE name = ?");
+    stmt.run(permissionLevel, agent.name);
 
-    this.updateAgentMetadata(agent.name, next);
     return { success: true, agentName: agent.name, permissionLevel };
   }
 
   /**
-   * Update agent session policy stored in metadata.sessionPolicy.
+   * Update agent session policy stored in session_policy column.
    *
    * Notes:
    * - This is intentionally permissive; validation should happen in the daemon RPC layer.
@@ -270,47 +299,54 @@ export class HiBossDatabase {
       throw new Error(`Agent ${name} not found in database`);
     }
 
-    const existingMetadata =
-      agent.metadata && typeof agent.metadata === "object" ? agent.metadata : {};
-
-    const nextMetadata: Record<string, unknown> = { ...existingMetadata };
+    let nextPolicy: SessionPolicyConfig | null = null;
 
     if (update.clear) {
-      delete nextMetadata.sessionPolicy;
+      nextPolicy = null;
     } else {
-      const existingPolicy =
-        typeof (existingMetadata as { sessionPolicy?: unknown }).sessionPolicy === "object" &&
-        (existingMetadata as { sessionPolicy?: unknown }).sessionPolicy !== null
-          ? ((existingMetadata as { sessionPolicy?: unknown }).sessionPolicy as Record<
-              string,
-              unknown
-            >)
-          : {};
-
-      const nextPolicy: Record<string, unknown> = { ...existingPolicy };
+      const existingPolicy = agent.sessionPolicy ?? {};
+      const merged: SessionPolicyConfig = { ...existingPolicy };
 
       if (typeof update.dailyResetAt === "string") {
-        nextPolicy.dailyResetAt = update.dailyResetAt;
+        merged.dailyResetAt = update.dailyResetAt;
       }
       if (typeof update.idleTimeout === "string") {
-        nextPolicy.idleTimeout = update.idleTimeout;
+        merged.idleTimeout = update.idleTimeout;
       }
       if (typeof update.maxTokens === "number") {
-        nextPolicy.maxTokens = update.maxTokens;
+        merged.maxTokens = update.maxTokens;
       }
 
-      if (Object.keys(nextPolicy).length === 0) {
-        delete nextMetadata.sessionPolicy;
+      if (Object.keys(merged).length === 0) {
+        nextPolicy = null;
       } else {
-        nextMetadata.sessionPolicy = nextPolicy;
+        nextPolicy = merged;
       }
     }
 
-    this.updateAgentMetadata(name, Object.keys(nextMetadata).length ? nextMetadata : null);
+    const stmt = this.db.prepare("UPDATE agents SET session_policy = ? WHERE name = ?");
+    stmt.run(nextPolicy ? JSON.stringify(nextPolicy) : null, name);
+
     return this.getAgentByName(name)!;
   }
 
   private rowToAgent(row: AgentRow): Agent {
+    // Parse permission level
+    let permissionLevel: AgentPermissionLevel | undefined;
+    if (row.permission_level === "restricted" || row.permission_level === "standard" || row.permission_level === "privileged") {
+      permissionLevel = row.permission_level;
+    }
+
+    // Parse session policy
+    let sessionPolicy: SessionPolicyConfig | undefined;
+    if (row.session_policy) {
+      try {
+        sessionPolicy = JSON.parse(row.session_policy) as SessionPolicyConfig;
+      } catch {
+        // ignore invalid JSON
+      }
+    }
+
     return {
       name: row.name,
       token: row.token,
@@ -320,6 +356,8 @@ export class HiBossDatabase {
       model: row.model ?? undefined,
       reasoningEffort: (row.reasoning_effort as 'low' | 'medium' | 'high') ?? undefined,
       autoLevel: (row.auto_level as 'low' | 'medium' | 'high') ?? undefined,
+      permissionLevel,
+      sessionPolicy,
       createdAt: row.created_at,
       lastSeenAt: row.last_seen_at ?? undefined,
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,

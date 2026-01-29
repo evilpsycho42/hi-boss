@@ -152,26 +152,18 @@ export async function listAgents(options: ListAgentsOptions): Promise<void> {
       if (agent.autoLevel) {
         console.log(`auto-level: ${agent.autoLevel}`);
       }
-      const permissionLevel = (agent.metadata as { permissionLevel?: unknown } | undefined)
-        ?.permissionLevel;
-      if (
-        permissionLevel === "restricted" ||
-        permissionLevel === "standard" ||
-        permissionLevel === "privileged"
-      ) {
-        console.log(`permission-level: ${permissionLevel}`);
+      if (agent.permissionLevel) {
+        console.log(`permission-level: ${agent.permissionLevel}`);
       }
-      const sessionPolicy = (agent.metadata as { sessionPolicy?: unknown } | undefined)
-        ?.sessionPolicy as Record<string, unknown> | undefined;
-      if (sessionPolicy && typeof sessionPolicy === "object") {
-        if (typeof sessionPolicy.dailyResetAt === "string") {
-          console.log(`session-daily-reset-at: ${sessionPolicy.dailyResetAt}`);
+      if (agent.sessionPolicy && typeof agent.sessionPolicy === "object") {
+        if (typeof agent.sessionPolicy.dailyResetAt === "string") {
+          console.log(`session-daily-reset-at: ${agent.sessionPolicy.dailyResetAt}`);
         }
-        if (typeof sessionPolicy.idleTimeout === "string") {
-          console.log(`session-idle-timeout: ${sessionPolicy.idleTimeout}`);
+        if (typeof agent.sessionPolicy.idleTimeout === "string") {
+          console.log(`session-idle-timeout: ${agent.sessionPolicy.idleTimeout}`);
         }
-        if (typeof sessionPolicy.maxTokens === "number") {
-          console.log(`session-max-tokens: ${sessionPolicy.maxTokens}`);
+        if (typeof agent.sessionPolicy.maxTokens === "number") {
+          console.log(`session-max-tokens: ${agent.sessionPolicy.maxTokens}`);
         }
       }
       if (agent.bindings && agent.bindings.length > 0) {
@@ -215,16 +207,17 @@ export async function setAgentSessionPolicy(
     console.log(`agent-name: ${result.agentName}`);
     console.log(`success: ${result.success ? "true" : "false"}`);
 
-    const sessionPolicy = result.sessionPolicy as Record<string, unknown> | undefined;
+    const sessionPolicy = result.sessionPolicy;
     if (sessionPolicy && typeof sessionPolicy === "object") {
-      if (typeof sessionPolicy.dailyResetAt === "string") {
-        console.log(`session-daily-reset-at: ${sessionPolicy.dailyResetAt}`);
+      const sp = sessionPolicy as Record<string, unknown>;
+      if (typeof sp.dailyResetAt === "string") {
+        console.log(`session-daily-reset-at: ${sp.dailyResetAt}`);
       }
-      if (typeof sessionPolicy.idleTimeout === "string") {
-        console.log(`session-idle-timeout: ${sessionPolicy.idleTimeout}`);
+      if (typeof sp.idleTimeout === "string") {
+        console.log(`session-idle-timeout: ${sp.idleTimeout}`);
       }
-      if (typeof sessionPolicy.maxTokens === "number") {
-        console.log(`session-max-tokens: ${sessionPolicy.maxTokens}`);
+      if (typeof sp.maxTokens === "number") {
+        console.log(`session-max-tokens: ${sp.maxTokens}`);
       }
     }
   } catch (err) {

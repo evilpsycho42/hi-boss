@@ -20,20 +20,34 @@ interface Agent {
   model?: string;                                    // Model selection
   reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
   autoLevel?: 'low' | 'medium' | 'high';             // Access/automation level
+  permissionLevel?: AgentPermissionLevel;            // Authorization level for CLI/RPC ops
+  sessionPolicy?: SessionPolicyConfig;               // Session refresh policy
   createdAt: string;                                 // ISO 8601
   lastSeenAt?: string;                               // ISO 8601
-  metadata?: Record<string, unknown>;                // Extensible metadata
+  metadata?: Record<string, unknown>;                // Extensible metadata (for future use)
 }
 ```
 
-Permission level is stored in `metadata.permissionLevel` and is used by the daemon to authorize CLI/RPC operations:
+### Permission Level
 
-- `restricted < standard < privileged < boss`
+Authorization level for CLI/RPC operations. Values: `restricted < standard < privileged < boss`.
 
-Set it with:
+Set permission level with:
 
 ```bash
 hiboss agent permission set --name <agent-name> --permission-level <restricted|standard|privileged> --token <boss-token>
+```
+
+### Session Policy
+
+Session refresh policy configuration:
+
+```typescript
+interface SessionPolicyConfig {
+  dailyResetAt?: string;   // "HH:MM" format (24h)
+  idleTimeout?: string;    // Duration: "2h", "30m", "1h30m"
+  maxTokens?: number;      // Token limit per run
+}
 ```
 
 ### Database Schema
@@ -50,9 +64,11 @@ Table: `agents` (in `src/daemon/db/schema.ts`)
 | model | TEXT | Optional |
 | reasoning_effort | TEXT | Default: 'medium' |
 | auto_level | TEXT | Default: 'high' |
+| permission_level | TEXT | Default: 'standard' |
+| session_policy | TEXT | JSON blob for SessionPolicyConfig |
 | created_at | TEXT | ISO 8601 |
 | last_seen_at | TEXT | ISO 8601, optional |
-| metadata | TEXT | JSON blob |
+| metadata | TEXT | JSON blob (for extensibility) |
 
 ## Agent Registration
 
@@ -100,6 +116,8 @@ Set at registration or via agent settings:
 | `model` | Model to use | Provider-specific model ID |
 | `reasoningEffort` | Extended reasoning level | `none`, `low`, `medium`, `high`, `xhigh` |
 | `autoLevel` | Automation/access level | `low`, `medium`, `high` |
+| `permissionLevel` | Authorization for CLI/RPC ops | `restricted`, `standard`, `privileged`, `boss` |
+| `sessionPolicy` | Session refresh policy | See [Session Policy](#session-policy) |
 
 ### Access Level Mapping
 
@@ -107,9 +125,9 @@ The `autoLevel` setting maps to SDK access permissions:
 
 | autoLevel | Behavior |
 |-----------|----------|
-| `low` | Minimal automation, more confirmations |
-| `medium` | Balanced automation |
-| `high` | Maximum automation, fewer confirmations |
+| `low` | Read-only filesystem; no writes; web search allowed |
+| `medium` | Sandboxed writes; web search; network including localhost |
+| `high` | Unrestricted; no sandbox |
 
 ## Home Directories
 
@@ -286,7 +304,7 @@ hiboss agent unbind \
 
 ## Session Policy
 
-Session policies control when agent sessions are refreshed. Stored in `agent.metadata.sessionPolicy`. For how policies are evaluated at runtime, see [Session Management](session.md#session-policy-evaluation).
+Session policies control when agent sessions are refreshed. Stored as a first-class field on the Agent (`agent.sessionPolicy`). For how policies are evaluated at runtime, see [Session Management](session.md#session-policy-evaluation).
 
 ### Configuration
 
