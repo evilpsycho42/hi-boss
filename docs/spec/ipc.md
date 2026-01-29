@@ -56,6 +56,7 @@ Backwards-compatible aliases:
 Agents:
 
 - `agent.register`
+- `agent.set`
 - `agent.list`
 - `agent.bind`
 - `agent.unbind`

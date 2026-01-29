@@ -1,16 +1,17 @@
-import * as os from "os";
+import * as fs from "fs";
 import * as path from "path";
-import { input, select, confirm, password } from "@inquirer/prompts";
+import { input, select, password } from "@inquirer/prompts";
 import { IpcClient } from "../ipc-client.js";
 import { getSocketPath, getDefaultConfig, isDaemonRunning } from "../../daemon/daemon.js";
 import { HiBossDatabase } from "../../daemon/db/database.js";
 import { setupAgentHome } from "../../agent/home-setup.js";
 import type { SetupCheckResult, SetupExecuteResult } from "../../daemon/ipc/types.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../shared/validation.js";
+import { parseDailyResetAt, parseDurationToMs } from "../../shared/session-policy.js";
 import {
+  DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_SETUP_AGENT_NAME,
   DEFAULT_SETUP_AUTO_LEVEL,
-  DEFAULT_SETUP_BIND_TELEGRAM,
   DEFAULT_SETUP_MODEL_BY_PROVIDER,
   DEFAULT_SETUP_PROVIDER,
   DEFAULT_SETUP_REASONING_EFFORT,
@@ -24,11 +25,7 @@ import {
  * Options for default setup.
  */
 export interface DefaultSetupOptions {
-  bossName?: string;
-  bossToken?: string;
-  adapterType?: string;
-  adapterToken?: string;
-  adapterBossId?: string;
+  config: string;
 }
 
 /**
@@ -44,13 +41,222 @@ interface SetupConfig {
     model?: string;
     reasoningEffort: 'low' | 'medium' | 'high';
     autoLevel: 'low' | 'medium' | 'high';
+    permissionLevel?: 'restricted' | 'standard' | 'privileged';
+    sessionPolicy?: {
+      dailyResetAt?: string;
+      idleTimeout?: string;
+      maxTokens?: number;
+    };
+    metadata?: Record<string, unknown>;
   };
-  adapter?: {
+  adapter: {
     adapterType: string;
     adapterToken: string;
-    adapterBossId?: string;
+    adapterBossId: string;
   };
   bossToken: string;
+}
+
+interface SetupConfigFileV1 {
+  version: 1;
+  "boss-name"?: string;
+  "boss-token": string;
+  provider?: "claude" | "codex";
+  agent: {
+    name?: string;
+    description?: string;
+    workspace?: string;
+    model?: string;
+    "reasoning-effort"?: "low" | "medium" | "high";
+    "auto-level"?: "low" | "medium" | "high";
+    "permission-level"?: "restricted" | "standard" | "privileged";
+    "session-policy"?: {
+      "daily-reset-at"?: string;
+      "idle-timeout"?: string;
+      "max-tokens"?: number;
+    };
+    metadata?: Record<string, unknown>;
+  };
+  telegram: {
+    "adapter-token": string;
+    "adapter-boss-id": string;
+  };
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseSetupConfigFileV1(json: string): SetupConfig {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw new Error("Invalid setup config JSON");
+  }
+
+  if (!isPlainObject(parsed)) {
+    throw new Error("Invalid setup config (expected object)");
+  }
+
+  const version = parsed.version;
+  if (version !== 1) {
+    throw new Error("Invalid setup config version (expected 1)");
+  }
+
+  const bossToken = typeof parsed["boss-token"] === "string" ? parsed["boss-token"].trim() : "";
+  if (!bossToken) {
+    throw new Error("Invalid setup config (boss-token is required)");
+  }
+  if (bossToken.length < 4) {
+    throw new Error("Invalid setup config (boss-token must be at least 4 characters)");
+  }
+
+  const providerRaw = parsed.provider;
+  const provider =
+    providerRaw === "claude" || providerRaw === "codex" ? providerRaw : DEFAULT_SETUP_PROVIDER;
+
+  const bossNameRaw = parsed["boss-name"];
+  const bossName =
+    typeof bossNameRaw === "string" && bossNameRaw.trim() ? bossNameRaw.trim() : getDefaultSetupBossName();
+
+  const agentRaw = parsed.agent;
+  if (!isPlainObject(agentRaw)) {
+    throw new Error("Invalid setup config (agent is required)");
+  }
+
+  const agentNameRaw = agentRaw.name;
+  const agentName =
+    typeof agentNameRaw === "string" && agentNameRaw.trim() ? agentNameRaw.trim() : DEFAULT_SETUP_AGENT_NAME;
+  if (!isValidAgentName(agentName)) {
+    throw new Error(`Invalid setup config (agent.name): ${AGENT_NAME_ERROR_MESSAGE}`);
+  }
+
+  const agentDescriptionRaw = agentRaw.description;
+  const agentDescription =
+    typeof agentDescriptionRaw === "string" ? agentDescriptionRaw : getDefaultSetupAgentDescription(agentName);
+
+  const workspaceRaw = agentRaw.workspace;
+  const workspace =
+    typeof workspaceRaw === "string" && workspaceRaw.trim() ? workspaceRaw.trim() : getDefaultSetupWorkspace();
+  if (!path.isAbsolute(workspace)) {
+    throw new Error("Invalid setup config (agent.workspace must be an absolute path)");
+  }
+
+  const modelRaw = agentRaw.model;
+  const model =
+    typeof modelRaw === "string" && modelRaw.trim()
+      ? modelRaw.trim()
+      : DEFAULT_SETUP_MODEL_BY_PROVIDER[provider];
+
+  const reasoningEffortRaw = agentRaw["reasoning-effort"];
+  const reasoningEffort =
+    reasoningEffortRaw === "low" || reasoningEffortRaw === "medium" || reasoningEffortRaw === "high"
+      ? reasoningEffortRaw
+      : DEFAULT_SETUP_REASONING_EFFORT;
+
+  const autoLevelRaw = agentRaw["auto-level"];
+  const autoLevel =
+    autoLevelRaw === "low" || autoLevelRaw === "medium" || autoLevelRaw === "high"
+      ? autoLevelRaw
+      : DEFAULT_SETUP_AUTO_LEVEL;
+
+  const permissionLevelRaw = agentRaw["permission-level"];
+  const permissionLevel =
+    permissionLevelRaw === "restricted" || permissionLevelRaw === "standard" || permissionLevelRaw === "privileged"
+      ? permissionLevelRaw
+      : undefined;
+
+  let sessionPolicy: SetupConfig["agent"]["sessionPolicy"] | undefined;
+  const sessionPolicyRaw = agentRaw["session-policy"];
+  if (sessionPolicyRaw !== undefined) {
+    if (!isPlainObject(sessionPolicyRaw)) {
+      throw new Error("Invalid setup config (agent.session-policy must be an object)");
+    }
+
+    const nextPolicy: NonNullable<SetupConfig["agent"]["sessionPolicy"]> = {};
+
+    if (sessionPolicyRaw["daily-reset-at"] !== undefined) {
+      if (typeof sessionPolicyRaw["daily-reset-at"] !== "string") {
+        throw new Error("Invalid setup config (agent.session-policy.daily-reset-at must be a string)");
+      }
+      nextPolicy.dailyResetAt = parseDailyResetAt(sessionPolicyRaw["daily-reset-at"]).normalized;
+    }
+    if (sessionPolicyRaw["idle-timeout"] !== undefined) {
+      if (typeof sessionPolicyRaw["idle-timeout"] !== "string") {
+        throw new Error("Invalid setup config (agent.session-policy.idle-timeout must be a string)");
+      }
+      parseDurationToMs(sessionPolicyRaw["idle-timeout"]);
+      nextPolicy.idleTimeout = sessionPolicyRaw["idle-timeout"].trim();
+    }
+    if (sessionPolicyRaw["max-tokens"] !== undefined) {
+      if (typeof sessionPolicyRaw["max-tokens"] !== "number" || !Number.isFinite(sessionPolicyRaw["max-tokens"])) {
+        throw new Error("Invalid setup config (agent.session-policy.max-tokens must be a number)");
+      }
+      if (sessionPolicyRaw["max-tokens"] <= 0) {
+        throw new Error("Invalid setup config (agent.session-policy.max-tokens must be > 0)");
+      }
+      nextPolicy.maxTokens = Math.trunc(sessionPolicyRaw["max-tokens"]);
+    }
+
+    if (Object.keys(nextPolicy).length > 0) {
+      sessionPolicy = nextPolicy;
+    }
+  }
+
+  const metadataRaw = agentRaw.metadata;
+  let metadata: Record<string, unknown> | undefined;
+  if (metadataRaw !== undefined) {
+    if (!isPlainObject(metadataRaw)) {
+      throw new Error("Invalid setup config (agent.metadata must be a JSON object)");
+    }
+    metadata = metadataRaw;
+  }
+
+  const telegramRaw = (parsed as Record<string, unknown>).telegram;
+  if (!isPlainObject(telegramRaw)) {
+    throw new Error("Invalid setup config (telegram is required)");
+  }
+
+  const adapterToken =
+    typeof telegramRaw["adapter-token"] === "string" ? telegramRaw["adapter-token"].trim() : "";
+  if (!adapterToken) {
+    throw new Error("Invalid setup config (telegram.adapter-token is required)");
+  }
+  if (!/^\d+:[A-Za-z0-9_-]+$/.test(adapterToken)) {
+    throw new Error("Invalid setup config (telegram.adapter-token has invalid format)");
+  }
+
+  const adapterBossIdRaw =
+    typeof telegramRaw["adapter-boss-id"] === "string" ? telegramRaw["adapter-boss-id"].trim() : "";
+  if (!adapterBossIdRaw) {
+    throw new Error("Invalid setup config (telegram.adapter-boss-id is required)");
+  }
+  const adapterBossId = adapterBossIdRaw.replace(/^@/, "");
+
+  const config: SetupConfig = {
+    provider,
+    bossName,
+    agent: {
+      name: agentName,
+      description: agentDescription,
+      workspace,
+      model,
+      reasoningEffort,
+      autoLevel,
+      permissionLevel,
+      sessionPolicy,
+      metadata,
+    },
+    adapter: {
+      adapterType: "telegram",
+      adapterToken,
+      adapterBossId,
+    },
+    bossToken,
+  };
+
+  return config;
 }
 
 /**
@@ -137,17 +343,16 @@ async function executeSetupDirect(config: SetupConfig): Promise<string> {
         model: config.agent.model,
         reasoningEffort: config.agent.reasoningEffort,
         autoLevel: config.agent.autoLevel,
+        permissionLevel: config.agent.permissionLevel,
+        sessionPolicy: config.agent.sessionPolicy,
+        metadata: config.agent.metadata,
       });
 
       // Create adapter binding if provided
-      if (config.adapter) {
-        db.createBinding(config.agent.name, config.adapter.adapterType, config.adapter.adapterToken);
+      db.createBinding(config.agent.name, config.adapter.adapterType, config.adapter.adapterToken);
 
-        // Store boss ID for this adapter
-        if (config.adapter.adapterBossId) {
-          db.setAdapterBossId(config.adapter.adapterType, config.adapter.adapterBossId);
-        }
-      }
+      // Store boss ID for this adapter
+      db.setAdapterBossId(config.adapter.adapterType, config.adapter.adapterBossId);
 
       // Set boss token
       db.setBossToken(config.bossToken);
@@ -287,47 +492,119 @@ export async function runInteractiveSetup(): Promise<void> {
     default: DEFAULT_SETUP_AUTO_LEVEL,
   });
 
-  // Step 4: Telegram binding
-  console.log("\n📱 Telegram Integration\n");
-
-  const bindTelegram = await confirm({
-    message: "Would you like to bind a Telegram bot?",
-    default: DEFAULT_SETUP_BIND_TELEGRAM,
+  const permissionLevel = await select<'restricted' | 'standard' | 'privileged'>({
+    message: "Agent permission level:",
+    choices: [
+      { value: 'restricted', name: "Restricted" },
+      { value: 'standard', name: "Standard (recommended)" },
+      { value: 'privileged', name: "Privileged" },
+    ],
+    default: DEFAULT_AGENT_PERMISSION_LEVEL,
   });
 
-  let adapter: SetupConfig['adapter'];
-  if (bindTelegram) {
-    console.log("\n📋 To create a Telegram bot:");
-    console.log("   1. Open Telegram and search for @BotFather");
-    console.log("   2. Send /newbot and follow the instructions");
-    console.log("   3. Copy the bot token (looks like: 123456789:ABCdef...)\n");
-
-    const adapterToken = await input({
-      message: "Enter your Telegram bot token:",
-      validate: (value) => {
-        if (!/^\d+:[A-Za-z0-9_-]+$/.test(value)) {
-          return "Invalid token format. Should look like: 123456789:ABCdef...";
-        }
+  const sessionDailyResetAt = (await input({
+    message: "Session daily reset at (HH:MM) (optional):",
+    default: "",
+    validate: (value) => {
+      const trimmed = value.trim();
+      if (!trimmed) return true;
+      try {
+        parseDailyResetAt(trimmed);
         return true;
-      },
-    });
+      } catch (err) {
+        return (err as Error).message;
+      }
+    },
+  })).trim();
 
-    const adapterBossId = await input({
-      message: "Your Telegram username (to identify you as the boss):",
-      validate: (value) => {
-        if (value.trim().length === 0) {
-          return "Telegram username is required";
-        }
+  const sessionIdleTimeout = (await input({
+    message: "Session idle timeout (e.g., 2h, 30m) (optional):",
+    default: "",
+    validate: (value) => {
+      const trimmed = value.trim();
+      if (!trimmed) return true;
+      try {
+        parseDurationToMs(trimmed);
         return true;
-      },
-    });
+      } catch (err) {
+        return (err as Error).message;
+      }
+    },
+  })).trim();
 
-    adapter = {
-      adapterType: 'telegram',
-      adapterToken,
-      adapterBossId: adapterBossId.replace(/^@/, ''),  // Store without @
-    };
-  }
+  const sessionMaxTokensRaw = (await input({
+    message: "Session max tokens (optional):",
+    default: "",
+    validate: (value) => {
+      const trimmed = value.trim();
+      if (!trimmed) return true;
+      const n = Number(trimmed);
+      if (!Number.isFinite(n) || n <= 0) return "Session max tokens must be a positive number";
+      return true;
+    },
+  })).trim();
+
+  const sessionMaxTokens = sessionMaxTokensRaw ? Math.trunc(Number(sessionMaxTokensRaw)) : undefined;
+
+  const metadataRaw = (await input({
+    message: "Agent metadata JSON (optional):",
+    default: "",
+    validate: (value) => {
+      const trimmed = value.trim();
+      if (!trimmed) return true;
+      try {
+        const parsed = JSON.parse(trimmed) as unknown;
+        if (!isPlainObject(parsed)) return "Metadata must be a JSON object";
+        return true;
+      } catch {
+        return "Invalid JSON";
+      }
+    },
+  })).trim();
+
+  const metadata = metadataRaw ? (JSON.parse(metadataRaw) as Record<string, unknown>) : undefined;
+
+  const sessionPolicy =
+    sessionDailyResetAt || sessionIdleTimeout || sessionMaxTokens !== undefined
+      ? {
+          dailyResetAt: sessionDailyResetAt ? parseDailyResetAt(sessionDailyResetAt).normalized : undefined,
+          idleTimeout: sessionIdleTimeout || undefined,
+          maxTokens: sessionMaxTokens,
+        }
+      : undefined;
+
+  // Step 4: Telegram binding (required)
+  console.log("\n📱 Telegram Integration\n");
+  console.log("\n📋 To create a Telegram bot:");
+  console.log("   1. Open Telegram and search for @BotFather");
+  console.log("   2. Send /newbot and follow the instructions");
+  console.log("   3. Copy the bot token (looks like: 123456789:ABCdef...)\n");
+
+  const adapterToken = await input({
+    message: "Enter your Telegram bot token:",
+    validate: (value) => {
+      if (!/^\d+:[A-Za-z0-9_-]+$/.test(value.trim())) {
+        return "Invalid token format. Should look like: 123456789:ABCdef...";
+      }
+      return true;
+    },
+  });
+
+  const adapterBossId = await input({
+    message: "Your Telegram username (to identify you as the boss):",
+    validate: (value) => {
+      if (value.trim().length === 0) {
+        return "Telegram username is required";
+      }
+      return true;
+    },
+  });
+
+  const adapter: SetupConfig["adapter"] = {
+    adapterType: "telegram",
+    adapterToken: adapterToken.trim(),
+    adapterBossId: adapterBossId.trim().replace(/^@/, ""), // Store without @
+  };
 
   // Step 5: Boss token
   console.log("\n🔐 Boss Token\n");
@@ -366,6 +643,9 @@ export async function runInteractiveSetup(): Promise<void> {
       model,
       reasoningEffort,
       autoLevel,
+      permissionLevel,
+      sessionPolicy,
+      metadata,
     },
     adapter,
     bossToken,
@@ -378,13 +658,11 @@ export async function runInteractiveSetup(): Promise<void> {
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log(`   agent-name:  ${agentName}`);
     console.log(`   agent-token: ${agentToken}`);
+    console.log(`   boss-token:  ${bossToken}`);
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("\n⚠️  Save this token! It won't be shown again.\n");
-
-    if (adapter) {
-      console.log("📱 Telegram bot is configured. Start the daemon with:");
-      console.log("   hiboss daemon start\n");
-    }
+    console.log("\n⚠️  Save these tokens! They won't be shown again.\n");
+    console.log("📱 Telegram bot is configured. Start the daemon with:");
+    console.log("   hiboss daemon start\n");
   } catch (err) {
     const error = err as Error;
     console.error(`\n❌ Setup failed: ${error.message}\n`);
@@ -412,46 +690,20 @@ export async function runDefaultSetup(options: DefaultSetupOptions): Promise<voi
     return;
   }
 
-  const providedBossToken = options.bossToken?.trim();
-  if (!providedBossToken) {
-    console.error("❌ --boss-token is required\n");
+  const filePath = path.resolve(process.cwd(), options.config);
+  let json: string;
+  try {
+    json = await fs.promises.readFile(filePath, "utf-8");
+  } catch (err) {
+    console.error(`❌ Failed to read setup config file: ${(err as Error).message}\n`);
     process.exit(1);
   }
-  if (providedBossToken.length < 4) {
-    console.error("❌ --boss-token must be at least 4 characters\n");
-    process.exit(1);
-  }
 
-  const bossToken = providedBossToken;
-
-  // Default configuration
-  const config: SetupConfig = {
-    provider: DEFAULT_SETUP_PROVIDER,
-    bossName: options.bossName || getDefaultSetupBossName(),
-    agent: {
-      name: DEFAULT_SETUP_AGENT_NAME,
-      description: getDefaultSetupAgentDescription(DEFAULT_SETUP_AGENT_NAME),
-      workspace: getDefaultSetupWorkspace(),
-      model: DEFAULT_SETUP_MODEL_BY_PROVIDER.claude,
-      reasoningEffort: DEFAULT_SETUP_REASONING_EFFORT,
-      autoLevel: DEFAULT_SETUP_AUTO_LEVEL,
-    },
-    bossToken,
-  };
-
-  // Add adapter if specified
-  if (options.adapterType === 'telegram' && options.adapterToken) {
-    if (!options.adapterBossId) {
-      console.error(`❌ --adapter-boss-id is required when using --adapter-type telegram\n`);
-      process.exit(1);
-    }
-    config.adapter = {
-      adapterType: 'telegram',
-      adapterToken: options.adapterToken,
-      adapterBossId: options.adapterBossId.replace(/^@/, ''),
-    };
-  } else if (options.adapterType && !options.adapterToken) {
-    console.error(`❌ --adapter-token is required when using --adapter-type ${options.adapterType}\n`);
+  let config: SetupConfig;
+  try {
+    config = parseSetupConfigFileV1(json);
+  } catch (err) {
+    console.error(`❌ ${(err as Error).message}\n`);
     process.exit(1);
   }
 
@@ -461,23 +713,16 @@ export async function runDefaultSetup(options: DefaultSetupOptions): Promise<voi
     console.log("✅ Default setup complete!\n");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log(`   boss-name:   ${config.bossName}`);
-    console.log(`   agent-name:  ${DEFAULT_SETUP_AGENT_NAME}`);
+    console.log(`   agent-name:  ${config.agent.name}`);
     console.log(`   agent-token: ${agentToken}`);
-    console.log(`   boss-token:  ${bossToken}`);
-    console.log(`   provider:    ${DEFAULT_SETUP_PROVIDER}`);
-    console.log(`   model:       ${DEFAULT_SETUP_MODEL_BY_PROVIDER.claude}`);
+    console.log(`   boss-token:  ${config.bossToken}`);
+    console.log(`   provider:    ${config.provider}`);
+    console.log(`   model:       ${config.agent.model ?? DEFAULT_SETUP_MODEL_BY_PROVIDER[config.provider]}`);
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("\n⚠️  Save the agent token and boss token! They won't be shown again.\n");
 
-    if (config.adapter) {
-      console.log("📱 Telegram bot is configured. Start the daemon with:");
-      console.log("   hiboss daemon start\n");
-    } else {
-      console.log("💡 No adapter was bound. You can bind one later with:");
-      console.log(
-        `   hiboss agent bind --name ${DEFAULT_SETUP_AGENT_NAME} --adapter-type telegram --adapter-token <TOKEN>\n`
-      );
-    }
+    console.log("📱 Telegram bot is configured. Start the daemon with:");
+    console.log("   hiboss daemon start\n");
   } catch (err) {
     const error = err as Error;
     console.error(`\n❌ Setup failed: ${error.message}\n`);
@@ -488,10 +733,15 @@ export async function runDefaultSetup(options: DefaultSetupOptions): Promise<voi
 /**
  * Main setup entry point.
  */
-export async function runSetup(isDefault: boolean, options: DefaultSetupOptions): Promise<void> {
+export async function runSetup(isDefault: true, options: DefaultSetupOptions): Promise<void>;
+export async function runSetup(isDefault: false, options?: Record<string, never>): Promise<void>;
+export async function runSetup(
+  isDefault: boolean,
+  options: DefaultSetupOptions | Record<string, never> = {}
+): Promise<void> {
   if (isDefault) {
-    await runDefaultSetup(options);
-  } else {
-    await runInteractiveSetup();
+    await runDefaultSetup(options as DefaultSetupOptions);
+    return;
   }
+  await runInteractiveSetup();
 }

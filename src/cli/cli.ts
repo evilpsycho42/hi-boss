@@ -8,16 +8,10 @@ import {
   getEnvelope,
   setReaction,
   registerAgent,
+  setAgent,
   listAgents,
-  setAgentSessionPolicy,
-  bindAgent,
-  unbindAgent,
-  setAgentPermissionLevel,
-  getAgentPermissionLevel,
   runBackground,
   runSetup,
-  getPermissionPolicy,
-  setPermissionPolicy,
 } from "./commands/index.js";
 import { DEFAULT_ENVELOPE_LIST_BOX } from "../shared/defaults.js";
 
@@ -167,6 +161,17 @@ agent
   .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .option("--description <description>", "Agent description")
   .option("--workspace <path>", "Workspace path for unified-agent-sdk")
+  .option("--provider <provider>", "Provider (claude or codex)")
+  .option("--model <model>", "Model name (provider-specific)")
+  .option(
+    "--reasoning-effort <effort>",
+    "Reasoning effort (none, low, medium, high, xhigh)"
+  )
+  .option("--auto-level <level>", "Auto-approval level (low, medium, high)")
+  .option(
+    "--permission-level <level>",
+    "Permission level (restricted, standard, privileged)"
+  )
   .option(
     "--session-daily-reset-at <time>",
     "Daily session reset time in local timezone (HH:MM)"
@@ -180,15 +185,90 @@ agent
     "Refresh session after a run uses more than N tokens",
     parseInt
   )
+  .option("--metadata-json <json>", "Agent metadata JSON object")
+  .option("--metadata-file <path>", "Path to agent metadata JSON file")
+  .option("--bind-adapter-type <type>", "Bind adapter type at creation (e.g., telegram)")
+  .option("--bind-adapter-token <token>", "Bind adapter token at creation (e.g., bot token)")
   .action((options) => {
     registerAgent({
       token: options.token,
       name: options.name,
       description: options.description,
       workspace: options.workspace,
+      provider: options.provider,
+      model: options.model,
+      reasoningEffort: options.reasoningEffort,
+      autoLevel: options.autoLevel,
+      permissionLevel: options.permissionLevel,
       sessionDailyResetAt: options.sessionDailyResetAt,
       sessionIdleTimeout: options.sessionIdleTimeout,
       sessionMaxTokens: options.sessionMaxTokens,
+      metadataJson: options.metadataJson,
+      metadataFile: options.metadataFile,
+      bindAdapterType: options.bindAdapterType,
+      bindAdapterToken: options.bindAdapterToken,
+    });
+  });
+
+agent
+  .command("set")
+  .description("Update agent settings and bindings")
+  .requiredOption("--name <name>", "Agent name")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .option("--description <description>", "Agent description")
+  .option("--workspace <path>", "Workspace path for unified-agent-sdk")
+  .option("--provider <provider>", "Provider (claude or codex)")
+  .option("--model <model>", "Model name (provider-specific)")
+  .option(
+    "--reasoning-effort <effort>",
+    "Reasoning effort (none, low, medium, high, xhigh)"
+  )
+  .option("--auto-level <level>", "Auto-approval level (low, medium, high)")
+  .option(
+    "--permission-level <level>",
+    "Permission level (restricted, standard, privileged; boss token only)"
+  )
+  .option(
+    "--session-daily-reset-at <time>",
+    "Daily session reset time in local timezone (HH:MM)"
+  )
+  .option(
+    "--session-idle-timeout <duration>",
+    "Refresh session after being idle longer than this duration (e.g., 2h, 30m; units: d/h/m/s)"
+  )
+  .option(
+    "--session-max-tokens <n>",
+    "Refresh session after a run uses more than N tokens",
+    parseInt
+  )
+  .option("--clear-session-policy", "Clear session policy")
+  .option("--metadata-json <json>", "Agent metadata JSON object")
+  .option("--metadata-file <path>", "Path to agent metadata JSON file")
+  .option("--clear-metadata", "Clear agent metadata")
+  .option("--bind-adapter-type <type>", "Bind adapter type (e.g., telegram)")
+  .option("--bind-adapter-token <token>", "Bind adapter token (e.g., bot token)")
+  .option("--unbind-adapter-type <type>", "Unbind adapter type (e.g., telegram)")
+  .action((options) => {
+    setAgent({
+      token: options.token,
+      name: options.name,
+      description: options.description,
+      workspace: options.workspace,
+      provider: options.provider,
+      model: options.model,
+      reasoningEffort: options.reasoningEffort,
+      autoLevel: options.autoLevel,
+      permissionLevel: options.permissionLevel,
+      sessionDailyResetAt: options.sessionDailyResetAt,
+      sessionIdleTimeout: options.sessionIdleTimeout,
+      sessionMaxTokens: options.sessionMaxTokens,
+      clearSessionPolicy: options.clearSessionPolicy,
+      metadataJson: options.metadataJson,
+      metadataFile: options.metadataFile,
+      clearMetadata: options.clearMetadata,
+      bindAdapterType: options.bindAdapterType,
+      bindAdapterToken: options.bindAdapterToken,
+      unbindAdapterType: options.unbindAdapterType,
     });
   });
 
@@ -198,111 +278,6 @@ agent
   .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .action((options) => {
     listAgents({ token: options.token });
-  });
-
-agent
-  .command("bind")
-  .description("Bind an adapter (e.g., Telegram bot) to an agent")
-  .requiredOption("--name <name>", "Agent name")
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
-  .requiredOption("--adapter-type <type>", "Adapter type (e.g., telegram)")
-  .requiredOption("--adapter-token <token>", "Adapter token (e.g., Telegram bot token)")
-  .action((options) => {
-    bindAgent({
-      token: options.token,
-      name: options.name,
-      adapterType: options.adapterType,
-      adapterToken: options.adapterToken,
-    });
-  });
-
-agent
-  .command("unbind")
-  .description("Unbind an adapter from an agent")
-  .requiredOption("--name <name>", "Agent name")
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
-  .requiredOption("--adapter-type <type>", "Adapter type (e.g., telegram)")
-  .action((options) => {
-    unbindAgent({
-      token: options.token,
-      name: options.name,
-      adapterType: options.adapterType,
-    });
-  });
-
-agent
-  .command("session-policy")
-  .description("Set session refresh policy for an agent")
-  .requiredOption("--name <name>", "Agent name")
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
-  .option(
-    "--session-daily-reset-at <time>",
-    "Daily session reset time in local timezone (HH:MM)"
-  )
-  .option(
-    "--session-idle-timeout <duration>",
-    "Refresh session after being idle longer than this duration (e.g., 2h, 30m; units: d/h/m/s)"
-  )
-  .option(
-    "--session-max-tokens <n>",
-    "Refresh session after a run uses more than N tokens",
-    parseInt
-  )
-  .option("--clear", "Clear session policy")
-  .action((options) => {
-    setAgentSessionPolicy({
-      token: options.token,
-      name: options.name,
-      sessionDailyResetAt: options.sessionDailyResetAt,
-      sessionIdleTimeout: options.sessionIdleTimeout,
-      sessionMaxTokens: options.sessionMaxTokens,
-      clear: options.clear,
-    });
-  });
-
-agent
-  .command("background")
-  .description("Run a non-interactive background task as this agent")
-  .requiredOption("--token <token>", "Agent token")
-  .requiredOption("--task <text>", "Task text")
-  .action((options) => {
-    return runBackground({
-      token: options.token,
-      task: options.task,
-    });
-  });
-
-const agentPermission = agent
-  .command("permission")
-  .description("Agent permission management");
-
-agentPermission
-  .command("get")
-  .description("Get an agent permission level")
-  .requiredOption("--name <name>", "Agent name")
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
-  .action((options) => {
-    getAgentPermissionLevel({
-      token: options.token,
-      name: options.name,
-    });
-  });
-
-agentPermission
-  .command("set")
-  .description("Set an agent permission level")
-  .requiredOption("--name <name>", "Agent name")
-  .requiredOption(
-    "--permission-level <level>",
-    "Permission level (restricted, standard, privileged)"
-  )
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
-  .action((options) => {
-    setAgentPermissionLevel({
-      token: options.token,
-      name: options.name,
-      permissionLevel: options.permissionLevel,
-    });
   });
 
 // Setup command
@@ -317,41 +292,25 @@ setup
 
 setup
   .command("default")
-  .description("Run setup with default values")
-  .option("--boss-name <name>", "Your name (how the agent should address you)")
-  .requiredOption("--boss-token <token>", "Boss token for administrative tasks")
-  .option("--adapter-type <type>", "Adapter type to bind (e.g., telegram)")
-  .option("--adapter-token <token>", "Adapter bot token")
-  .option("--adapter-boss-id <id>", "Your ID on the adapter (e.g., Telegram username)")
+  .description("Run setup from a JSON config file")
+  .requiredOption("--config <path>", "Path to setup config JSON file")
   .action((options) => {
     runSetup(true, {
-      bossName: options.bossName,
-      bossToken: options.bossToken,
-      adapterType: options.adapterType,
-      adapterToken: options.adapterToken,
-      adapterBossId: options.adapterBossId,
+      config: options.config,
     });
   });
 
-// Permission commands
-const permission = program.command("permission").description("Permission management");
-const policy = permission.command("policy").description("Permission policy management");
-
-policy
-  .command("get")
-  .description("Get permission policy")
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+// Background command
+program
+  .command("background")
+  .description("Run a non-interactive background task as this agent")
+  .requiredOption("--token <token>", "Agent token")
+  .requiredOption("--task <text>", "Task text")
   .action((options) => {
-    getPermissionPolicy({ token: options.token });
-  });
-
-policy
-  .command("set")
-  .description("Set permission policy from a JSON file")
-  .requiredOption("--file <path>", "Path to permission policy JSON file")
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
-  .action((options) => {
-    setPermissionPolicy({ token: options.token, file: options.file });
+    return runBackground({
+      token: options.token,
+      task: options.task,
+    });
   });
 
 // Helper to collect multiple values for an option

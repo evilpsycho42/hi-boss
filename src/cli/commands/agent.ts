@@ -3,10 +3,9 @@ import { IpcClient } from "../ipc-client.js";
 import type { Agent } from "../../agent/types.js";
 import { formatUtcIsoAsLocalOffset } from "../../shared/time.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../shared/validation.js";
-import { authorizeCliOperation } from "../authz.js";
 import { resolveToken } from "../token.js";
-import { HiBossDatabase } from "../../daemon/db/database.js";
 import * as path from "path";
+import * as fs from "fs";
 import { DEFAULT_AGENT_PERMISSION_LEVEL } from "../../shared/defaults.js";
 
 interface RegisterAgentResult {
@@ -20,6 +19,14 @@ interface AgentWithBindings extends Omit<Agent, "token"> {
 
 interface ListAgentsResult {
   agents: AgentWithBindings[];
+}
+
+interface AgentSetResult {
+  success: boolean;
+  agent: Omit<Agent, "token"> & {
+    permissionLevel?: string;
+  };
+  bindings: string[];
 }
 
 interface BindAgentResult {
@@ -36,9 +43,18 @@ export interface RegisterAgentOptions {
   name: string;
   description?: string;
   workspace?: string;
+  provider?: string;
+  model?: string;
+  reasoningEffort?: string;
+  autoLevel?: string;
+  permissionLevel?: string;
   sessionDailyResetAt?: string;
   sessionIdleTimeout?: string;
   sessionMaxTokens?: number;
+  metadataJson?: string;
+  metadataFile?: string;
+  bindAdapterType?: string;
+  bindAdapterToken?: string;
 }
 
 export interface BindAgentOptions {
@@ -67,21 +83,74 @@ export interface SetAgentSessionPolicyOptions {
   clear?: boolean;
 }
 
-export interface SetAgentPermissionLevelOptions {
+export interface SetAgentOptions {
   token?: string;
   name: string;
-  permissionLevel: string;
-}
-
-export interface GetAgentPermissionLevelOptions {
-  token?: string;
-  name: string;
+  description?: string;
+  workspace?: string;
+  provider?: string;
+  model?: string;
+  reasoningEffort?: string;
+  autoLevel?: string;
+  permissionLevel?: string;
+  sessionDailyResetAt?: string;
+  sessionIdleTimeout?: string;
+  sessionMaxTokens?: number;
+  clearSessionPolicy?: boolean;
+  metadataJson?: string;
+  metadataFile?: string;
+  clearMetadata?: boolean;
+  bindAdapterType?: string;
+  bindAdapterToken?: string;
+  unbindAdapterType?: string;
 }
 
 interface SetAgentSessionPolicyResult {
   success: boolean;
   agentName: string;
   sessionPolicy?: unknown;
+}
+
+async function readMetadataInput(options: {
+  metadataJson?: string;
+  metadataFile?: string;
+}): Promise<Record<string, unknown> | undefined> {
+  const jsonInline = options.metadataJson?.trim();
+  const filePath = options.metadataFile?.trim();
+
+  if (jsonInline && filePath) {
+    throw new Error("Use only one of --metadata-json or --metadata-file");
+  }
+
+  if (jsonInline) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(jsonInline);
+    } catch {
+      throw new Error("Invalid metadata JSON");
+    }
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw new Error("Invalid metadata JSON (expected object)");
+    }
+    return parsed as Record<string, unknown>;
+  }
+
+  if (filePath) {
+    const abs = path.resolve(process.cwd(), filePath);
+    const json = await fs.promises.readFile(abs, "utf-8");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(json);
+    } catch {
+      throw new Error("Invalid metadata file JSON");
+    }
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw new Error("Invalid metadata file JSON (expected object)");
+    }
+    return parsed as Record<string, unknown>;
+  }
+
+  return undefined;
 }
 
 /**
@@ -102,9 +171,17 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
       name: options.name,
       description: options.description,
       workspace: options.workspace,
+      provider: options.provider,
+      model: options.model,
+      reasoningEffort: options.reasoningEffort,
+      autoLevel: options.autoLevel,
+      permissionLevel: options.permissionLevel,
+      metadata: await readMetadataInput(options),
       sessionDailyResetAt: options.sessionDailyResetAt,
       sessionIdleTimeout: options.sessionIdleTimeout,
       sessionMaxTokens: options.sessionMaxTokens,
+      bindAdapterType: options.bindAdapterType,
+      bindAdapterToken: options.bindAdapterToken,
     });
 
     console.log(`name: ${result.agent.name}`);
@@ -115,6 +192,108 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
       console.log(`workspace: ${result.agent.workspace}`);
     }
     console.log(`token: ${result.token}`);
+  } catch (err) {
+    console.error("error:", (err as Error).message);
+    process.exit(1);
+  }
+}
+
+/**
+ * Update agent settings and bindings.
+ */
+export async function setAgent(options: SetAgentOptions): Promise<void> {
+  const config = getDefaultConfig();
+  const client = new IpcClient(getSocketPath(config));
+
+  try {
+    const token = resolveToken(options.token);
+
+    if (options.clearMetadata && (options.metadataJson || options.metadataFile)) {
+      throw new Error("Use either --clear-metadata or --metadata-json/--metadata-file, not both");
+    }
+    if (
+      (options.bindAdapterType && !options.bindAdapterToken) ||
+      (!options.bindAdapterType && options.bindAdapterToken)
+    ) {
+      throw new Error("--bind-adapter-type and --bind-adapter-token must be used together");
+    }
+    if (options.unbindAdapterType && options.bindAdapterType) {
+      throw new Error("Use either --bind-adapter-* or --unbind-adapter-type, not both");
+    }
+
+    const metadata = options.clearMetadata
+      ? null
+      : (await readMetadataInput(options)) ?? undefined;
+
+    const sessionPolicy =
+      options.clearSessionPolicy ||
+      options.sessionDailyResetAt !== undefined ||
+      options.sessionIdleTimeout !== undefined ||
+      options.sessionMaxTokens !== undefined
+        ? options.clearSessionPolicy
+          ? null
+          : {
+              dailyResetAt: options.sessionDailyResetAt,
+              idleTimeout: options.sessionIdleTimeout,
+              maxTokens: options.sessionMaxTokens,
+            }
+        : undefined;
+
+    const result = await client.call<AgentSetResult>("agent.set", {
+      token,
+      agentName: options.name,
+      description: options.description,
+      workspace: options.workspace,
+      provider: options.provider,
+      model: options.model,
+      reasoningEffort: options.reasoningEffort,
+      autoLevel: options.autoLevel,
+      permissionLevel: options.permissionLevel,
+      sessionPolicy,
+      metadata,
+      bindAdapterType: options.bindAdapterType,
+      bindAdapterToken: options.bindAdapterToken,
+      unbindAdapterType: options.unbindAdapterType,
+    });
+
+    console.log(`success: ${result.success ? "true" : "false"}`);
+    console.log(`agent-name: ${result.agent.name}`);
+    if (result.agent.description) {
+      console.log(`description: ${result.agent.description}`);
+    }
+    if (result.agent.workspace) {
+      console.log(`workspace: ${result.agent.workspace}`);
+    }
+    if (result.agent.provider) {
+      console.log(`provider: ${result.agent.provider}`);
+    }
+    if (result.agent.model) {
+      console.log(`model: ${result.agent.model}`);
+    }
+    if (result.agent.reasoningEffort) {
+      console.log(`reasoning-effort: ${result.agent.reasoningEffort}`);
+    }
+    if (result.agent.autoLevel) {
+      console.log(`auto-level: ${result.agent.autoLevel}`);
+    }
+    if (result.agent.permissionLevel) {
+      console.log(`permission-level: ${result.agent.permissionLevel}`);
+    }
+    if (result.agent.sessionPolicy && typeof result.agent.sessionPolicy === "object") {
+      const sp = result.agent.sessionPolicy as Record<string, unknown>;
+      if (typeof sp.dailyResetAt === "string") {
+        console.log(`session-daily-reset-at: ${sp.dailyResetAt}`);
+      }
+      if (typeof sp.idleTimeout === "string") {
+        console.log(`session-idle-timeout: ${sp.idleTimeout}`);
+      }
+      if (typeof sp.maxTokens === "number") {
+        console.log(`session-max-tokens: ${sp.maxTokens}`);
+      }
+    }
+    if (result.bindings.length > 0) {
+      console.log(`bindings: ${result.bindings.join(", ")}`);
+    }
   } catch (err) {
     console.error("error:", (err as Error).message);
     process.exit(1);
@@ -275,66 +454,6 @@ export async function unbindAgent(options: UnbindAgentOptions): Promise<void> {
     console.log(`agent-name: ${options.name}`);
     console.log(`adapter-type: ${options.adapterType}`);
     console.log("unbound: true");
-  } catch (err) {
-    console.error("error:", (err as Error).message);
-    process.exit(1);
-  }
-}
-
-function getDbPath(): string {
-  const config = getDefaultConfig();
-  return path.join(config.dataDir, "hiboss.db");
-}
-
-export async function setAgentPermissionLevel(
-  options: SetAgentPermissionLevelOptions
-): Promise<void> {
-  try {
-    const token = resolveToken(options.token);
-    authorizeCliOperation("agent.permission.set", token);
-
-    if (
-      options.permissionLevel !== "restricted" &&
-      options.permissionLevel !== "standard" &&
-      options.permissionLevel !== "privileged"
-    ) {
-      throw new Error("Invalid permission-level (expected restricted, standard, privileged)");
-    }
-
-    const db = new HiBossDatabase(getDbPath());
-    try {
-      const result = db.setAgentPermissionLevel(options.name, options.permissionLevel);
-      console.log(`success: ${result.success ? "true" : "false"}`);
-      console.log(`agent-name: ${result.agentName}`);
-      console.log(`permission-level: ${result.permissionLevel}`);
-    } finally {
-      db.close();
-    }
-  } catch (err) {
-    console.error("error:", (err as Error).message);
-    process.exit(1);
-  }
-}
-
-export async function getAgentPermissionLevel(
-  options: GetAgentPermissionLevelOptions
-): Promise<void> {
-  try {
-    const token = resolveToken(options.token);
-    authorizeCliOperation("agent.permission.get", token);
-
-    const db = new HiBossDatabase(getDbPath());
-    try {
-      const agent = db.getAgentByNameCaseInsensitive(options.name);
-      if (!agent) {
-        throw new Error("Agent not found");
-      }
-
-      console.log(`agent-name: ${agent.name}`);
-      console.log(`permission-level: ${agent.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL}`);
-    } finally {
-      db.close();
-    }
   } catch (err) {
     console.error("error:", (err as Error).message);
     process.exit(1);

@@ -35,7 +35,7 @@ Authorization level for CLI/RPC operations. Values: `restricted < standard < pri
 Set permission level with:
 
 ```bash
-hiboss agent permission set --name <agent-name> --permission-level <restricted|standard|privileged> --token <boss-token>
+hiboss agent set --name <agent-name> --permission-level <restricted|standard|privileged> --token <boss-token>
 ```
 
 ### Session Policy
@@ -79,7 +79,12 @@ hiboss agent register \
   --token <boss-token> \
   --name <name> \
   --description "Agent description" \
-  --workspace "$PWD"
+  --workspace "$PWD" \
+  --provider <claude|codex> \
+  --model <model> \
+  --reasoning-effort <none|low|medium|high|xhigh> \
+  --auto-level <low|medium|high> \
+  --permission-level <restricted|standard|privileged>
 ```
 
 ### Validation
@@ -116,7 +121,7 @@ Set at registration or via agent settings:
 | `model` | Model to use | Provider-specific model ID |
 | `reasoningEffort` | Extended reasoning level | `none`, `low`, `medium`, `high`, `xhigh` |
 | `autoLevel` | Automation/access level | `low`, `medium`, `high` |
-| `permissionLevel` | Authorization for CLI/RPC ops | `restricted`, `standard`, `privileged`, `boss` |
+| `permissionLevel` | Authorization for CLI/RPC ops | `restricted`, `standard`, `privileged` |
 | `sessionPolicy` | Session refresh policy | See [Session Policy](#session-policy) |
 
 ### Access Level Mapping
@@ -248,7 +253,7 @@ Hi-Boss supports fire-and-forget background execution for an agent, intended for
 ### CLI Command
 
 ```bash
-hiboss agent background --token <agent-token> --task "..."
+hiboss background --token <agent-token> --task "..."
 ```
 
 ### Behavior
@@ -282,17 +287,17 @@ Constraints:
 
 ```bash
 # Bind agent to Telegram bot
-hiboss agent bind \
+hiboss agent set \
   --token <boss-token> \
   --name nex \
-  --adapter-type telegram \
-  --adapter-token <telegram-bot-token>
+  --bind-adapter-type telegram \
+  --bind-adapter-token <telegram-bot-token>
 
 # Remove binding
-hiboss agent unbind \
+hiboss agent set \
   --token <boss-token> \
   --name nex \
-  --adapter-type telegram
+  --unbind-adapter-type telegram
 ```
 
 ### Permissions
@@ -318,7 +323,7 @@ interface SessionPolicyConfig {
 
 ```bash
 # Set session policy
-hiboss agent session-policy \
+hiboss agent set \
   --token <boss-token> \
   --name nex \
   --session-daily-reset-at 09:00 \
@@ -326,7 +331,7 @@ hiboss agent session-policy \
   --session-max-tokens 100000
 
 # Clear session policy
-hiboss agent session-policy --token <boss-token> --name nex --clear
+hiboss agent set --token <boss-token> --name nex --clear-session-policy
 ```
 
 ## Agent Runs (Auditing)
@@ -359,12 +364,9 @@ sqlite3 ~/.hiboss/hiboss.db \
 | Command | Description |
 |---------|-------------|
 | `hiboss agent register --token <boss-token> --name <n> [--description <d>] [--workspace <w>]` | Create agent |
+| `hiboss agent set --token <token> --name <n> [options]` | Update agent settings and bindings |
 | `hiboss agent list --token <boss-token>` | List all agents with bindings |
-| `hiboss agent background --token <agent-token> --task <text>` | Run a background task and send the final response to `agent:<self>` |
-| `hiboss agent bind --token <boss-token> --name <n> --adapter-type <t> --adapter-token <tok>` | Bind adapter |
-| `hiboss agent unbind --token <boss-token> --name <n> --adapter-type <t>` | Remove binding |
-| `hiboss agent session-policy --token <boss-token> --name <n> [options]` | Configure session policy |
-| `hiboss agent permission set --token <boss-token> --name <n> --permission-level <level>` | Set agent permission level |
+| `hiboss background --token <agent-token> --task <text>` | Run a background task and send the final response to `agent:<self>` |
 
 ## RPC Methods
 
@@ -373,6 +375,7 @@ Available via daemon IPC:
 | Method | Parameters | Description |
 |--------|------------|-------------|
 | `agent.register` | token, name, description?, workspace?, session policy options | Create agent |
+| `agent.set` | token, agentName, updates (settings/binding/session policy/metadata) | Update agent settings and bindings |
 | `agent.list` | token | List agents with bindings |
 | `agent.bind` | token, agentName, adapterType, adapterToken | Bind adapter |
 | `agent.unbind` | token, agentName, adapterType | Remove binding |

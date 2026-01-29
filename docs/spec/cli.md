@@ -25,21 +25,17 @@ Many commands accept `--token`; if omitted, the CLI uses the `HIBOSS_TOKEN` envi
 ### Daemon dependency
 
 - Commands that call IPC (`envelope.*`, most `agent.*`) require the daemon to be running.
-- Some admin commands edit the local SQLite DB directly and do not require a running daemon:
-  - `hiboss agent permission set`
-  - `hiboss agent permission get`
-  - `hiboss permission policy get|set`
 
 ---
 
 ## Command Summary
 
-Default permission levels below come from the built-in permission policy (`DEFAULT_PERMISSION_POLICY`). They can be changed via `hiboss permission policy set`.
+Default permission levels below come from the built-in permission policy (`DEFAULT_PERMISSION_POLICY`).
 
 | Command | Purpose | Token required? | Default permission |
 |--------|---------|-----------------|--------------------|
 | `hiboss setup` | Initialize Hi-Boss (interactive wizard) | No (bootstrap) | n/a |
-| `hiboss setup default` | Initialize Hi-Boss (non-interactive) | No (bootstrap; requires `--boss-token`) | n/a |
+| `hiboss setup default` | Initialize Hi-Boss (non-interactive) | No (bootstrap; requires `--config`) | n/a |
 | `hiboss daemon start` | Start the daemon | Yes (boss token) | boss |
 | `hiboss daemon stop` | Stop the daemon | Yes (boss token) | boss |
 | `hiboss daemon status` | Show daemon status | Yes (boss token) | boss |
@@ -49,15 +45,9 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | `hiboss envelope get` | Get an envelope by id | Yes (agent/boss token) | restricted |
 | `hiboss reaction set` | Set a reaction on a channel message | Yes (agent token) | restricted |
 | `hiboss agent register` | Register a new agent | Yes (boss token) | boss |
+| `hiboss agent set` | Update agent settings and bindings | Yes (agent/boss token) | privileged |
 | `hiboss agent list` | List agents | Yes (agent/boss token) | restricted |
-| `hiboss agent bind` | Bind an adapter to an agent | Yes (agent/boss token) | privileged |
-| `hiboss agent unbind` | Unbind an adapter from an agent | Yes (agent/boss token) | privileged |
-| `hiboss agent session-policy` | Set/clear agent session policy | Yes (agent/boss token) | privileged |
-| `hiboss agent background` | Run a background task as an agent | Yes (agent token) | standard |
-| `hiboss agent permission get` | Get agent permission level | Yes (agent/boss token) | privileged |
-| `hiboss agent permission set` | Set agent permission level | Yes (boss token) | boss |
-| `hiboss permission policy get` | Print permission policy JSON | Yes (boss token) | boss |
-| `hiboss permission policy set` | Set permission policy from a JSON file | Yes (boss token) | boss |
+| `hiboss background` | Run a background task as an agent | Yes (agent token) | standard |
 
 ---
 
@@ -71,15 +61,44 @@ Behavior:
 - Initializes the SQLite database at `~/.hiboss/hiboss.db` (configuration is stored in the DB; WAL sidecars like `hiboss.db-wal` / `hiboss.db-shm` may appear)
 - Creates the agent home directories under `~/.hiboss/agents/<agent-name>/` (provider homes + copied base configs when available)
 - Creates the first agent and prints `agent-token:` once (no “show token” command)
-- Optionally configures/binds an adapter (e.g., Telegram)
+- Prints `boss-token:` once
+- Configures/binds a Telegram adapter for the first agent (required)
 
 ### `hiboss setup default`
 
-Runs non-interactive setup with flags:
+Runs non-interactive setup from a JSON file:
 
-- `--boss-token <token>` (required)
-- `--boss-name <name>` (optional)
-- `--adapter-type <type>` / `--adapter-token <token>` / `--adapter-boss-id <id>` (optional)
+- `--config <path>` (required)
+
+Config file must include:
+- `version: 1`
+- `boss-token: <token>`
+- `agent: { ... }`
+- `telegram: { adapter-token, adapter-boss-id }`
+
+Example (`setup.json`):
+
+```json
+{
+  "version": 1,
+  "boss-name": "your-name",
+  "boss-token": "your-boss-token",
+  "provider": "claude",
+  "agent": {
+    "name": "nex",
+    "description": "nex - AI assistant",
+    "workspace": "/absolute/path/to/workspace",
+    "model": "opus",
+    "reasoning-effort": "medium",
+    "auto-level": "high",
+    "permission-level": "standard"
+  },
+  "telegram": {
+    "adapter-token": "123456789:ABCdef...",
+    "adapter-boss-id": "your_telegram_username"
+  }
+}
+```
 
 Output:
 - Prints `agent-token:` and `boss-token:` once.
@@ -224,8 +243,18 @@ Registers a new agent.
 
 Flags:
 - `--name <name>` (required)
+- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
 - `--description <description>` (optional)
 - `--workspace <path>` (optional)
+- `--provider <claude|codex>` (optional)
+- `--model <model>` (optional)
+- `--reasoning-effort <none|low|medium|high|xhigh>` (optional)
+- `--auto-level <low|medium|high>` (optional)
+- `--permission-level <restricted|standard|privileged>` (optional)
+- `--metadata-json <json>` or `--metadata-file <path>` (optional)
+- Optional binding at creation:
+  - `--bind-adapter-type <type>`
+  - `--bind-adapter-token <token>`
 - Optional session policy inputs:
   - `--session-daily-reset-at HH:MM`
   - `--session-idle-timeout <duration>` (units: `d/h/m/s`)
@@ -236,6 +265,38 @@ Output (parseable):
 - `description:` (optional)
 - `workspace:` (optional)
 - `token:` (printed once)
+
+### `hiboss agent set`
+
+Updates agent settings and (optionally) binds/unbinds adapters.
+
+Flags:
+- `--name <name>` (required)
+- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
+- `--description <description>` (optional)
+- `--workspace <path>` (optional)
+- `--provider <claude|codex>` (optional)
+- `--model <model>` (optional)
+- `--reasoning-effort <none|low|medium|high|xhigh>` (optional)
+- `--auto-level <low|medium|high>` (optional)
+- `--permission-level <restricted|standard|privileged>` (optional; boss token only)
+- Session policy:
+  - `--session-daily-reset-at HH:MM` (optional)
+  - `--session-idle-timeout <duration>` (optional; units: `d/h/m/s`)
+  - `--session-max-tokens <n>` (optional)
+  - `--clear-session-policy` (optional)
+- Metadata:
+  - `--metadata-json <json>` or `--metadata-file <path>` (optional)
+  - `--clear-metadata` (optional)
+- Binding:
+  - `--bind-adapter-type <type>` + `--bind-adapter-token <token>` (optional)
+  - `--unbind-adapter-type <type>` (optional)
+
+Output (parseable):
+- `success: true|false`
+- `agent-name:`
+- Updated fields when present (e.g., `provider:`, `model:`, `reasoning-effort:`, `auto-level:`, `permission-level:`)
+- `bindings:` (optional; comma-separated adapter types)
 
 ### `hiboss agent list`
 
@@ -261,121 +322,6 @@ Output (parseable, one block per agent):
 Default permission:
 - `restricted`
 
-### `hiboss agent bind`
-
-Binds an adapter credential (e.g., a Telegram bot token) to an agent.
-
-Flags:
-- `--name <name>` (required)
-- `--adapter-type <type>` (required)
-- `--adapter-token <token>` (required)
-
-Output (parseable):
-- `id:`
-- `agent-name:`
-- `adapter-type:`
-- `created-at:` (local timezone offset)
-
-Default permission:
-- `privileged`
-
-### `hiboss agent unbind`
-
-Unbinds an adapter credential from an agent.
-
-Output (parseable):
-- `agent-name:`
-- `adapter-type:`
-- `unbound: true`
-
-Default permission:
-- `privileged`
-
-### `hiboss agent session-policy`
-
-Sets or clears session refresh policy for an agent.
-
-Flags:
-- `--name <name>` (required)
-- `--session-daily-reset-at HH:MM` (optional)
-- `--session-idle-timeout <duration>` (optional; units: `d/h/m/s`)
-- `--session-max-tokens <n>` (optional)
-- `--clear` clears the policy
-
-Output (parseable):
-- `agent-name:`
-- `success: true|false`
-- `session-daily-reset-at:` / `session-idle-timeout:` / `session-max-tokens:` (when present)
-
-Default permission:
-- `privileged`
-
-### `hiboss agent background`
+### `hiboss background`
 
 Runs a fire-and-forget background task as the agent identified by `--token`.
-
-Behavior:
-- Spawns a detached local worker process.
-- Sends exactly one envelope back to `agent:<self>` containing the final response text.
-
-Output:
-- No output (success is “silent”).
-
-Default permission:
-- `standard`
-
-### `hiboss agent permission get`
-
-Gets an agent permission level from the local DB.
-
-Note:
-- This command reads `~/.hiboss/hiboss.db` directly (no daemon IPC).
-
-Flags:
-- `--name <name>` (required)
-
-Output (parseable):
-- `agent-name:`
-- `permission-level:`
-
-Default permission:
-- `privileged`
-
-### `hiboss agent permission set`
-
-Sets an agent permission level in the local DB.
-
-Note:
-- This command edits `~/.hiboss/hiboss.db` directly (no daemon IPC).
-
-Flags:
-- `--name <name>` (required)
-- `--permission-level restricted|standard|privileged` (required)
-
-Output (parseable):
-- `success: true|false`
-- `agent-name:`
-- `permission-level:`
-
-Default permission:
-- `boss`
-
----
-
-## Permission Policy
-
-### `hiboss permission policy get`
-
-Prints the effective permission policy JSON from the local DB:
-
-- `policy-json: <json>`
-
-### `hiboss permission policy set`
-
-Sets permission policy from a JSON file.
-
-Flags:
-- `--file <path>` (required)
-
-Output (parseable):
-- `success: true`

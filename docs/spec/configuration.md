@@ -75,12 +75,12 @@ Setup writes to the SQLite `config` table and creates the first agent.
 
 - `hiboss setup` (interactive)
 - `hiboss setup default`
-  - `--boss-name <name>`: stored as `config.boss_name`
-  - `--boss-token <token>`: stored hashed as `config.boss_token_hash`
-  - `--adapter-type <type>`: creates an initial binding (currently only `telegram`)
-  - `--adapter-token <token>`: the adapter credential (e.g., Telegram bot token)
-  - `--adapter-boss-id <id>`: stored as `config.adapter_boss_id_<type>`
-    - For Telegram, this is your username (`@name` or `name`); it is compared case-insensitively.
+  - `--config <path>`: JSON setup config file
+    - `boss-name`: stored as `config.boss_name`
+    - `boss-token`: stored hashed as `config.boss_token_hash`
+    - `provider`: stored as `config.default_provider`
+    - `telegram.adapter-boss-id`: stored as `config.adapter_boss_id_telegram` (stored without `@`)
+    - `telegram.adapter-token`: creates an initial `agent_bindings` row for the first agent
 
 ### Agents
 
@@ -89,27 +89,30 @@ Setup writes to the SQLite `config` table and creates the first agent.
   - `--name <name>`
   - `--description <text>`
   - `--workspace <path>`
+  - `--provider <claude|codex>`
+  - `--model <model>`
+  - `--reasoning-effort <none|low|medium|high|xhigh>`
+  - `--auto-level <low|medium|high>`
+  - `--permission-level <restricted|standard|privileged>`
+  - `--metadata-json <json>` / `--metadata-file <path>`
+  - `--bind-adapter-type <type>` / `--bind-adapter-token <token>`
   - Session policy (optional):
     - `--session-daily-reset-at <HH:MM>`
     - `--session-idle-timeout <duration>`
     - `--session-max-tokens <n>`
 
-- `hiboss agent bind`
-  - `--name <agent-name>`
-  - `--adapter-type <type>` (currently `telegram`)
-  - `--adapter-token <token>`
+- `hiboss agent set`
+  - Updates agent settings and bindings (see `docs/spec/cli.md` for full flags)
+
+Binding management is done via `hiboss agent set`:
+
+- Bind: `hiboss agent set --name <agent-name> --bind-adapter-type telegram --bind-adapter-token <token>`
+- Unbind: `hiboss agent set --name <agent-name> --unbind-adapter-type telegram`
 
 Binding constraints:
 
 - A single bot token can only be bound to **one** agent (`UNIQUE(adapter_type, adapter_token)`).
 - An agent can only have **one** binding per adapter type (so no “two telegram bots for one agent” today).
-
-- `hiboss agent session-policy`
-  - `--name <agent-name>`
-  - `--session-daily-reset-at <HH:MM>` (optional)
-  - `--session-idle-timeout <duration>` (optional)
-  - `--session-max-tokens <n>` (optional)
-  - `--clear` (optional): clears the policy entirely
 
 ### Envelopes
 
@@ -149,7 +152,7 @@ Keys:
 - `default_provider`: `"claude"` or `"codex"` (used by setup as a default)
 - `permission_policy`: JSON permission policy mapping operations → required permission level
 - `adapter_boss_id_<adapter-type>`: boss identity on an adapter, e.g.:
-  - `adapter_boss_id_telegram = "@your_username"`
+  - `adapter_boss_id_telegram = "your_username"`
 
 What `adapter_boss_id_<adapter-type>` does:
 
@@ -176,7 +179,7 @@ Per-agent settings:
 | `last_seen_at` | TEXT | `NULL` | Updated when the agent authenticates RPC calls via token |
 | `metadata` | TEXT | `NULL` | JSON blob for extended settings |
 
-Set permission level via: `hiboss agent permission set --name <agent-name> --permission-level <level> --token <boss-token>`
+Set permission level via: `hiboss agent set --name <agent-name> --permission-level <level> --token <boss-token>` (daemon required)
 
 ### `agent_bindings` table
 
@@ -310,16 +313,6 @@ If an operation is missing from the policy, it defaults to `boss` (safe-by-defau
 | `agent.bind` | `privileged` |
 | `agent.unbind` | `privileged` |
 | `agent.refresh` | `boss` |
+| `agent.set` | `privileged` |
 | `agent.session-policy.set` | `privileged` |
 | `agent.background` | `standard` |
-| `agent.permission.get` | `privileged` |
-| `agent.permission.set` | `boss` |
-| `permission.policy.get` | `boss` |
-| `permission.policy.set` | `boss` |
-
-Manage the policy with:
-
-```bash
-hiboss permission policy get --token <boss-token>
-hiboss permission policy set --token <boss-token> --file ./permission-policy.json
-```

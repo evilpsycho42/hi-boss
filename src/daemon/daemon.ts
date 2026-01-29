@@ -22,6 +22,7 @@ import {
   type AgentRefreshParams,
   type AgentSelfParams,
   type AgentSessionPolicySetParams,
+  type AgentSetParams,
   type SetupExecuteParams,
   type BossVerifyParams,
   type ReactionSetParams,
@@ -32,6 +33,7 @@ import { TelegramAdapter } from "../adapters/telegram.adapter.js";
 import { parseDateTimeInputToUtcIso, nowLocalIso } from "../shared/time.js";
 import { parseDailyResetAt, parseDurationToMs } from "../shared/session-policy.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../shared/validation.js";
+import { red } from "../shared/ansi.js";
 import {
   DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PERMISSION_LEVEL,
@@ -203,7 +205,9 @@ export class Daemon {
       const enrichedCommand = command as typeof command & { agentName?: string };
 
       if (command.command === "new" && enrichedCommand.agentName) {
-        console.log(`[${nowLocalIso()}] [Daemon] Session refresh requested for agent: ${enrichedCommand.agentName}`);
+        console.log(
+          red(`[${nowLocalIso()}] [Daemon] Session refresh requested for agent: ${enrichedCommand.agentName}`)
+        );
         this.executor.requestSessionRefresh(enrichedCommand.agentName, "telegram:/new");
       }
     });
@@ -687,6 +691,62 @@ export class Daemon {
           rpcError(RPC_ERRORS.ALREADY_EXISTS, "Agent already exists");
         }
 
+        let provider: "claude" | "codex" | undefined;
+        if (p.provider !== undefined) {
+          if (p.provider !== "claude" && p.provider !== "codex") {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid provider (expected claude or codex)");
+          }
+          provider = p.provider;
+        }
+
+        let reasoningEffort: Agent["reasoningEffort"] | undefined;
+        if (p.reasoningEffort !== undefined) {
+          if (
+            p.reasoningEffort !== "none" &&
+            p.reasoningEffort !== "low" &&
+            p.reasoningEffort !== "medium" &&
+            p.reasoningEffort !== "high" &&
+            p.reasoningEffort !== "xhigh"
+          ) {
+            rpcError(
+              RPC_ERRORS.INVALID_PARAMS,
+              "Invalid reasoning-effort (expected none, low, medium, high, xhigh)"
+            );
+          }
+          reasoningEffort = p.reasoningEffort;
+        }
+
+        let autoLevel: Agent["autoLevel"] | undefined;
+        if (p.autoLevel !== undefined) {
+          if (p.autoLevel !== "low" && p.autoLevel !== "medium" && p.autoLevel !== "high") {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid auto-level (expected low, medium, high)");
+          }
+          autoLevel = p.autoLevel;
+        }
+
+        let permissionLevel: "restricted" | "standard" | "privileged" | undefined;
+        if (p.permissionLevel !== undefined) {
+          if (
+            p.permissionLevel !== "restricted" &&
+            p.permissionLevel !== "standard" &&
+            p.permissionLevel !== "privileged"
+          ) {
+            rpcError(
+              RPC_ERRORS.INVALID_PARAMS,
+              "Invalid permission-level (expected restricted, standard, privileged)"
+            );
+          }
+          permissionLevel = p.permissionLevel;
+        }
+
+        let metadata: Record<string, unknown> | undefined;
+        if (p.metadata !== undefined) {
+          if (typeof p.metadata !== "object" || p.metadata === null || Array.isArray(p.metadata)) {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid metadata (expected object)");
+          }
+          metadata = p.metadata;
+        }
+
         const sessionPolicy: Record<string, unknown> = {};
         if (p.sessionDailyResetAt !== undefined) {
           if (typeof p.sessionDailyResetAt !== "string") {
@@ -716,11 +776,73 @@ export class Daemon {
           name: p.name,
           description: p.description,
           workspace: p.workspace,
+          provider,
+          model: typeof p.model === "string" && p.model.trim() ? p.model.trim() : undefined,
+          reasoningEffort,
+          autoLevel,
+          permissionLevel,
           sessionPolicy: Object.keys(sessionPolicy).length > 0 ? sessionPolicy as any : undefined,
+          metadata,
         });
 
         // Setup agent home directories
         await setupAgentHome(p.name, this.config.dataDir);
+
+        const bindAdapterType = p.bindAdapterType;
+        const bindAdapterToken = p.bindAdapterToken;
+        const wantsBind = bindAdapterType !== undefined || bindAdapterToken !== undefined;
+
+        if (wantsBind) {
+          if (typeof bindAdapterType !== "string" || !bindAdapterType.trim()) {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid bind-adapter-type");
+          }
+          if (typeof bindAdapterToken !== "string" || !bindAdapterToken.trim()) {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid bind-adapter-token");
+          }
+
+          const adapterType = bindAdapterType.trim();
+          const adapterToken = bindAdapterToken.trim();
+
+          const existingBinding = this.db.getBindingByAdapter(adapterType, adapterToken);
+          if (existingBinding) {
+            rpcError(
+              RPC_ERRORS.ALREADY_EXISTS,
+              `This ${adapterType} bot is already bound to agent '${existingBinding.agentName}'`
+            );
+          }
+
+          const agentBinding = this.db.getAgentBindingByType(p.name, adapterType);
+          if (agentBinding) {
+            rpcError(RPC_ERRORS.ALREADY_EXISTS, `Agent '${p.name}' already has a ${adapterType} binding`);
+          }
+
+          const hadAdapterAlready = this.adapters.has(adapterToken);
+          let createdAdapterForRegister = false;
+
+          if (this.running) {
+            try {
+              const adapter = await this.createAdapterForBinding(adapterType, adapterToken);
+              if (!adapter) {
+                rpcError(RPC_ERRORS.INVALID_PARAMS, `Unknown adapter type: ${adapterType}`);
+              }
+              createdAdapterForRegister = !hadAdapterAlready;
+            } catch (err) {
+              if (!hadAdapterAlready) {
+                await this.removeAdapter(adapterToken).catch(() => undefined);
+              }
+              throw err;
+            }
+          }
+
+          try {
+            this.db.createBinding(p.name, adapterType, adapterToken);
+          } catch (err) {
+            if (createdAdapterForRegister) {
+              await this.removeAdapter(adapterToken).catch(() => undefined);
+            }
+            throw err;
+          }
+        }
 
         // Register agent handler for auto-execution
         this.router.registerAgentHandler(p.name, async () => {
@@ -963,6 +1085,328 @@ export class Daemon {
         return { success: true, agentName: agent.name, sessionPolicy: updated.sessionPolicy };
       },
 
+      "agent.set": async (params) => {
+        const p = params as unknown as AgentSetParams;
+        const token = requireToken(p.token);
+        const principal = this.resolvePrincipal(token);
+        this.assertOperationAllowed("agent.set", principal);
+
+        if (typeof p.agentName !== "string" || !p.agentName.trim()) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid agent-name");
+        }
+
+        const agent = this.db.getAgentByNameCaseInsensitive(p.agentName.trim());
+        if (!agent) {
+          rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
+        }
+        const agentName = agent.name;
+
+        const wantsBind = p.bindAdapterType !== undefined || p.bindAdapterToken !== undefined;
+        const wantsUnbind = p.unbindAdapterType !== undefined;
+
+        const hasAnyUpdate =
+          p.description !== undefined ||
+          p.workspace !== undefined ||
+          p.provider !== undefined ||
+          p.model !== undefined ||
+          p.reasoningEffort !== undefined ||
+          p.autoLevel !== undefined ||
+          p.permissionLevel !== undefined ||
+          p.sessionPolicy !== undefined ||
+          p.metadata !== undefined ||
+          wantsBind ||
+          wantsUnbind;
+
+        if (!hasAnyUpdate) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "No updates provided");
+        }
+
+        if (wantsBind) {
+          if (typeof p.bindAdapterType !== "string" || !p.bindAdapterType.trim()) {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid bind-adapter-type");
+          }
+          if (typeof p.bindAdapterToken !== "string" || !p.bindAdapterToken.trim()) {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid bind-adapter-token");
+          }
+        }
+
+        if (wantsUnbind) {
+          if (typeof p.unbindAdapterType !== "string" || !p.unbindAdapterType.trim()) {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid unbind-adapter-type");
+          }
+        }
+
+        if (wantsBind && wantsUnbind) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Cannot bind and unbind in the same request");
+        }
+
+        let provider: "claude" | "codex" | null | undefined;
+        if (p.provider !== undefined) {
+          if (p.provider !== null && p.provider !== "claude" && p.provider !== "codex") {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid provider (expected claude or codex)");
+          }
+          provider = p.provider;
+        }
+
+        let reasoningEffort: Agent["reasoningEffort"] | null | undefined;
+        if (p.reasoningEffort !== undefined) {
+          if (
+            p.reasoningEffort !== null &&
+            p.reasoningEffort !== "none" &&
+            p.reasoningEffort !== "low" &&
+            p.reasoningEffort !== "medium" &&
+            p.reasoningEffort !== "high" &&
+            p.reasoningEffort !== "xhigh"
+          ) {
+            rpcError(
+              RPC_ERRORS.INVALID_PARAMS,
+              "Invalid reasoning-effort (expected none, low, medium, high, xhigh)"
+            );
+          }
+          reasoningEffort = p.reasoningEffort;
+        }
+
+        let autoLevel: Agent["autoLevel"] | null | undefined;
+        if (p.autoLevel !== undefined) {
+          if (p.autoLevel !== null && p.autoLevel !== "low" && p.autoLevel !== "medium" && p.autoLevel !== "high") {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid auto-level (expected low, medium, high)");
+          }
+          autoLevel = p.autoLevel;
+        }
+
+        let permissionLevel: "restricted" | "standard" | "privileged" | undefined;
+        if (p.permissionLevel !== undefined) {
+          if (principal.kind !== "boss") {
+            rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+          }
+          if (
+            p.permissionLevel !== "restricted" &&
+            p.permissionLevel !== "standard" &&
+            p.permissionLevel !== "privileged"
+          ) {
+            rpcError(
+              RPC_ERRORS.INVALID_PARAMS,
+              "Invalid permission-level (expected restricted, standard, privileged)"
+            );
+          }
+          permissionLevel = p.permissionLevel;
+        }
+
+        let sessionPolicyUpdate:
+          | { clear: true }
+          | { dailyResetAt?: string; idleTimeout?: string; maxTokens?: number }
+          | undefined;
+        if (p.sessionPolicy !== undefined) {
+          if (p.sessionPolicy === null) {
+            sessionPolicyUpdate = { clear: true };
+          } else if (typeof p.sessionPolicy === "object" && p.sessionPolicy !== null && !Array.isArray(p.sessionPolicy)) {
+            const raw = p.sessionPolicy as Record<string, unknown>;
+            const next: { dailyResetAt?: string; idleTimeout?: string; maxTokens?: number } = {};
+
+            if (raw.dailyResetAt !== undefined) {
+              if (typeof raw.dailyResetAt !== "string") {
+                rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.daily-reset-at");
+              }
+              next.dailyResetAt = parseDailyResetAt(raw.dailyResetAt).normalized;
+            }
+
+            if (raw.idleTimeout !== undefined) {
+              if (typeof raw.idleTimeout !== "string") {
+                rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.idle-timeout");
+              }
+              parseDurationToMs(raw.idleTimeout);
+              next.idleTimeout = raw.idleTimeout.trim();
+            }
+
+            if (raw.maxTokens !== undefined) {
+              if (typeof raw.maxTokens !== "number" || !Number.isFinite(raw.maxTokens)) {
+                rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.max-tokens");
+              }
+              if (raw.maxTokens <= 0) {
+                rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.max-tokens (must be > 0)");
+              }
+              next.maxTokens = Math.trunc(raw.maxTokens);
+            }
+
+            if (Object.keys(next).length === 0) {
+              rpcError(RPC_ERRORS.INVALID_PARAMS, "No session policy values provided");
+            }
+
+            sessionPolicyUpdate = next;
+          } else {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy (expected object or null)");
+          }
+        }
+
+        let metadata: Record<string, unknown> | null | undefined;
+        if (p.metadata !== undefined) {
+          if (p.metadata === null) {
+            metadata = null;
+          } else if (typeof p.metadata === "object" && p.metadata !== null && !Array.isArray(p.metadata)) {
+            metadata = p.metadata;
+          } else {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid metadata (expected object or null)");
+          }
+        }
+
+        const before = this.db.getAgentByName(agentName)!;
+
+        // Bind/unbind are async due to adapter start/stop; do those outside the DB transaction.
+        if (wantsUnbind) {
+          const adapterType = (p.unbindAdapterType as string).trim();
+          const binding = this.db.getAgentBindingByType(agentName, adapterType);
+          if (!binding) {
+            rpcError(RPC_ERRORS.NOT_FOUND, "Binding not found");
+          }
+
+          await this.removeAdapter(binding.adapterToken);
+          this.db.deleteBinding(agentName, adapterType);
+        }
+
+        if (wantsBind) {
+          const adapterType = (p.bindAdapterType as string).trim();
+          const adapterToken = (p.bindAdapterToken as string).trim();
+
+          const existingBinding = this.db.getBindingByAdapter(adapterType, adapterToken);
+          if (existingBinding && existingBinding.agentName !== agentName) {
+            rpcError(
+              RPC_ERRORS.ALREADY_EXISTS,
+              `This ${adapterType} bot is already bound to agent '${existingBinding.agentName}'`
+            );
+          }
+
+          const agentBinding = this.db.getAgentBindingByType(agentName, adapterType);
+          if (agentBinding) {
+            rpcError(RPC_ERRORS.ALREADY_EXISTS, `Agent '${agentName}' already has a ${adapterType} binding`);
+          }
+
+          const hadAdapterAlready = this.adapters.has(adapterToken);
+          let createdAdapterForSet = false;
+
+          if (this.running) {
+            try {
+              const adapter = await this.createAdapterForBinding(adapterType, adapterToken);
+              if (!adapter) {
+                rpcError(RPC_ERRORS.INVALID_PARAMS, `Unknown adapter type: ${adapterType}`);
+              }
+              createdAdapterForSet = !hadAdapterAlready;
+            } catch (err) {
+              if (!hadAdapterAlready) {
+                await this.removeAdapter(adapterToken).catch(() => undefined);
+              }
+              throw err;
+            }
+          }
+
+          try {
+            this.db.createBinding(agentName, adapterType, adapterToken);
+          } catch (err) {
+            if (createdAdapterForSet) {
+              await this.removeAdapter(adapterToken).catch(() => undefined);
+            }
+            throw err;
+          }
+        }
+
+        const updates: {
+          description?: string | null;
+          workspace?: string | null;
+          provider?: "claude" | "codex" | null;
+          model?: string | null;
+          reasoningEffort?: Agent["reasoningEffort"] | null;
+          autoLevel?: Agent["autoLevel"] | null;
+        } = {};
+
+        if (p.description !== undefined) {
+          if (p.description !== null && typeof p.description !== "string") {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid description");
+          }
+          const trimmed = typeof p.description === "string" ? p.description.trim() : null;
+          updates.description = trimmed && trimmed.length > 0 ? trimmed : null;
+        }
+
+        if (p.workspace !== undefined) {
+          if (p.workspace !== null && typeof p.workspace !== "string") {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid workspace");
+          }
+          const trimmed = typeof p.workspace === "string" ? p.workspace.trim() : null;
+          updates.workspace = trimmed && trimmed.length > 0 ? trimmed : null;
+        }
+
+        if (provider !== undefined) {
+          updates.provider = provider;
+        }
+
+        if (p.model !== undefined) {
+          if (p.model !== null && typeof p.model !== "string") {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid model");
+          }
+          const trimmed = typeof p.model === "string" ? p.model.trim() : null;
+          updates.model = trimmed && trimmed.length > 0 ? trimmed : null;
+        }
+
+        if (reasoningEffort !== undefined) {
+          updates.reasoningEffort = reasoningEffort;
+        }
+
+        if (autoLevel !== undefined) {
+          updates.autoLevel = autoLevel;
+        }
+
+        this.db.runInTransaction(() => {
+          if (Object.keys(updates).length > 0) {
+            this.db.updateAgentFields(agentName, updates);
+          }
+
+          if (permissionLevel !== undefined) {
+            this.db.setAgentPermissionLevel(agentName, permissionLevel);
+          }
+
+          if (sessionPolicyUpdate !== undefined) {
+            if ("clear" in sessionPolicyUpdate) {
+              this.db.updateAgentSessionPolicy(agentName, { clear: true });
+            } else {
+              this.db.updateAgentSessionPolicy(agentName, sessionPolicyUpdate);
+            }
+          }
+
+          if (metadata !== undefined) {
+            this.db.updateAgentMetadata(agentName, metadata);
+          }
+        });
+
+        const updated = this.db.getAgentByName(agentName)!;
+        const bindings = this.db.getBindingsByAgentName(agentName).map((b) => b.adapterType);
+
+        const needsRefresh =
+          (provider !== undefined && before.provider !== updated.provider) ||
+          (p.model !== undefined && before.model !== updated.model) ||
+          (reasoningEffort !== undefined && before.reasoningEffort !== updated.reasoningEffort) ||
+          (autoLevel !== undefined && before.autoLevel !== updated.autoLevel) ||
+          (p.workspace !== undefined && before.workspace !== updated.workspace);
+
+        if (needsRefresh) {
+          this.executor.requestSessionRefresh(agentName, "rpc:agent.set");
+        }
+
+        return {
+          success: true,
+          agent: {
+            name: updated.name,
+            description: updated.description,
+            workspace: updated.workspace,
+            provider: updated.provider ?? DEFAULT_AGENT_PROVIDER,
+            model: updated.model,
+            reasoningEffort: updated.reasoningEffort ?? DEFAULT_AGENT_REASONING_EFFORT,
+            autoLevel: updated.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL,
+            permissionLevel: updated.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL,
+            sessionPolicy: updated.sessionPolicy,
+            metadata: updated.metadata,
+          },
+          bindings,
+        };
+      },
+
       // Daemon methods
       "daemon.status": async (params) => {
         const p = params as unknown as { token: string };
@@ -1006,17 +1450,100 @@ export class Daemon {
           rpcError(RPC_ERRORS.ALREADY_EXISTS, "Setup already completed");
         }
 
+        if (typeof p.bossName !== "string" || !p.bossName.trim()) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid boss-name");
+        }
+
+        if (typeof p.agent.name !== "string" || !isValidAgentName(p.agent.name)) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, AGENT_NAME_ERROR_MESSAGE);
+        }
+
+        if (
+          p.agent.reasoningEffort !== "low" &&
+          p.agent.reasoningEffort !== "medium" &&
+          p.agent.reasoningEffort !== "high"
+        ) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid reasoning-effort (expected low, medium, high)");
+        }
+
+        if (p.agent.autoLevel !== "low" && p.agent.autoLevel !== "medium" && p.agent.autoLevel !== "high") {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid auto-level (expected low, medium, high)");
+        }
+
+        if (p.agent.permissionLevel !== undefined) {
+          if (
+            p.agent.permissionLevel !== "restricted" &&
+            p.agent.permissionLevel !== "standard" &&
+            p.agent.permissionLevel !== "privileged"
+          ) {
+            rpcError(
+              RPC_ERRORS.INVALID_PARAMS,
+              "Invalid permission-level (expected restricted, standard, privileged)"
+            );
+          }
+        }
+
+        if (p.agent.sessionPolicy !== undefined) {
+          if (typeof p.agent.sessionPolicy !== "object" || p.agent.sessionPolicy === null) {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy (expected object)");
+          }
+
+          const sp = p.agent.sessionPolicy as Record<string, unknown>;
+          if (sp.dailyResetAt !== undefined) {
+            if (typeof sp.dailyResetAt !== "string") {
+              rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.daily-reset-at");
+            }
+            sp.dailyResetAt = parseDailyResetAt(sp.dailyResetAt).normalized;
+          }
+          if (sp.idleTimeout !== undefined) {
+            if (typeof sp.idleTimeout !== "string") {
+              rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.idle-timeout");
+            }
+            parseDurationToMs(sp.idleTimeout);
+            sp.idleTimeout = sp.idleTimeout.trim();
+          }
+          if (sp.maxTokens !== undefined) {
+            if (typeof sp.maxTokens !== "number" || !Number.isFinite(sp.maxTokens)) {
+              rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.max-tokens");
+            }
+            if (sp.maxTokens <= 0) {
+              rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.max-tokens (must be > 0)");
+            }
+            sp.maxTokens = Math.trunc(sp.maxTokens);
+          }
+        }
+
+        if (p.agent.metadata !== undefined) {
+          if (typeof p.agent.metadata !== "object" || p.agent.metadata === null || Array.isArray(p.agent.metadata)) {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid metadata (expected object)");
+          }
+        }
+
+        if (p.adapter.adapterType !== "telegram") {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid adapter-type (expected telegram)");
+        }
+        if (typeof p.adapter.adapterToken !== "string" || !p.adapter.adapterToken.trim()) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid adapter-token");
+        }
+        if (typeof p.adapter.adapterBossId !== "string" || !p.adapter.adapterBossId.trim()) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid adapter-boss-id");
+        }
+
+        if (typeof p.bossToken !== "string" || p.bossToken.trim().length < 4) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid boss-token (must be at least 4 characters)");
+        }
+
         // Setup agent home directories
         await setupAgentHome(p.agent.name, this.config.dataDir);
 
         // If an adapter is provided and the daemon is running, create/start it first.
         // This validates adapter credentials and avoids committing setup state if startup fails.
-        const adapterToken = p.adapter?.adapterToken;
-        const adapterType = p.adapter?.adapterType;
-        const hadAdapterAlready = adapterToken ? this.adapters.has(adapterToken) : false;
+        const adapterToken = p.adapter.adapterToken.trim();
+        const adapterType = p.adapter.adapterType.trim();
+        const hadAdapterAlready = this.adapters.has(adapterToken);
         let createdAdapterForSetup = false;
 
-        if (this.running && adapterToken && adapterType) {
+        if (this.running) {
           try {
             const adapter = await this.createAdapterForBinding(adapterType, adapterToken);
             if (!adapter) {
@@ -1050,20 +1577,19 @@ export class Daemon {
               model: p.agent.model,
               reasoningEffort: p.agent.reasoningEffort,
               autoLevel: p.agent.autoLevel,
+              permissionLevel: p.agent.permissionLevel,
+              sessionPolicy: p.agent.sessionPolicy,
+              metadata: p.agent.metadata,
             });
 
             // Create adapter binding if provided
-            if (p.adapter) {
-              this.db.createBinding(p.agent.name, p.adapter.adapterType, p.adapter.adapterToken);
+            this.db.createBinding(p.agent.name, p.adapter.adapterType, p.adapter.adapterToken);
 
-              // Store boss ID for this adapter
-              if (p.adapter.adapterBossId) {
-                this.db.setAdapterBossId(p.adapter.adapterType, p.adapter.adapterBossId);
-              }
-            }
+            // Store boss ID for this adapter
+            this.db.setAdapterBossId(p.adapter.adapterType, p.adapter.adapterBossId.trim().replace(/^@/, ""));
 
             // Set boss token
-            this.db.setBossToken(p.bossToken);
+            this.db.setBossToken(p.bossToken.trim());
 
             // Mark setup as complete
             this.db.markSetupComplete();

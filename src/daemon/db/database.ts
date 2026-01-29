@@ -257,6 +257,67 @@ export class HiBossDatabase {
   }
 
   /**
+   * Update agent core fields stored in their respective columns.
+   *
+   * Notes:
+   * - Uses the canonical agent name (case-insensitive lookup).
+   * - Only fields present in `update` are modified.
+   */
+  updateAgentFields(
+    name: string,
+    update: {
+      description?: string | null;
+      workspace?: string | null;
+      provider?: "claude" | "codex" | null;
+      model?: string | null;
+      reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | null;
+      autoLevel?: "low" | "medium" | "high" | null;
+    }
+  ): Agent {
+    const agent = this.getAgentByNameCaseInsensitive(name);
+    if (!agent) {
+      throw new Error("Agent not found");
+    }
+
+    const updates: string[] = [];
+    const params: Array<string | null> = [];
+
+    if (update.description !== undefined) {
+      updates.push("description = ?");
+      params.push(update.description);
+    }
+    if (update.workspace !== undefined) {
+      updates.push("workspace = ?");
+      params.push(update.workspace);
+    }
+    if (update.provider !== undefined) {
+      updates.push("provider = ?");
+      params.push(update.provider);
+    }
+    if (update.model !== undefined) {
+      updates.push("model = ?");
+      params.push(update.model);
+    }
+    if (update.reasoningEffort !== undefined) {
+      updates.push("reasoning_effort = ?");
+      params.push(update.reasoningEffort);
+    }
+    if (update.autoLevel !== undefined) {
+      updates.push("auto_level = ?");
+      params.push(update.autoLevel);
+    }
+
+    if (updates.length === 0) {
+      return this.getAgentByName(agent.name)!;
+    }
+
+    const stmt = this.db.prepare(`UPDATE agents SET ${updates.join(", ")} WHERE name = ?`);
+    stmt.run(...params, agent.name);
+
+    return this.getAgentByName(agent.name)!;
+  }
+
+  /**
    * Update agent metadata.
    */
   updateAgentMetadata(name: string, metadata: Record<string, unknown> | null): void {

@@ -92,9 +92,17 @@ export interface AgentRegisterParams {
   name: string;
   description?: string;
   workspace?: string;
+  provider?: "claude" | "codex";
+  model?: string;
+  reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
+  autoLevel?: "low" | "medium" | "high";
+  permissionLevel?: "restricted" | "standard" | "privileged";
+  metadata?: Record<string, unknown>;
   sessionDailyResetAt?: string;
   sessionIdleTimeout?: string;
   sessionMaxTokens?: number;
+  bindAdapterType?: string;
+  bindAdapterToken?: string;
 }
 
 export interface ReactionSetParams {
@@ -146,6 +154,44 @@ export interface AgentSessionPolicySetParams {
   clear?: boolean;
 }
 
+export interface AgentSetParams {
+  token: string;
+  agentName: string;
+  description?: string | null;
+  workspace?: string | null;
+  provider?: "claude" | "codex" | null;
+  model?: string | null;
+  reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | null;
+  autoLevel?: "low" | "medium" | "high" | null;
+  permissionLevel?: "restricted" | "standard" | "privileged";
+  sessionPolicy?: {
+    dailyResetAt?: string;
+    idleTimeout?: string;
+    maxTokens?: number;
+  } | null;
+  metadata?: Record<string, unknown> | null;
+  bindAdapterType?: string;
+  bindAdapterToken?: string;
+  unbindAdapterType?: string;
+}
+
+export interface AgentSetResult {
+  success: boolean;
+  agent: {
+    name: string;
+    description?: string;
+    workspace?: string;
+    provider: "claude" | "codex";
+    model?: string;
+    reasoningEffort: "none" | "low" | "medium" | "high" | "xhigh";
+    autoLevel: "low" | "medium" | "high";
+    permissionLevel: "restricted" | "standard" | "privileged";
+    sessionPolicy?: unknown;
+    metadata?: unknown;
+  };
+  bindings: string[];
+}
+
 export interface DaemonStatusParams {
   token: string;
 }
@@ -174,12 +220,19 @@ export interface SetupExecuteParams {
     model?: string;
     reasoningEffort?: 'low' | 'medium' | 'high';
     autoLevel?: 'low' | 'medium' | 'high';
+    permissionLevel?: 'restricted' | 'standard' | 'privileged';
+    sessionPolicy?: {
+      dailyResetAt?: string;
+      idleTimeout?: string;
+      maxTokens?: number;
+    };
+    metadata?: Record<string, unknown>;
   };
   bossToken: string;
-  adapter?: {
+  adapter: {
     adapterType: string;
     adapterToken: string;
-    adapterBossId?: string;
+    adapterBossId: string;
   };
 }
 

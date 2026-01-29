@@ -24,6 +24,7 @@ import { buildTurnInput } from "./turn-input.js";
 import { HIBOSS_TOKEN_ENV } from "../shared/env.js";
 import { computeTokensUsed, parseSessionPolicyConfig } from "../shared/session-policy.js";
 import { nowLocalIso } from "../shared/time.js";
+import { red } from "../shared/ansi.js";
 import {
   DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PROVIDER,
@@ -72,9 +73,14 @@ export class AgentExecutor {
   /**
    * Log debug messages.
    */
-  private log(message: string): void {
+  private log(message: string, options?: { color?: "red" }): void {
     if (this.debug) {
-      console.log(`[${nowLocalIso()}] [AgentExecutor] ${message}`);
+      const line = `[${nowLocalIso()}] [AgentExecutor] ${message}`;
+      if (options?.color === "red") {
+        console.log(red(line));
+      } else {
+        console.log(line);
+      }
     }
   }
 
@@ -209,7 +215,10 @@ export class AgentExecutor {
     const reasons = this.getAndClearPendingRefreshReasons(agentName);
     if (reasons.length === 0) return;
 
-    this.log(`Applying pending session refresh for ${agentName} reason=${reasons.join(",")}`);
+    this.log(
+      `Applying pending session refresh for ${agentName} reason=${reasons.join(",")}`,
+      { color: "red" }
+    );
     await this.refreshSession(agentName);
 
     // Log the system prompt that will be used for the new session
@@ -311,7 +320,8 @@ export class AgentExecutor {
         turn.tokensUsed > policy.maxTokens
       ) {
         this.log(
-          `Refreshing session for ${agent.name} tokens-used=${turn.tokensUsed} max-tokens=${policy.maxTokens}`
+          `Refreshing session for ${agent.name} tokens-used=${turn.tokensUsed} max-tokens=${policy.maxTokens}`,
+          { color: "red" }
         );
         await this.refreshSession(agent.name);
       }
@@ -343,7 +353,7 @@ export class AgentExecutor {
       const policy = this.getSessionPolicy(agent);
       const reason = this.getRefreshReasonForPolicy(session, policy, new Date());
       if (reason) {
-        this.log(`Refreshing session for ${agent.name} policy=${reason}`);
+        this.log(`Refreshing session for ${agent.name} policy=${reason}`, { color: "red" });
         await this.refreshSession(agent.name);
         session = undefined;
       }
@@ -407,7 +417,7 @@ export class AgentExecutor {
       };
       this.sessions.set(agent.name, session);
 
-      this.log(`Created new session for ${agent.name} with provider ${provider}`);
+      this.log(`Created new session for ${agent.name} with provider ${provider}`, { color: "red" });
     }
 
     return session;
@@ -446,6 +456,19 @@ export class AgentExecutor {
       throw new Error(`Agent run ${result.status}`);
     }
 
+    if (this.debug) {
+      const usage = (result.usage ?? {}) as Record<string, unknown>;
+      const inputTokens = typeof usage.input_tokens === "number" ? usage.input_tokens : null;
+      const outputTokens = typeof usage.output_tokens === "number" ? usage.output_tokens : null;
+      const cacheReadTokens = typeof usage.cache_read_tokens === "number" ? usage.cache_read_tokens : null;
+      const cacheWriteTokens = typeof usage.cache_write_tokens === "number" ? usage.cache_write_tokens : null;
+      const totalTokens = typeof usage.total_tokens === "number" ? usage.total_tokens : null;
+
+      this.log(
+        `Token usage input=${inputTokens ?? "n/a"} output=${outputTokens ?? "n/a"} cache-read=${cacheReadTokens ?? "n/a"} cache-write=${cacheWriteTokens ?? "n/a"} total=${totalTokens ?? "n/a"}`
+      );
+    }
+
     const tokensUsed = computeTokensUsed(result.usage);
     return { finalText: result.finalText ?? "", tokensUsed };
   }
@@ -473,7 +496,7 @@ export class AgentExecutor {
       await session.session.dispose();
       await session.runtime.close();
       this.sessions.delete(agentName);
-      this.log(`Refreshed session for ${agentName}`);
+      this.log(`Refreshed session for ${agentName}`, { color: "red" });
     }
   }
 

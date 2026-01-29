@@ -136,21 +136,18 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 
 | Command | Flags |
 |--------|-------|
-| `hiboss agent register` | `--token`, `--name`, `--description`, `--workspace`, `--session-daily-reset-at`, `--session-idle-timeout`, `--session-max-tokens` |
+| `hiboss agent register` | `--token`, `--name`, `--description`, `--workspace`, `--provider`, `--model`, `--reasoning-effort`, `--auto-level`, `--permission-level`, `--metadata-json`, `--metadata-file`, `--bind-adapter-type`, `--bind-adapter-token`, `--session-daily-reset-at`, `--session-idle-timeout`, `--session-max-tokens` |
+| `hiboss agent set` | `--token`, `--name`, `--description`, `--workspace`, `--provider`, `--model`, `--reasoning-effort`, `--auto-level`, `--permission-level`, `--session-daily-reset-at`, `--session-idle-timeout`, `--session-max-tokens`, `--clear-session-policy`, `--metadata-json`, `--metadata-file`, `--clear-metadata`, `--bind-adapter-type`, `--bind-adapter-token`, `--unbind-adapter-type` |
 | `hiboss agent list` | `--token` |
-| `hiboss agent background` | `--token`, `--task` |
-| `hiboss agent session-policy` | `--token`, `--name`, `--session-daily-reset-at`, `--session-idle-timeout`, `--session-max-tokens`, `--clear` |
-| `hiboss agent bind` | `--token`, `--name`, `--adapter-type`, `--adapter-token` |
-| `hiboss agent unbind` | `--token`, `--name`, `--adapter-type` |
-| `hiboss agent permission get` | `--token`, `--name` |
-| `hiboss agent permission set` | `--token`, `--name`, `--permission-level` |
+| `hiboss background` | `--token`, `--task` |
 
 ### CLI Output Keys
 
 - `hiboss agent register` prints `token:` once (there is no “show token” command).
 - `hiboss setup` / `hiboss setup default` prints `agent-token:` once.
+- `hiboss setup` / `hiboss setup default` also prints `boss-token:` once.
 - `hiboss agent list` prints fields like `provider:`, `reasoning-effort:`, `auto-level:`, `permission-level:`, `created-at:` (timestamps are shown in local timezone offset).
-- `hiboss agent background` prints no output; it sends an envelope to `agent:<self>` whose text is the background run's final response.
+- `hiboss background` prints no output; it sends an envelope to `agent:<self>` whose text is the background run's final response.
 - Session policy is printed as:
   - `session-daily-reset-at:`
   - `session-idle-timeout:`
@@ -178,16 +175,14 @@ Table: `agent_bindings` (see `src/daemon/db/schema.ts`)
 
 | Command | Flags |
 |--------|-------|
-| `hiboss agent bind` | `--name`, `--adapter-type`, `--adapter-token` |
-| `hiboss agent unbind` | `--name`, `--adapter-type` |
+| `hiboss agent set` | `--name`, `--bind-adapter-type`, `--bind-adapter-token`, `--unbind-adapter-type` |
 
 ### CLI Output Keys
 
-`hiboss agent bind` prints:
-- `id:`
+`hiboss agent set` prints:
+- `success:`
 - `agent-name:`
-- `adapter-type:`
-- `created-at:` (shown in local timezone offset)
+- `bindings:` (optional)
 
 ---
 
@@ -223,18 +218,14 @@ Setup configures Hi-Boss for first use by initializing `~/.hiboss/hiboss.db` (co
 ```bash
 hiboss setup                    # Interactive setup (default)
 hiboss setup interactive        # Interactive setup
-hiboss setup default --boss-token <token> [options]
+hiboss setup default --config <path>
 ```
 
 ### Default Setup Options
 
 ```bash
 hiboss setup default \
-  --boss-name <name> \
-  --boss-token <token> \
-  --adapter-type <type> \
-  --adapter-token <token> \
-  --adapter-boss-id <id>
+  --config <path>
 ```
 
 ---
@@ -242,18 +233,6 @@ hiboss setup default \
 ## Permission
 
 Permissions are enforced by the daemon per operation using a configurable policy stored in `config.permission_policy`.
-
-### CLI Flags
-
-| Command | Flags |
-|--------|-------|
-| `hiboss permission policy get` | `--token` |
-| `hiboss permission policy set` | `--token`, `--file` |
-
-### CLI Output Keys
-
-`hiboss permission policy get` prints:
-- `policy-json:`
 
 ---
 

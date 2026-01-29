@@ -16,7 +16,7 @@ Use Telegram’s @BotFather to create a bot and copy the bot token.
 ## 2) Bind the bot to an agent
 
 ```bash
-hiboss agent bind --name <agent-name> --adapter-type telegram --adapter-token <telegram-bot-token>
+hiboss agent set --token <boss-token> --name <agent-name> --bind-adapter-type telegram --bind-adapter-token <telegram-bot-token>
 ```
 
 ## 3) Talk to your agent
