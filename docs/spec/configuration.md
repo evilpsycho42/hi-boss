@@ -152,28 +152,68 @@ What `adapter_boss_id_<adapter-type>` does:
 
 Per-agent settings:
 
-- `name`: agent identifier (used in addresses like `agent:<name>`)
-- `token`: agent auth token (stored **plaintext** in the DB; printed by setup/register)
-  - There is no CLI command to show it again; you can retrieve it by querying `~/.hiboss/hiboss.db`.
-- `description`
-- `workspace`: passed to the provider runtime as the session working directory
-- `provider`: `"claude"` or `"codex"`
-  - Agents created via `hiboss agent register` currently default to `"claude"` (no CLI flag yet).
-- `model`: optional model name (set by setup for the initial agent)
-- `reasoning_effort`: setup currently sets `"low" | "medium" | "high"` for the initial agent
-- `auto_level`: `"low" | "medium" | "high"` (set by setup for the initial agent)
-- `last_seen_at`: updated when the agent authenticates RPC calls via token (e.g., `hiboss envelope list --token ...`)
-- `metadata`: JSON blob for extended settings (see session policy below)
-  - `permissionLevel`: `"restricted" | "standard" | "privileged"` (defaults to `"standard"` when unset)
-    - Set via: `hiboss agent permission set --name <agent-name> --permission-level <level> --token <boss-token>`
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `name` | TEXT | — | Agent identifier (used in addresses like `agent:<name>`) |
+| `token` | TEXT | — | Agent auth token (stored plaintext; printed by setup/register). No CLI command to show it again. |
+| `description` | TEXT | `NULL` | Optional description |
+| `workspace` | TEXT | `NULL` | Passed to the provider runtime as the session working directory |
+| `provider` | TEXT | `'claude'` | `"claude"` or `"codex"` |
+| `model` | TEXT | `NULL` | Optional model name (set by setup for the initial agent) |
+| `reasoning_effort` | TEXT | `'medium'` | `"none"`, `"low"`, `"medium"`, `"high"`, or `"xhigh"` |
+| `auto_level` | TEXT | `'high'` | `"low"`, `"medium"`, or `"high"` |
+| `permission_level` | TEXT | `'standard'` | `"restricted"`, `"standard"`, or `"privileged"` |
+| `session_policy` | TEXT | `NULL` | JSON blob for SessionPolicyConfig |
+| `created_at` | TEXT | `datetime('now')` | ISO 8601 timestamp |
+| `last_seen_at` | TEXT | `NULL` | Updated when the agent authenticates RPC calls via token |
+| `metadata` | TEXT | `NULL` | JSON blob for extended settings |
+
+Set permission level via: `hiboss agent permission set --name <agent-name> --permission-level <level> --token <boss-token>`
 
 ### `agent_bindings` table
 
 Bindings connect an agent to an adapter credential:
 
-- `agent_name`
-- `adapter_type` (currently `telegram`)
-- `adapter_token` (e.g., Telegram bot token)
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `id` | TEXT | — | Primary key |
+| `agent_name` | TEXT | — | References `agents(name)` |
+| `adapter_type` | TEXT | — | e.g., `"telegram"` |
+| `adapter_token` | TEXT | — | Adapter credential (e.g., Telegram bot token) |
+| `created_at` | TEXT | `datetime('now')` | ISO 8601 timestamp |
+
+Constraints:
+- `UNIQUE(adapter_type, adapter_token)` — each adapter binds to one agent
+- Each agent can have at most one binding per adapter type
+
+### `envelopes` table
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `id` | TEXT | — | Primary key |
+| `from` | TEXT | — | Sender address |
+| `to` | TEXT | — | Recipient address |
+| `from_boss` | INTEGER | `0` | `1` if sent by boss, `0` otherwise |
+| `content_text` | TEXT | `NULL` | Message text |
+| `content_attachments` | TEXT | `NULL` | JSON array of attachments |
+| `reply_to` | TEXT | `NULL` | Optional envelope ID being replied to |
+| `deliver_at` | TEXT | `NULL` | ISO 8601 UTC timestamp (scheduled delivery) |
+| `status` | TEXT | `'pending'` | `"pending"` or `"done"` |
+| `created_at` | TEXT | `datetime('now')` | ISO 8601 timestamp |
+| `metadata` | TEXT | `NULL` | JSON blob |
+
+### `agent_runs` table
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `id` | TEXT | — | Primary key |
+| `agent_name` | TEXT | — | Agent that ran |
+| `started_at` | INTEGER | — | Unix timestamp (ms) |
+| `completed_at` | INTEGER | `NULL` | Unix timestamp (ms) |
+| `envelope_ids` | TEXT | `NULL` | JSON array of processed envelope IDs |
+| `final_response` | TEXT | `NULL` | Stored for auditing |
+| `status` | TEXT | `'running'` | `"running"`, `"completed"`, or `"failed"` |
+| `error` | TEXT | `NULL` | Error message if failed |
 
 ---
 
@@ -242,6 +282,30 @@ The policy maps an operation name to a minimum permission level:
 - `restricted < standard < privileged < boss`
 
 If an operation is missing from the policy, it defaults to `boss` (safe-by-default).
+
+### Default Policy
+
+| Operation | Default Level |
+|-----------|---------------|
+| `envelope.send` | `standard` |
+| `envelope.list` | `standard` |
+| `envelope.get` | `standard` |
+| `message.send` | `standard` |
+| `message.list` | `standard` |
+| `message.get` | `standard` |
+| `daemon.status` | `standard` |
+| `daemon.ping` | `standard` |
+| `daemon.start` | `boss` |
+| `daemon.stop` | `boss` |
+| `agent.register` | `boss` |
+| `agent.list` | `boss` |
+| `agent.bind` | `boss` |
+| `agent.unbind` | `boss` |
+| `agent.refresh` | `boss` |
+| `agent.session-policy.set` | `boss` |
+| `agent.permission.set` | `boss` |
+| `permission.policy.get` | `boss` |
+| `permission.policy.set` | `boss` |
 
 Manage the policy with:
 
