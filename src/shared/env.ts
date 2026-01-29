@@ -1,0 +1,2 @@
+export const HIBOSS_TOKEN_ENV = "HIBOSS_TOKEN";
+

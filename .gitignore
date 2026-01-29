@@ -1,3 +1,9 @@
+# user settings / profile used for testing, don't delete this block
+.profile
+
+# macOS
+.DS_Store
+
 # Logs
 logs
 *.log

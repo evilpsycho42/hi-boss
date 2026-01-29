@@ -1,0 +1,30 @@
+{
+  "name": "hiboss",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "hiboss": "./dist/bin/hiboss.js"
+  },
+  "scripts": {
+    "dev": "tsx watch src/daemon-entry.ts",
+    "start": "tsx src/daemon-entry.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "hiboss": "tsx bin/hiboss.ts",
+    "inventory:magic": "tsx scripts/magic-inventory.ts --out docs/magic-inventory.md"
+  },
+  "dependencies": {
+    "@unified-agent-sdk/runtime": "^0.4.1",
+    "@inquirer/prompts": "^7.0.0",
+    "better-sqlite3": "^11.7.0",
+    "commander": "^13.0.0",
+    "dotenv": "^16.4.5",
+    "telegraf": "^4.16.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
