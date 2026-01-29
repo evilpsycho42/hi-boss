@@ -20,6 +20,7 @@ import {
   type AgentBindParams,
   type AgentUnbindParams,
   type AgentRefreshParams,
+  type AgentSelfParams,
   type AgentSessionPolicySetParams,
   type SetupExecuteParams,
   type BossVerifyParams,
@@ -734,6 +735,32 @@ export class Daemon {
         this.executor.requestSessionRefresh(agent.name, "rpc:agent.refresh");
 
         return { success: true, agentName: agent.name };
+      },
+
+      "agent.self": async (params) => {
+        const p = params as unknown as AgentSelfParams;
+        const agent = this.db.findAgentByToken(p.token);
+        if (!agent) {
+          rpcError(RPC_ERRORS.UNAUTHORIZED, "Invalid token");
+        }
+
+        this.db.updateAgentLastSeen(agent.name);
+
+        const provider = agent.provider ?? "claude";
+        const workspace = agent.workspace ?? process.cwd();
+        const reasoningEffort = agent.reasoningEffort ?? "medium";
+        const autoLevel = agent.autoLevel ?? "high";
+
+        return {
+          agent: {
+            name: agent.name,
+            provider,
+            workspace,
+            model: agent.model,
+            reasoningEffort,
+            autoLevel,
+          },
+        };
       },
 
       "agent.session-policy.set": async (params) => {
