@@ -52,38 +52,46 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<voi
   // Acquire PID file lock before spawning to prevent race condition.
   // This is atomic at the filesystem level - only one process can create the file.
   const pidPath = path.join(config.dataDir, "daemon.pid");
-  try {
-    const fd = fs.openSync(pidPath, "wx");
+  let acquired = false;
+  for (let attempt = 0; attempt < 5; attempt++) {
     try {
-      // Write placeholder; daemon will overwrite with its actual PID
-      fs.writeFileSync(fd, "starting", "utf-8");
-    } finally {
-      fs.closeSync(fd);
-    }
-  } catch (err) {
-    const e = err as NodeJS.ErrnoException;
-    if (e.code === "EEXIST") {
+      const fd = fs.openSync(pidPath, "wx");
+      try {
+        // Write placeholder; daemon will overwrite with its actual PID
+        fs.writeFileSync(fd, "starting", "utf-8");
+      } finally {
+        fs.closeSync(fd);
+      }
+      acquired = true;
+      break;
+    } catch (err) {
+      const e = err as NodeJS.ErrnoException;
+      if (e.code !== "EEXIST") {
+        throw err;
+      }
+
       // PID file exists - check if daemon is actually running
       if (await isDaemonRunning(config)) {
         console.log("Daemon is already running");
         return;
       }
-      // Stale PID file - remove and retry
+
+      // Stale PID file - remove and retry (handle races where it disappears)
       try {
         fs.unlinkSync(pidPath);
-        const fd = fs.openSync(pidPath, "wx");
-        try {
-          fs.writeFileSync(fd, "starting", "utf-8");
-        } finally {
-          fs.closeSync(fd);
+      } catch (unlinkErr) {
+        const ue = unlinkErr as NodeJS.ErrnoException;
+        if (ue.code !== "ENOENT") {
+          console.error("Failed to acquire daemon lock");
+          process.exit(1);
         }
-      } catch {
-        console.error("Failed to acquire daemon lock");
-        process.exit(1);
       }
-    } else {
-      throw err;
     }
+  }
+
+  if (!acquired) {
+    console.error("Failed to acquire daemon lock");
+    process.exit(1);
   }
 
   // Find the daemon entry script

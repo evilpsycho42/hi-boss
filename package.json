@@ -9,6 +9,7 @@
     "dev": "tsx watch src/daemon-entry.ts",
     "start": "tsx src/daemon-entry.ts",
     "build": "tsc",
+    "e2e": "npm run build && tsx scripts/e2e.ts",
     "typecheck": "tsc --noEmit",
     "hiboss": "tsx bin/hiboss.ts",
     "defaults:check": "tsx scripts/check-defaults.ts",

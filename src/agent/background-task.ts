@@ -40,6 +40,11 @@ export async function runBackgroundTask(options: BackgroundTaskOptions): Promise
   delete process.env.HIBOSS_BACKGROUND_TOKEN;
   delete process.env.HIBOSS_TOKEN;
 
+  if (process.env.HIBOSS_E2E === "1") {
+    await sendEnvelopeToSelf(backgroundToken, options.agentName, `[HIBOSS_E2E mock] ${options.task}`);
+    return;
+  }
+
   const baseHome = getAgentHomePath(options.agentName, options.provider);
   if (!fs.existsSync(baseHome)) {
     throw new Error(`Agent home not found: ${baseHome}`);
@@ -117,4 +122,3 @@ export async function runBackgroundTask(options: BackgroundTaskOptions): Promise
     }
   }
 }
-

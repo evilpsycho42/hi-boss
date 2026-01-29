@@ -31,6 +31,10 @@ import {
   DEFAULT_AGENT_REASONING_EFFORT,
 } from "../shared/defaults.js";
 
+function isE2eMockEnabled(): boolean {
+  return process.env.HIBOSS_E2E === "1";
+}
+
 /**
  * Maximum number of pending envelopes to process in a single turn.
  */
@@ -390,23 +394,31 @@ export class AgentExecutor {
         reasoningEffort: agent.reasoningEffort ?? DEFAULT_AGENT_REASONING_EFFORT,
       };
 
-      const runtime =
-        provider === "claude"
-          ? createRuntime({
-              provider: "@anthropic-ai/claude-agent-sdk",
-              home: homePath,
-              env: { [HIBOSS_TOKEN_ENV]: agentRecord.token },
-              defaultOpts,
-            })
-          : createRuntime({
-              provider: "@openai/codex-sdk",
-              home: homePath,
-              env: { [HIBOSS_TOKEN_ENV]: agentRecord.token },
-              defaultOpts,
-            });
+      let runtime: UnifiedAgentRuntime<any, any>;
+      let unifiedSession: UnifiedSession<any, any>;
 
-      // Open a session (instructions are loaded from home directory files)
-      const unifiedSession = await runtime.openSession({});
+      if (isE2eMockEnabled()) {
+        runtime = { close: async () => {} } as unknown as UnifiedAgentRuntime<any, any>;
+        unifiedSession = { dispose: async () => {} } as unknown as UnifiedSession<any, any>;
+      } else {
+        runtime =
+          provider === "claude"
+            ? createRuntime({
+                provider: "@anthropic-ai/claude-agent-sdk",
+                home: homePath,
+                env: { [HIBOSS_TOKEN_ENV]: agentRecord.token },
+                defaultOpts,
+              })
+            : createRuntime({
+                provider: "@openai/codex-sdk",
+                home: homePath,
+                env: { [HIBOSS_TOKEN_ENV]: agentRecord.token },
+                defaultOpts,
+              });
+
+        // Open a session (instructions are loaded from home directory files)
+        unifiedSession = await runtime.openSession({});
+      }
 
       session = {
         runtime,
@@ -431,6 +443,15 @@ export class AgentExecutor {
     turnInput: string
   ): Promise<{ finalText: string; tokensUsed: number | null }> {
     this.log(`Executing turn with ${session.provider} provider`);
+
+    if (isE2eMockEnabled()) {
+      const envelopeCount = (turnInput.match(/^### Envelope /gm) ?? []).length;
+      const tokensUsed = Math.max(1, Math.ceil(turnInput.length / 20));
+      return {
+        finalText: `[HIBOSS_E2E mock] processed ${envelopeCount} envelope(s)`,
+        tokensUsed,
+      };
+    }
 
     // Debug: display turn input
     if (this.debug) {

@@ -19,6 +19,22 @@ hiboss daemon start --debug
 hiboss agent register --name nex --description "AI assistant" --workspace "$PWD"
 ```
 
+## E2E tests (no adapters)
+
+Automated (runs in a temp `$HOME`, does **not** require OpenAI/Anthropic keys):
+
+```bash
+npm run e2e
+```
+
+Notes:
+- Uses `HIBOSS_E2E=1` to mock agent/background runs (so envelope/session/scheduler mechanisms are testable offline).
+- Uses `HIBOSS_DISABLE_AGENT_AUTO_RUN=1` for one phase to verify `hiboss envelope list --as-turn`, then restarts the daemon to verify startup recovery + auto-run.
+- Memory is smoke-tested via `hiboss mem state` only. Avoid `hiboss mem add/search` unless embeddings are configured (it may download a large model).
+
+Manual (real home):
+- Build/link, reset state, run setup, start daemon, then follow `docs/spec/cli.md` and check `~/.hiboss/daemon.log` + DB.
+
 ## Naming rules (parsing safety)
 
 | Context | Convention | Example |

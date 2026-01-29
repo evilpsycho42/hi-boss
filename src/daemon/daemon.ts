@@ -173,7 +173,12 @@ export class Daemon {
       await this.loadBindings();
 
       // Register agent handlers for auto-execution
-      await this.registerAgentExecutionHandlers();
+      const disableAutoRun = process.env.HIBOSS_DISABLE_AGENT_AUTO_RUN === "1";
+      if (disableAutoRun) {
+        console.log(`[${nowLocalIso()}] [Daemon] Agent auto-run disabled (HIBOSS_DISABLE_AGENT_AUTO_RUN=1)`);
+      } else {
+        await this.registerAgentExecutionHandlers();
+      }
 
       // Start all loaded adapters
       for (const adapter of this.adapters.values()) {
@@ -184,7 +189,9 @@ export class Daemon {
       this.scheduler.start();
 
       // Process any pending envelopes from before restart
-      await this.processPendingEnvelopes();
+      if (!disableAutoRun) {
+        await this.processPendingEnvelopes();
+      }
     } catch (err) {
       // Best-effort cleanup to avoid leaving stale pid/socket files.
       await this.stop().catch(() => {});
