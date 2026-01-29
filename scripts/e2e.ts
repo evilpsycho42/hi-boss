@@ -106,6 +106,7 @@ async function main(): Promise<void> {
     HIBOSS_E2E: "1",
     MEM_CLI_DAEMON: "0",
   };
+  const daemonLogPath = path.join(tmpHome, ".hiboss", "daemon.log");
 
   const setupConfigPath = path.join(tmpHome, "setup.json");
   const setupConfig = {
@@ -224,6 +225,75 @@ async function main(): Promise<void> {
       },
       { timeoutMs: 10_000, intervalMs: 200, context: "agent should process startup pending inbox" }
     );
+
+    // Scheduler: deliver-at should delay delivery until due.
+    const scheduled = runHiboss(
+      hibossEntry,
+      [
+        "envelope",
+        "send",
+        "--token",
+        bossToken,
+        "--to",
+        "agent:nex",
+        "--from",
+        "agent:nex",
+        "--from-boss",
+        "--from-name",
+        bossName,
+        "--text",
+        "scheduled-1",
+        "--deliver-at",
+        "+2s",
+      ],
+      baseEnv
+    );
+    expectOk(scheduled, "envelope send scheduled", secretsToRedact);
+
+    const doneBeforeDue = runHiboss(
+      hibossEntry,
+      ["envelope", "list", "--token", agentToken, "--box", "inbox", "--status", "done"],
+      baseEnv
+    );
+    expectOk(doneBeforeDue, "envelope list done (before due)", secretsToRedact);
+    assert.ok(!doneBeforeDue.stdout.includes("scheduled-1"), "scheduled envelope delivered too early");
+
+    await waitFor(
+      () => {
+        const res = runHiboss(
+          hibossEntry,
+          ["envelope", "list", "--token", agentToken, "--box", "inbox", "--status", "done"],
+          baseEnv
+        );
+        return res.code === 0 && res.stdout.includes("scheduled-1");
+      },
+      { timeoutMs: 10_000, intervalMs: 200, context: "scheduled envelope should be delivered and processed" }
+    );
+
+    // Session policy: idle-timeout should trigger a refresh (log-level verification).
+    await sleep(2500);
+    const afterIdle = runHiboss(
+      hibossEntry,
+      ["envelope", "send", "--token", bossToken, "--to", "agent:nex", "--from", "agent:nex", "--text", "after-idle"],
+      baseEnv
+    );
+    expectOk(afterIdle, "envelope send after idle", secretsToRedact);
+
+    await waitFor(
+      () => {
+        const res = runHiboss(
+          hibossEntry,
+          ["envelope", "list", "--token", agentToken, "--box", "inbox", "--status", "pending"],
+          baseEnv
+        );
+        return res.code === 0 && res.stdout.includes("no-envelopes: true");
+      },
+      { timeoutMs: 10_000, intervalMs: 200, context: "agent should process after-idle envelope" }
+    );
+
+    const daemonLog = fs.existsSync(daemonLogPath) ? fs.readFileSync(daemonLogPath, "utf8") : "";
+    assert.ok(daemonLog.includes("idle-timeout-ms:2000"), "daemon log missing idle-timeout session refresh");
+    assert.ok(daemonLog.includes("## Memory"), "daemon log missing memory section in generated system prompt");
 
     // Envelope rendering should preserve boss marker.
     const getEnv1 = runHiboss(hibossEntry, ["envelope", "get", "--token", agentToken, "--id", env1Id], baseEnv);
@@ -344,4 +414,3 @@ main().catch((err) => {
   console.error(err instanceof Error ? err.message : String(err));
   process.exit(1);
 });
-
