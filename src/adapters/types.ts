@@ -78,6 +78,19 @@ export interface ChannelMessage {
     username?: string;
     displayName: string;
   };
+  /**
+   * If this message is a reply to (quotes) another message in the same chat,
+   * this contains minimal info about the target message.
+   */
+  inReplyTo?: {
+    messageId: string;
+    author?: {
+      id: string;
+      username?: string;
+      displayName: string;
+    };
+    text?: string;
+  };
   chat: {
     id: string;
     name?: string;
@@ -105,19 +118,28 @@ export type ChannelCommandHandler = (command: ChannelCommand) => void | Promise<
 
 export type MessageContent = ChannelMessage["content"];
 
+export type OutgoingParseMode = "plain" | "markdownv2" | "html";
+
+export interface SendMessageOptions {
+  parseMode?: OutgoingParseMode;
+  replyToMessageId?: string;
+}
+
 export interface ChatAdapter {
   readonly platform: string;
   /**
    * Send a message to a chat.
    * @param chatId - Target chat ID
    * @param content - Message content (text and/or attachments)
+   * @param options - Optional send options (formatting, reply threading, etc.)
    *
    * Note: When sending multiple attachments, platforms may deliver them as
    * separate messages (e.g., Telegram media groups).
    */
-  sendMessage(chatId: string, content: MessageContent): Promise<void>;
+  sendMessage(chatId: string, content: MessageContent, options?: SendMessageOptions): Promise<void>;
   onMessage(handler: ChannelMessageHandler): void;
   onCommand?(handler: ChannelCommandHandler): void;
+  setReaction?(chatId: string, messageId: string, emoji: string): Promise<void>;
   start(): Promise<void>;
   stop(): Promise<void>;
 }

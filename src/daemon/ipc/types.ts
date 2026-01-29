@@ -33,6 +33,7 @@ export const RPC_ERRORS = {
   UNAUTHORIZED: -32001,
   NOT_FOUND: -32002,
   ALREADY_EXISTS: -32003,
+  DELIVERY_FAILED: -32010,
 } as const;
 
 /**
@@ -56,8 +57,10 @@ export interface EnvelopeSendParams {
   fromBoss?: boolean;
   fromName?: string;
   text?: string;
-  attachments?: Array<{ source: string; filename?: string }>;
+  attachments?: Array<{ source: string; filename?: string; telegramFileId?: string }>;
   deliverAt?: string;
+  parseMode?: "plain" | "markdownv2" | "html";
+  replyToMessageId?: string;
 }
 
 export interface EnvelopeListParams {
@@ -92,6 +95,13 @@ export interface AgentRegisterParams {
   sessionDailyResetAt?: string;
   sessionIdleTimeout?: string;
   sessionMaxTokens?: number;
+}
+
+export interface ReactionSetParams {
+  token: string;
+  to: string;         // channel:<adapter>:<chat-id>
+  messageId: string;  // platform message id
+  emoji: string;      // unicode emoji
 }
 
 export interface AgentBindParams {

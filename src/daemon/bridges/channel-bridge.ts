@@ -144,6 +144,7 @@ export class ChannelBridge {
         attachments: message.content.attachments?.map((a) => ({
           source: a.source,
           filename: a.filename,
+          telegramFileId: a.telegramFileId,
         })),
       },
       metadata: {
@@ -151,6 +152,7 @@ export class ChannelBridge {
         channelMessageId: message.id,
         author: message.author,
         chat: message.chat,
+        ...(message.inReplyTo ? { inReplyTo: message.inReplyTo } : {}),
       },
     });
 

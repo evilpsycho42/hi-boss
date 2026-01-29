@@ -19,6 +19,29 @@ hiboss envelope send --to <address> --text "your response"
 
 Your agent token is provided via the `{{ hiboss.tokenEnvVar }}` environment variable, so `--token` is optional.
 
+**Reply/quote a specific message (Telegram):**
+
+When an incoming envelope includes `channel-message-id: <id>`, you can reply (quote) that message in Telegram:
+
+```bash
+hiboss envelope send --to <address> --reply-to <channel-message-id> --text "replying to that message"
+```
+
+**Reactions (Telegram):**
+
+```bash
+hiboss reaction set --to <address> --channel-message-id <channel-message-id> --emoji "👍"
+```
+
+**Formatting (Telegram):**
+
+Default is plain text (no escaping needed). Only opt in if you want Telegram formatting.
+
+```bash
+hiboss envelope send --to <address> --parse-mode markdownv2 --text "*bold*"
+hiboss envelope send --to <address> --parse-mode html --text "<b>bold</b>"
+```
+
 **Address formats:**
 - `agent:<name>` — Send to another agent
 - `channel:telegram:<chatId>` — Send to a Telegram chat (use the `from` address to reply)

@@ -35,6 +35,8 @@ export interface SendEnvelopeOptions {
   textFile?: string;
   attachment?: string[];
   deliverAt?: string;
+  parseMode?: string;
+  replyTo?: string;
 }
 
 export interface ListEnvelopesOptions {
@@ -71,6 +73,13 @@ function normalizeAttachmentSource(source: string): string {
   if (fs.existsSync(resolved)) return resolved;
   if (isProbablyFilePath(source)) return resolved;
   return source;
+}
+
+function extractTelegramFileId(source: string): string | undefined {
+  const prefix = "telegram:file-id:";
+  if (!source.startsWith(prefix)) return undefined;
+  const id = source.slice(prefix.length).trim();
+  return id ? id : undefined;
 }
 
 /**
@@ -161,6 +170,10 @@ export async function sendEnvelope(options: SendEnvelopeOptions): Promise<void> 
   try {
     const token = resolveToken(options.token);
     const text = await resolveText(options.text, options.textFile);
+    const parseMode = options.parseMode?.trim();
+    if (parseMode && parseMode !== "plain" && parseMode !== "markdownv2" && parseMode !== "html") {
+      throw new Error("Invalid --parse-mode (expected plain, markdownv2, or html)");
+    }
     const result = await client.call<SendEnvelopeResult>("envelope.send", {
       token,
       from: options.from,
@@ -168,15 +181,63 @@ export async function sendEnvelope(options: SendEnvelopeOptions): Promise<void> 
       fromBoss: options.fromBoss,
       fromName: options.fromName,
       text,
-      attachments: options.attachment?.map((source) => ({
-        source: normalizeAttachmentSource(source),
-      })),
+      attachments: options.attachment?.map((source) => {
+        const telegramFileId = extractTelegramFileId(source);
+        return {
+          source: normalizeAttachmentSource(source),
+          ...(telegramFileId ? { telegramFileId } : {}),
+        };
+      }),
       deliverAt: options.deliverAt,
+      parseMode,
+      replyToMessageId: options.replyTo,
     });
 
     console.log(`id: ${result.id}`);
   } catch (err) {
-    console.error("error:", (err as Error).message);
+    const e = err as Error & { code?: number; data?: unknown };
+    console.error("error:", e.message);
+
+    const data = e.data;
+    if (data && typeof data === "object") {
+      const d = data as Record<string, unknown>;
+      if (typeof d.envelopeId === "string" && d.envelopeId.trim()) {
+        console.error(`envelope-id: ${d.envelopeId.trim()}`);
+      }
+      if (typeof d.adapterType === "string") {
+        console.error(`adapter-type: ${d.adapterType}`);
+      }
+      if (typeof d.chatId === "string") {
+        console.error(`chat-id: ${d.chatId}`);
+      }
+      if (typeof d.parseMode === "string") {
+        console.error(`parse-mode: ${d.parseMode}`);
+      }
+      if (typeof d.replyToMessageId === "string" && d.replyToMessageId.trim()) {
+        console.error(`reply-to-message-id: ${d.replyToMessageId.trim()}`);
+      }
+
+      const adapterError = d.adapterError;
+      if (adapterError && typeof adapterError === "object") {
+        const ae = adapterError as Record<string, unknown>;
+        if (typeof ae.summary === "string") {
+          console.error(`adapter-error: ${ae.summary}`);
+        }
+        if (typeof ae.hint === "string" && ae.hint.trim()) {
+          console.error(`hint: ${ae.hint.trim()}`);
+        }
+        const telegram = ae.telegram;
+        if (telegram && typeof telegram === "object") {
+          const t = telegram as Record<string, unknown>;
+          if (typeof t.errorCode === "number") {
+            console.error(`telegram-error-code: ${t.errorCode}`);
+          }
+          if (typeof t.description === "string") {
+            console.error(`telegram-description: ${t.description}`);
+          }
+        }
+      }
+    }
     process.exit(1);
   }
 }

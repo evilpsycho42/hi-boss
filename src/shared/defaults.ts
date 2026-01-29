@@ -78,6 +78,9 @@ export const DEFAULT_PERMISSION_POLICY: PermissionPolicyV1 = {
     "message.list": "restricted",
     "message.get": "restricted",
 
+    // Reactions
+    "reaction.set": "restricted",
+
     // Daemon read-only
     "daemon.status": "boss",
     "daemon.ping": "standard",
@@ -98,4 +101,3 @@ export const DEFAULT_PERMISSION_POLICY: PermissionPolicyV1 = {
     "permission.policy.set": "boss",
   },
 };
-

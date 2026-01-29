@@ -73,7 +73,11 @@ export class EnvelopeScheduler {
       // 1) Deliver due channel envelopes (scheduled delivery).
       const dueChannel = this.db.listDueChannelEnvelopes(MAX_CHANNEL_ENVELOPES_PER_TICK);
       for (const env of dueChannel) {
-        await this.router.deliverEnvelope(env);
+        try {
+          await this.router.deliverEnvelope(env);
+        } catch (err) {
+          console.error(`[Scheduler] Channel delivery failed for envelope ${env.id}:`, err);
+        }
       }
 
       // 2) Trigger agents that have due envelopes.
@@ -128,4 +132,3 @@ export class EnvelopeScheduler {
     }, clamped);
   }
 }
-

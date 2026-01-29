@@ -5,15 +5,31 @@ from: {{ envelope.from }}
 {% if envelope.fromName %}
 from-name: {{ envelope.fromName }}
 {% endif %}
+{% if envelope.channelMessageId %}
+channel-message-id: {{ envelope.channelMessageId }}
+{% endif %}
 {% if envelope.isGroup == false %}
 created-at: {{ envelope.createdAt.localIso }}
 {% endif %}
-{% endif %}
+{% if envelope.isGroup == false %}
 
+{% endif %}
+{% endif %}
 {% if isContinuation %}
 
-{% endif %}
 
+{% endif %}
+{% if (not showHeader) and envelope.channelMessageId %}
+channel-message-id: {{ envelope.channelMessageId }}
+{% endif %}
+{% if envelope.inReplyTo %}
+in-reply-to-message-id: {{ envelope.inReplyTo.messageId }}
+{% if envelope.inReplyTo.fromName %}
+in-reply-to-from-name: {{ envelope.inReplyTo.fromName }}
+{% endif %}
+in-reply-to-text:
+{{ envelope.inReplyTo.text }}
+{% endif %}
 {% if envelope.isGroup %}
 {{ envelope.authorLine }} at {{ envelope.createdAt.localIso }}:
 {{ envelope.content.text }}

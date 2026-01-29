@@ -47,6 +47,7 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | `hiboss envelope list` | List envelopes | Yes (agent/boss token) | restricted |
 | `hiboss envelope list --as-turn` | Render pending inbox as a turn preview | Yes (agent/boss token) | restricted |
 | `hiboss envelope get` | Get an envelope by id | Yes (agent/boss token) | restricted |
+| `hiboss reaction set` | Set a reaction on a channel message | Yes (agent token) | restricted |
 | `hiboss agent register` | Register a new agent | Yes (boss token) | boss |
 | `hiboss agent list` | List agents | Yes (agent/boss token) | restricted |
 | `hiboss agent bind` | Bind an adapter to an agent | Yes (agent/boss token) | privileged |
@@ -134,6 +135,8 @@ Flags:
 - `--to <address>` (required)
 - `--text <text>` or `--text -` (stdin) or `--text-file <path>`
 - `--attachment <path>` (repeatable)
+- `--reply-to <message-id>` (optional; channel destinations only)
+- `--parse-mode <mode>` (optional; channel destinations only; `plain|markdownv2|html`)
 - `--deliver-at <time>` (ISO 8601 or relative: `+2h`, `+30m`, `+1Y2M`, `-15m`; units: `Y/M/D/h/m/s`)
 - Boss-only: `--from <address>`, `--from-boss`, `--from-name <name>`
 
@@ -145,6 +148,20 @@ id: <envelope-id>
 
 Default permission:
 - `restricted`
+
+---
+
+## Reactions
+
+### `hiboss reaction set`
+
+Sets a reaction (emoji) on a channel message.
+
+Example:
+
+```bash
+hiboss reaction set --to channel:telegram:<chat-id> --channel-message-id <channel-message-id> --emoji "👍"
+```
 
 ### `hiboss envelope get`
 
@@ -192,7 +209,7 @@ Meaning:
 - Consecutive group-chat envelopes with the same `from:` are batched under one `### Envelope <index>` header.
 
 Note:
-- `## Pending Envelopes (<n>)` is the number of underlying envelopes (messages). With batching, the number of `### Envelope <index>` sections may be smaller.
+- `## Pending Envelopes (...)` shows the number of underlying messages, and when batching occurs it also shows the number of grouped blocks (so it can differ from the number of `### Envelope <index>` headers).
 
 Default permission:
 - `restricted`

@@ -90,6 +90,11 @@ interface ChannelMetadata {
   channelMessageId: string;
   author: { id: string; username?: string; displayName: string };
   chat: { id: string; name?: string };
+  inReplyTo?: {
+    messageId: string;
+    author?: { id: string; username?: string; displayName: string };
+    text?: string;
+  };
 }
 
 function getFromNameOverride(metadata: unknown): string | undefined {
@@ -174,6 +179,44 @@ function buildSemanticFrom(envelope: Envelope): SemanticFromResult | undefined {
   }
 }
 
+interface InReplyToPrompt {
+  messageId: string;
+  fromName: string;
+  text: string;
+}
+
+function buildInReplyTo(metadata: unknown): InReplyToPrompt | undefined {
+  if (!isChannelMetadata(metadata)) return undefined;
+  const inReplyTo = metadata.inReplyTo;
+  if (!inReplyTo || typeof inReplyTo !== "object") return undefined;
+
+  const rt = inReplyTo as Record<string, unknown>;
+  const messageId = typeof rt.messageId === "string" ? rt.messageId.trim() : "";
+  if (!messageId) return undefined;
+
+  const authorRaw = rt.author;
+  let fromName = "";
+  if (authorRaw && typeof authorRaw === "object") {
+    const a = authorRaw as Record<string, unknown>;
+    const displayName = typeof a.displayName === "string" ? a.displayName : "";
+    const username = typeof a.username === "string" ? a.username : "";
+    fromName = username ? `${displayName} (@${username})` : displayName;
+  }
+
+  const text = typeof rt.text === "string" && rt.text.trim() ? rt.text : "(none)";
+
+  return {
+    messageId,
+    fromName,
+    text,
+  };
+}
+
+function getChannelMessageId(metadata: unknown): string {
+  if (!isChannelMetadata(metadata)) return "";
+  return metadata.channelMessageId;
+}
+
 export function buildSystemPromptContext(params: {
   agent: Agent;
   agentToken: string;
@@ -248,6 +291,8 @@ export function buildTurnPromptContext(params: {
 }): Record<string, unknown> {
   const envelopes = (params.envelopes ?? []).map((env, idx) => {
     const semantic = buildSemanticFrom(env);
+    const channelMessageId = getChannelMessageId(env.metadata);
+    const inReplyTo = buildInReplyTo(env.metadata);
     const attachments = (env.content.attachments ?? []).map((att) => {
       const type = detectAttachmentType(att);
       const displayName = displayAttachmentName(att) ?? "";
@@ -271,6 +316,8 @@ export function buildTurnPromptContext(params: {
       groupName: semantic?.groupName ?? "",
       authorName: semantic?.authorName ?? "",
       authorLine,
+      channelMessageId,
+      inReplyTo,
       createdAt: {
         utcIso: env.createdAt,
         localIso: formatUtcIsoAsLocalOffset(env.createdAt),
@@ -283,10 +330,26 @@ export function buildTurnPromptContext(params: {
     };
   });
 
+  let envelopeBlockCount = 0;
+  for (let i = 0; i < envelopes.length; i++) {
+    const env = envelopes[i];
+    const prev = i > 0 ? envelopes[i - 1] : undefined;
+    const isGroupContinuation =
+      i > 0 &&
+      env.isGroup &&
+      prev?.isGroup &&
+      prev.from === env.from;
+    if (!isGroupContinuation) {
+      envelopeBlockCount++;
+    }
+  }
+
   return {
     turn: {
       datetimeIso: params.datetimeIso,
       agentName: params.agentName,
+      envelopeCount: envelopes.length,
+      envelopeBlockCount,
     },
     envelopes,
   };
@@ -297,6 +360,8 @@ export function buildCliEnvelopePromptContext(params: {
 }): Record<string, unknown> {
   const env = params.envelope;
   const semantic = buildSemanticFrom(env);
+  const channelMessageId = getChannelMessageId(env.metadata);
+  const inReplyTo = buildInReplyTo(env.metadata);
   const attachments = (env.content.attachments ?? []).map((att) => {
     const type = detectAttachmentType(att);
     const displayName = displayAttachmentName(att) ?? "";
@@ -329,6 +394,8 @@ export function buildCliEnvelopePromptContext(params: {
       groupName: semantic?.groupName ?? "",
       authorName: semantic?.authorName ?? "",
       authorLine,
+      channelMessageId,
+      inReplyTo,
       createdAt: {
         utcIso: env.createdAt,
         localIso: formatUtcIsoAsLocalOffset(env.createdAt),
@@ -339,6 +406,10 @@ export function buildCliEnvelopePromptContext(params: {
         attachments,
         attachmentsText: formatAttachmentsText(env.content.attachments),
       },
+      lastDeliveryError:
+        env.metadata && typeof env.metadata === "object"
+          ? (env.metadata as Record<string, unknown>).lastDeliveryError ?? null
+          : null,
       metadata: env.metadata ?? {},
     },
   };

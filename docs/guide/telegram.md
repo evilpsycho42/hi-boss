@@ -41,6 +41,26 @@ Use it as the destination when sending:
 hiboss envelope send --to channel:telegram:<chat-id> --token <agent-token> --text "got it"
 ```
 
+## Reply/quote a specific message
+
+If the incoming envelope includes:
+
+```
+channel-message-id: <id>
+```
+
+You can reply (quote) that message in Telegram:
+
+```bash
+hiboss envelope send --to channel:telegram:<chat-id> --token <agent-token> --reply-to <id> --text "replying to that"
+```
+
+## Reactions
+
+```bash
+hiboss reaction set --to channel:telegram:<chat-id> --token <agent-token> --channel-message-id <id> --emoji "👍"
+```
+
 ## Refresh session (`/new`)
 
 Send `/new` to the bot to request a session refresh.

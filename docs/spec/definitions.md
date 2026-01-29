@@ -55,8 +55,19 @@ Table: `envelopes` (see `src/daemon/db/schema.ts`)
 **Header keys**
 - `from:` (always; raw address)
 - `from-name:` (only for channel messages; group name or author name with `[boss]` suffix for direct)
+- `channel-message-id:` (only for channel messages; platform message id, useful for `--reply-to` / reactions)
 - `created-at:` (only for direct/agent messages; group messages show per-message timestamps)
 - `deliver-at:` (optional; shown when present, in local timezone offset)
+
+**Reply/quote keys** (only when the incoming channel message is a reply)
+- `in-reply-to-message-id:`
+- `in-reply-to-from-name:` (optional)
+- `in-reply-to-text:` (multiline)
+
+**Delivery error keys** (only when a channel delivery attempt failed)
+- `last-delivery-error-at:`
+- `last-delivery-error-kind:`
+- `last-delivery-error-message:`
 
 **Sections (direct/agent messages)**
 - `text:` followed by the text (or `(none)`)

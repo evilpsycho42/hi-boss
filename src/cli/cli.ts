@@ -6,6 +6,7 @@ import {
   sendEnvelope,
   listEnvelopes,
   getEnvelope,
+  setReaction,
   registerAgent,
   listAgents,
   setAgentSessionPolicy,
@@ -72,6 +73,8 @@ envelope
   .option("--text <text>", "Envelope text (use - to read from stdin)")
   .option("--text-file <path>", "Read envelope text from file")
   .option("--attachment <path>", "Attachment path (can be used multiple times)", collect, [])
+  .option("--parse-mode <mode>", "Telegram parse mode: plain, markdownv2, html")
+  .option("--reply-to <message-id>", "Reply to a channel message by platform message id")
   .option(
     "--deliver-at <time>",
     "Schedule delivery time (ISO 8601 or relative: +2h, +30m, +1Y2M, -15m; units: Y/M/D/h/m/s)"
@@ -87,6 +90,37 @@ envelope
       textFile: options.textFile,
       attachment: options.attachment,
       deliverAt: options.deliverAt,
+      parseMode: options.parseMode,
+      replyTo: options.replyTo,
+    });
+  });
+
+// Reaction commands
+const reaction = program.command("reaction").description("Message reactions");
+
+reaction
+  .command("set")
+  .description("Set a reaction on a channel message")
+  .requiredOption("--to <address>", "Target channel address (channel:<adapter>:<chat-id>)")
+  .option("--channel-message-id <id>", "Target channel message id on the platform")
+  .option("--message-id <id>", "Deprecated: use --channel-message-id")
+  .requiredOption("--emoji <emoji>", "Reaction emoji (e.g., 👍)")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    if (options.channelMessageId && options.messageId) {
+      console.error("error: Cannot use both --channel-message-id and --message-id");
+      process.exit(1);
+    }
+    const messageId = options.channelMessageId ?? options.messageId;
+    if (!messageId) {
+      console.error("error: --channel-message-id is required");
+      process.exit(1);
+    }
+    setReaction({
+      token: options.token,
+      to: options.to,
+      messageId,
+      emoji: options.emoji,
     });
   });
 

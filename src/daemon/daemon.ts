@@ -24,6 +24,7 @@ import {
   type AgentSessionPolicySetParams,
   type SetupExecuteParams,
   type BossVerifyParams,
+  type ReactionSetParams,
 } from "./ipc/types.js";
 import type { ChatAdapter } from "../adapters/types.js";
 import { formatAgentAddress, parseAddress } from "../adapters/types.js";
@@ -373,7 +374,7 @@ export class Daemon {
 
       let from: string;
       let fromBoss = false;
-      let metadata: Record<string, unknown> | undefined;
+      const metadata: Record<string, unknown> = {};
 
       if (principal.kind === "boss") {
         if (typeof p.from !== "string" || !p.from.trim()) {
@@ -383,7 +384,7 @@ export class Daemon {
         fromBoss = p.fromBoss === true;
 
         if (typeof p.fromName === "string" && p.fromName.trim()) {
-          metadata = { fromName: p.fromName.trim() };
+          metadata.fromName = p.fromName.trim();
         }
       } else {
         if (p.from !== undefined || p.fromBoss !== undefined || p.fromName !== undefined) {
@@ -430,6 +431,30 @@ export class Daemon {
         }
       }
 
+      if (p.parseMode !== undefined) {
+        if (typeof p.parseMode !== "string") {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid parse-mode");
+        }
+        const mode = p.parseMode.trim();
+        if (mode !== "plain" && mode !== "markdownv2" && mode !== "html") {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid parse-mode (expected plain, markdownv2, or html)");
+        }
+        if (destination.type !== "channel") {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "parse-mode is only supported for channel destinations");
+        }
+        metadata.parseMode = mode;
+      }
+
+      if (p.replyToMessageId !== undefined) {
+        if (typeof p.replyToMessageId !== "string" || !p.replyToMessageId.trim()) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid reply-to-message-id");
+        }
+        if (destination.type !== "channel") {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "reply-to-message-id is only supported for channel destinations");
+        }
+        metadata.replyToMessageId = p.replyToMessageId.trim();
+      }
+
       let deliverAt: string | undefined;
       if (p.deliverAt) {
         try {
@@ -442,20 +467,91 @@ export class Daemon {
         }
       }
 
-      const envelope = await this.router.routeEnvelope({
-        from,
-        to: p.to,
-        fromBoss,
-        content: {
-          text: p.text,
-          attachments: p.attachments,
-        },
-        deliverAt,
-        metadata,
-      });
+      const finalMetadata = Object.keys(metadata).length > 0 ? metadata : undefined;
 
-      this.scheduler.onEnvelopeCreated(envelope);
-      return { id: envelope.id };
+      try {
+        const envelope = await this.router.routeEnvelope({
+          from,
+          to: p.to,
+          fromBoss,
+          content: {
+            text: p.text,
+            attachments: p.attachments,
+          },
+          deliverAt,
+          metadata: finalMetadata,
+        });
+
+        this.scheduler.onEnvelopeCreated(envelope);
+        return { id: envelope.id };
+      } catch (err) {
+        // Best-effort: ensure the scheduler sees newly-created scheduled envelopes, even if immediate delivery failed.
+        const e = err as Error & { data?: unknown };
+        if (e.data && typeof e.data === "object") {
+          const id = (e.data as Record<string, unknown>).envelopeId;
+          if (typeof id === "string" && id.trim()) {
+            const env = this.db.getEnvelopeById(id.trim());
+            if (env) {
+              this.scheduler.onEnvelopeCreated(env);
+            }
+          }
+        }
+        throw err;
+      }
+    };
+
+    const createReactionSet = (operation: string) => async (params: Record<string, unknown>) => {
+      const p = params as unknown as ReactionSetParams;
+      const token = requireToken(p.token);
+      const principal = this.resolvePrincipal(token);
+      this.assertOperationAllowed(operation, principal);
+
+      if (principal.kind !== "agent") {
+        rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+      }
+
+      if (typeof p.to !== "string" || !p.to.trim()) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to");
+      }
+
+      let destination: ReturnType<typeof parseAddress>;
+      try {
+        destination = parseAddress(p.to);
+      } catch (err) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, err instanceof Error ? err.message : "Invalid to");
+      }
+      if (destination.type !== "channel") {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Reaction targets must be channel:<adapter>:<chat-id>");
+      }
+
+      if (typeof p.messageId !== "string" || !p.messageId.trim()) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid message-id");
+      }
+      if (typeof p.emoji !== "string" || !p.emoji.trim()) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid emoji");
+      }
+
+      const agent = principal.agent;
+      this.db.updateAgentLastSeen(agent.name);
+
+      const binding = this.db.getAgentBindingByType(agent.name, destination.adapter);
+      if (!binding) {
+        rpcError(
+          RPC_ERRORS.UNAUTHORIZED,
+          `Agent '${agent.name}' is not bound to adapter '${destination.adapter}'`
+        );
+      }
+
+      const adapter = this.adapters.get(binding.adapterToken);
+      if (!adapter) {
+        rpcError(RPC_ERRORS.INTERNAL_ERROR, `Adapter not loaded: ${destination.adapter}`);
+      }
+      if (!adapter.setReaction) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, `Adapter '${destination.adapter}' does not support reactions`);
+      }
+
+      await adapter.setReaction(destination.chatId, p.messageId.trim(), p.emoji.trim());
+      return { success: true };
     };
 
     const createEnvelopeList = (operation: string) => async (params: Record<string, unknown>) => {
@@ -567,6 +663,7 @@ export class Daemon {
       "envelope.list": createEnvelopeList("envelope.list"),
       "envelope.get": createEnvelopeGet("envelope.get"),
       "turn.preview": createTurnPreview("turn.preview"),
+      "reaction.set": createReactionSet("reaction.set"),
 
       // Message methods (backwards-compatible aliases)
       "message.send": createEnvelopeSend("message.send"),

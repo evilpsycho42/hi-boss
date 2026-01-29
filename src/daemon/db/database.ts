@@ -450,6 +450,15 @@ export class HiBossDatabase {
     stmt.run(status, id);
   }
 
+  /**
+   * Update envelope metadata (JSON).
+   */
+  updateEnvelopeMetadata(id: string, metadata: Record<string, unknown> | undefined): void {
+    const value = metadata ? JSON.stringify(metadata) : null;
+    const stmt = this.db.prepare("UPDATE envelopes SET metadata = ? WHERE id = ?");
+    stmt.run(value, id);
+  }
+
   private rowToEnvelope(row: EnvelopeRow): Envelope {
     return {
       id: row.id,
