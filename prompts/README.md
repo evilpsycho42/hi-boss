@@ -6,11 +6,27 @@ This directory is the canonical source of prompt/instruction templates used by H
 
 Hi-Boss uses **Nunjucks** (Jinja-like) templates under `prompts/` to generate three kinds of text:
 
-1. **System instructions** (agent bootstrap / “system prompt”)
+1. **System instructions** (agent bootstrap / "system prompt")
 2. **Turn input** (what the agent SDK receives each run)
 3. **CLI envelope instructions** (what `hiboss envelope get/list` prints for agents to read)
 
-All agent-facing **keys** in rendered text must remain **kebab-case, lowercase** (e.g. `from-boss:`).
+All agent-facing **keys** in rendered text must remain **kebab-case, lowercase** (e.g. `from-name:`).
+
+---
+
+## Design Philosophy
+
+Templates are optimized for:
+
+1. **Token efficiency** — Minimize tokens while preserving clarity. Omit fields when empty (e.g., no `attachments:` block if none). Avoid redundant information (e.g., platform type already in `from:` address).
+
+2. **Dual readability** — Output should be easy to parse for both LLM agents and human developers debugging logs.
+
+3. **Consistent naming** — All output keys use kebab-case lowercase (`from-name:`, `created-at:`). No mixing of camelCase or snake_case in rendered output.
+
+4. **Necessary information only** — Include what agents need to act; exclude internal details (e.g., envelope IDs are omitted since agents reply via `from:` address).
+
+5. **Well organized** — Group related fields together. Header first, then content. Use clear section markers (`text:`, `attachments:`).
 
 ---
 
@@ -88,7 +104,7 @@ See `prompts/VARIABLES.md` for the authoritative variable catalog per surface.
 
 System instructions can include optional files from Hi-Boss’s state directory (default `~/.hiboss`):
 
-- `~/.hiboss/USER.md` — user profile (shared across agents)
+- `~/.hiboss/BOSS.md` — boss profile (shared across agents)
 - `~/.hiboss/agents/<agent-name>/SOUL.md` — persona / tone / boundaries (per-agent)
 
 These files are injected into `prompts/system/base.md`.

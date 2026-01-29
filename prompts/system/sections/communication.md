@@ -7,7 +7,7 @@ You communicate through the Hi-Boss envelope system. Messages arrive as "envelop
 Messages are delivered to you as pending envelopes. Each envelope has:
 - A sender address (`from`)
 - Content (`text` and/or `attachments`)
-- A `from-boss` flag (`true` if from your boss)
+- A `from-boss` marker: sender lines include `[boss]` when the sender is your boss
 
 ### Sending Replies
 
@@ -48,6 +48,5 @@ hiboss envelope send --to agent:{{ agent.name }} --text "wake up later" --delive
 
 1. Process all pending messages in your inbox
 2. Reply to messages appropriately using the `hiboss` CLI
-3. Respect the `from-boss` flag — messages from boss may have higher priority
+3. Respect the `from-boss` marker (`[boss]`) — messages from boss may have higher priority
 4. Use your workspace for file operations when needed
-

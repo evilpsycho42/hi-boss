@@ -1,3 +1,5 @@
+import { DEFAULT_PERMISSION_POLICY } from "./defaults.js";
+
 export type PermissionLevel = "restricted" | "standard" | "privileged" | "boss";
 
 export interface PermissionPolicyV1 {
@@ -5,37 +7,7 @@ export interface PermissionPolicyV1 {
   operations: Record<string, PermissionLevel>;
 }
 
-export const DEFAULT_PERMISSION_POLICY: PermissionPolicyV1 = {
-  version: 1,
-  operations: {
-    // Envelope operations (agents)
-    "envelope.send": "standard",
-    "envelope.list": "standard",
-    "envelope.get": "standard",
-
-    // Backwards-compatible aliases
-    "message.send": "standard",
-    "message.list": "standard",
-    "message.get": "standard",
-
-    // Daemon read-only
-    "daemon.status": "standard",
-    "daemon.ping": "standard",
-
-    // Admin operations (boss-only by default; configurable via policy)
-    "daemon.start": "boss",
-    "daemon.stop": "boss",
-    "agent.register": "boss",
-    "agent.list": "boss",
-    "agent.bind": "boss",
-    "agent.unbind": "boss",
-    "agent.refresh": "boss",
-    "agent.session-policy.set": "boss",
-    "agent.permission.set": "boss",
-    "permission.policy.get": "boss",
-    "permission.policy.set": "boss",
-  },
-};
+export { DEFAULT_PERMISSION_POLICY };
 
 export function isPermissionLevel(value: unknown): value is PermissionLevel {
   return (
@@ -123,4 +95,3 @@ export function parsePermissionPolicyV1OrDefault(
     return fallback;
   }
 }
-

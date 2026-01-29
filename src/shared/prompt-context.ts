@@ -7,11 +7,12 @@ import { detectAttachmentType } from "../adapters/types.js";
 import { formatUtcIsoAsLocalOffset } from "./time.js";
 import { HIBOSS_TOKEN_ENV } from "./env.js";
 import { getAgentDir, getHiBossDir } from "../agent/home-setup.js";
+import { DEFAULT_AGENT_PROVIDER } from "./defaults.js";
 
 const MAX_CUSTOM_FILE_CHARS = 10_000;
 
 export interface HiBossCustomizationFiles {
-  user?: string;
+  boss?: string;
 }
 
 export interface AgentCustomizationFiles {
@@ -39,8 +40,8 @@ function readOptionalFile(filePath: string): string | undefined {
 }
 
 export function readHiBossCustomizationFiles(hibossDir: string): HiBossCustomizationFiles {
-  const user = readOptionalFile(path.join(hibossDir, "USER.md"));
-  return { user };
+  const boss = readOptionalFile(path.join(hibossDir, "BOSS.md"));
+  return { boss };
 }
 
 export function readAgentCustomizationFiles(params: {
@@ -115,17 +116,62 @@ function isChannelMetadata(metadata: unknown): metadata is ChannelMetadata {
   );
 }
 
-function buildSemanticFrom(envelope: Envelope): string | undefined {
+function stripBossMarkerSuffix(name: string): string {
+  const trimmed = name.trim();
+  return trimmed.replace(/\s\[boss\]$/, "");
+}
+
+function withBossMarkerSuffix(name: string, fromBoss: boolean): string {
+  const trimmed = name.trim();
+  if (!fromBoss) return trimmed;
+  if (!trimmed) return trimmed;
+  if (trimmed.endsWith("[boss]")) return trimmed;
+  return `${trimmed} [boss]`;
+}
+
+interface SemanticFromResult {
+  fromName: string;
+  isGroup: boolean;
+  groupName: string;
+  authorName: string;
+}
+
+function buildSemanticFrom(envelope: Envelope): SemanticFromResult | undefined {
   const metadata = envelope.metadata;
   const override = getFromNameOverride(metadata);
-  if (override) return override;
+  if (override) {
+    const authorName = stripBossMarkerSuffix(override);
+    return {
+      fromName: withBossMarkerSuffix(authorName, envelope.fromBoss),
+      isGroup: false,
+      groupName: "",
+      authorName,
+    };
+  }
   if (!isChannelMetadata(metadata)) return undefined;
 
   const { author, chat } = metadata;
-  const name = author.username
+  const authorName = author.username
     ? `${author.displayName} (@${author.username})`
     : author.displayName;
-  return chat.name ? `${name} in "${chat.name}"` : name;
+
+  if (chat.name) {
+    // Group message
+    return {
+      fromName: `group "${chat.name}"`,
+      isGroup: true,
+      groupName: chat.name,
+      authorName,
+    };
+  } else {
+    return {
+      // Direct message - include [boss] suffix in fromName
+      fromName: withBossMarkerSuffix(authorName, envelope.fromBoss),
+      isGroup: false,
+      groupName: "",
+      authorName,
+    };
+  }
 }
 
 export function buildSystemPromptContext(params: {
@@ -133,6 +179,10 @@ export function buildSystemPromptContext(params: {
   agentToken: string;
   bindings: AgentBinding[];
   hibossDir?: string;
+  boss?: {
+    name?: string;
+    adapterIds?: Record<string, string>;
+  };
 }): Record<string, unknown> {
   const hibossDir = params.hibossDir ?? getHiBossDir();
 
@@ -150,17 +200,27 @@ export function buildSystemPromptContext(params: {
       tokenEnvVar: HIBOSS_TOKEN_ENV,
       additionalContext: "",
       files: {
-        user: hibossFiles.user ?? "",
+        boss: hibossFiles.boss ?? "",
       },
+    },
+    boss: {
+      name: params.boss?.name ?? "",
+      adapterIds: params.boss?.adapterIds ?? {},
     },
     agent: {
       name: params.agent.name,
       description: params.agent.description ?? "",
       workspace: workspaceDir,
-      provider: params.agent.provider ?? "claude",
+      provider: params.agent.provider ?? DEFAULT_AGENT_PROVIDER,
       model: params.agent.model ?? "",
       reasoningEffort: params.agent.reasoningEffort ?? "",
       autoLevel: params.agent.autoLevel ?? "",
+      permissionLevel: params.agent.permissionLevel ?? "",
+      sessionPolicy: {
+        dailyResetAt: params.agent.sessionPolicy?.dailyResetAt ?? "",
+        idleTimeout: params.agent.sessionPolicy?.idleTimeout ?? "",
+        maxTokens: params.agent.sessionPolicy?.maxTokens ?? 0,
+      },
       createdAt: params.agent.createdAt,
       lastSeenAt: params.agent.lastSeenAt ?? "",
       metadata: params.agent.metadata ?? {},
@@ -187,7 +247,7 @@ export function buildTurnPromptContext(params: {
   envelopes: Envelope[];
 }): Record<string, unknown> {
   const envelopes = (params.envelopes ?? []).map((env, idx) => {
-    const semanticFrom = buildSemanticFrom(env) ?? "";
+    const semantic = buildSemanticFrom(env);
     const attachments = (env.content.attachments ?? []).map((att) => {
       const type = detectAttachmentType(att);
       const displayName = displayAttachmentName(att) ?? "";
@@ -199,12 +259,18 @@ export function buildTurnPromptContext(params: {
       };
     });
 
+    const authorLine = semantic ? withBossMarkerSuffix(semantic.authorName, env.fromBoss) : "";
+
     return {
       index: idx + 1,
       id: env.id,
       from: env.from,
-      fromName: semanticFrom,
+      fromName: semantic?.fromName ?? "",
       fromBoss: env.fromBoss,
+      isGroup: semantic?.isGroup ?? false,
+      groupName: semantic?.groupName ?? "",
+      authorName: semantic?.authorName ?? "",
+      authorLine,
       createdAt: {
         utcIso: env.createdAt,
         localIso: formatUtcIsoAsLocalOffset(env.createdAt),
@@ -230,7 +296,7 @@ export function buildCliEnvelopePromptContext(params: {
   envelope: Envelope;
 }): Record<string, unknown> {
   const env = params.envelope;
-  const semanticFrom = buildSemanticFrom(env) ?? "";
+  const semantic = buildSemanticFrom(env);
   const attachments = (env.content.attachments ?? []).map((att) => {
     const type = detectAttachmentType(att);
     const displayName = displayAttachmentName(att) ?? "";
@@ -250,13 +316,19 @@ export function buildCliEnvelopePromptContext(params: {
         }
       : { utcIso: "", localIso: "" };
 
+  const authorLine = semantic ? withBossMarkerSuffix(semantic.authorName, env.fromBoss) : "";
+
   return {
     envelope: {
       id: env.id,
       from: env.from,
       to: env.to,
-      fromName: semanticFrom,
+      fromName: semantic?.fromName ?? "",
       fromBoss: env.fromBoss,
+      isGroup: semantic?.isGroup ?? false,
+      groupName: semantic?.groupName ?? "",
+      authorName: semantic?.authorName ?? "",
+      authorLine,
       createdAt: {
         utcIso: env.createdAt,
         localIso: formatUtcIsoAsLocalOffset(env.createdAt),

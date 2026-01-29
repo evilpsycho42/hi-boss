@@ -22,6 +22,10 @@ export interface InstructionContext {
   bindings?: AgentBinding[];
   additionalContext?: string;
   hibossDir?: string;
+  boss?: {
+    name?: string;
+    adapterIds?: Record<string, string>;
+  };
 }
 
 /**
@@ -34,13 +38,14 @@ export interface InstructionContext {
  * @returns Generated instruction content
  */
 export function generateSystemInstructions(ctx: InstructionContext): string {
-  const { agent, agentToken, bindings, additionalContext } = ctx;
+  const { agent, agentToken, bindings, additionalContext, boss } = ctx;
 
   const promptContext = buildSystemPromptContext({
     agent,
     agentToken,
     bindings: bindings ?? [],
     hibossDir: ctx.hibossDir,
+    boss,
   });
 
   (promptContext.hiboss as Record<string, unknown>).additionalContext =

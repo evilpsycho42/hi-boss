@@ -19,6 +19,7 @@ Hi-Boss has two kinds of documentation:
 - `docs/spec/goals.md` — product goal, non-goals, principles
 - `docs/spec/roadmap.md` — TODO roadmap placeholder
 - `docs/spec/architecture.md` — system architecture + invariants
+- `docs/spec/cli.md` — CLI output and rendering
 - `docs/spec/definitions.md` — field mappings (TypeScript ↔ SQLite ↔ CLI keys)
 - `docs/spec/envelope.md` — envelopes, lifecycle, status, scheduling
 - `docs/spec/routing.md` — message routing and envelope flow

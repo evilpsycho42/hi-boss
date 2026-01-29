@@ -216,26 +216,24 @@ Located in `src/agent/turn-input.ts`:
 datetime: 2026-01-28T18:30:00.000Z
 agent: nex
 
+---
 ## Pending Envelopes (2)
 
 ### Envelope 1
-id: abc-123
+
 from: channel:telegram:12345
-from-name: Alice (@alice) in "hiboss-test"
-from-boss: false
-created-at: 2026-01-28T10:25:00+08:00
+from-name: group "hiboss-test"
 
-text:
+Alice (@alice) at 2026-01-28T10:25:00+08:00:
 Hello, can you help me?
-
-attachments:
-(none)
 
 ---
 
 ### Envelope 2
 ...
 ```
+
+Note: consecutive group-chat envelopes from the same `from:` address are batched under a single `### Envelope <index>` header (header printed once, multiple message lines).
 
 ### Auto-Acknowledgment
 

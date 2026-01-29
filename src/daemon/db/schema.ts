@@ -2,6 +2,15 @@
  * SQLite schema definitions for Hi-Boss.
  */
 
+import {
+  DEFAULT_AGENT_AUTO_LEVEL,
+  DEFAULT_AGENT_PERMISSION_LEVEL,
+  DEFAULT_AGENT_PROVIDER,
+  DEFAULT_AGENT_REASONING_EFFORT,
+  DEFAULT_AGENT_RUN_STATUS,
+  DEFAULT_ENVELOPE_STATUS,
+} from "../../shared/defaults.js";
+
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS config (
   key TEXT PRIMARY KEY,
@@ -14,11 +23,11 @@ CREATE TABLE IF NOT EXISTS config (
 	  token TEXT UNIQUE NOT NULL,  -- agent token (short identifier; stored as plaintext)
 	  description TEXT,
 	  workspace TEXT,
-	  provider TEXT DEFAULT 'claude',
+	  provider TEXT DEFAULT '${DEFAULT_AGENT_PROVIDER}',
   model TEXT,
-  reasoning_effort TEXT DEFAULT 'medium',
-  auto_level TEXT DEFAULT 'high',
-  permission_level TEXT DEFAULT 'standard',
+  reasoning_effort TEXT DEFAULT '${DEFAULT_AGENT_REASONING_EFFORT}',
+  auto_level TEXT DEFAULT '${DEFAULT_AGENT_AUTO_LEVEL}',
+  permission_level TEXT DEFAULT '${DEFAULT_AGENT_PERMISSION_LEVEL}',
   session_policy TEXT,           -- JSON blob for SessionPolicyConfig
   created_at TEXT DEFAULT (datetime('now')),
   last_seen_at TEXT,
@@ -33,7 +42,7 @@ CREATE TABLE IF NOT EXISTS envelopes (
   content_text TEXT,
   content_attachments TEXT,
   deliver_at TEXT,            -- ISO 8601 UTC timestamp (not-before delivery)
-  status TEXT DEFAULT 'pending',
+  status TEXT DEFAULT '${DEFAULT_ENVELOPE_STATUS}',
   created_at TEXT DEFAULT (datetime('now')),
   metadata TEXT
 );
@@ -55,7 +64,7 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   completed_at INTEGER,
   envelope_ids TEXT,           -- JSON array of processed envelope IDs
   final_response TEXT,         -- stored for auditing
-  status TEXT DEFAULT 'running', -- running, completed, failed
+  status TEXT DEFAULT '${DEFAULT_AGENT_RUN_STATUS}', -- running, completed, failed
   error TEXT
 );
 

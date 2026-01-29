@@ -25,7 +25,7 @@ hiboss agent register --name nex --description "AI assistant" --workspace "$PWD"
 |---------|------------|---------|
 | Code (TypeScript) | camelCase | `envelope.fromBoss` |
 | CLI flags | kebab-case, lowercase | `--deliver-at` |
-| CLI output keys | kebab-case, lowercase | `from-boss:` |
+| CLI output keys | kebab-case, lowercase | `from-name:` |
 | Agent instructions | kebab-case, lowercase | `from-boss` |
 
 Rule: CLI flags, CLI output keys, and agent instructions **must** all stay kebab-case so agents can parse output without translation.
@@ -33,9 +33,14 @@ Rule: CLI flags, CLI output keys, and agent instructions **must** all stay kebab
 Canonical mapping:
 ```
 envelope.deliverAt  -> --deliver-at   (flag)
-envelope.fromBoss   -> from-boss:     (output key)
-envelope.createdAt  -> created-at:    (output key)
+envelope.fromBoss   -> --from-boss    (flag; boss token only)
+envelope.createdAt  -> created-at:    (output key; direct/agent messages only)
 ```
+
+Boss marker:
+- When `fromBoss` is true, rendered sender lines include the `[boss]` suffix:
+  - direct: `from-name: <author> [boss]`
+  - group: `Author [boss] at <timestamp>:`
 
 ## Core operational rules
 

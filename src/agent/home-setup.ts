@@ -10,12 +10,13 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { assertValidAgentName } from "../shared/validation.js";
+import { getDefaultHiBossDir } from "../shared/defaults.js";
 
 /**
  * Get the default hi-boss directory path.
  */
 export function getHiBossDir(): string {
-  return path.join(os.homedir(), ".hiboss");
+  return getDefaultHiBossDir();
 }
 
 /**

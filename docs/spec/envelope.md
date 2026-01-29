@@ -27,15 +27,13 @@ Key fields:
 
 - `from`: sender address (agent or channel)
 - `to`: destination address (agent or channel)
-- `from-boss`: `true` if the sender matches configured boss identity for that adapter (channel messages only)
-- `created-at`: when the envelope was created
+- `fromBoss`: `true` if the sender matches configured boss identity for that adapter (channel messages only)
+- `createdAt`: when the envelope was created (ISO 8601 UTC)
 - `status`: `pending` or `done`
-- `deliver-at` (optional): not-before delivery timestamp (stored as UTC ISO 8601)
+- `deliverAt` (optional): not-before delivery timestamp (stored as UTC ISO 8601)
 - `content.text` (optional)
 - `content.attachments` (optional): list of `{ source, filename?, telegramFileId? }`
 - `metadata` (optional): channel metadata for richer display (author/chat)
-
-Note: `replyTo` exists in the schema/types but is not currently exposed via CLI/RPC.
 
 ---
 
@@ -114,7 +112,13 @@ Boss token can list envelopes for any address by providing `--address`:
 hiboss envelope list --token <boss-token> --address agent:nex --box inbox --status pending -n 10
 ```
 
-`hiboss envelope list` and `hiboss envelope get` output an agent-facing "instruction" format (header + `text:` + `attachments:`). For the exact keys, see `docs/spec/definitions.md`.
+`hiboss envelope list` and `hiboss envelope get` output an agent-facing “instruction” format. Direct/agent messages use `text:` (and optional `attachments:`); group messages use `Author [boss] at timestamp:` lines (and optional `attachments:`). For the exact keys, see `docs/spec/definitions.md`.
+
+If you want a token-efficient format that matches what agents receive during a run, use:
+
+```bash
+hiboss envelope list --as-turn --token <agent-token>
+```
 
 If `envelope list` returns no results, it outputs:
 

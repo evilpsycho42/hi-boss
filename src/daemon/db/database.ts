@@ -5,6 +5,12 @@ import { SCHEMA_SQL } from "./schema.js";
 import type { Agent, AgentPermissionLevel, RegisterAgentInput } from "../../agent/types.js";
 import type { Envelope, CreateEnvelopeInput, EnvelopeStatus } from "../../envelope/types.js";
 import type { SessionPolicyConfig } from "../../shared/session-policy.js";
+import {
+  DEFAULT_AGENT_AUTO_LEVEL,
+  DEFAULT_AGENT_PERMISSION_LEVEL,
+  DEFAULT_AGENT_PROVIDER,
+  DEFAULT_AGENT_REASONING_EFFORT,
+} from "../../shared/defaults.js";
 import { generateToken, hashToken, verifyToken } from "../../agent/auth.js";
 import { generateUUID } from "../../shared/uuid.js";
 import { assertValidAgentName } from "../../shared/validation.js";
@@ -126,7 +132,9 @@ export class HiBossDatabase {
     if (agentColumns.length > 0) {
       const hasPermissionLevel = agentColumns.some((c) => c.name === "permission_level");
       if (!hasPermissionLevel) {
-        this.db.exec("ALTER TABLE agents ADD COLUMN permission_level TEXT DEFAULT 'standard'");
+        this.db.exec(
+          `ALTER TABLE agents ADD COLUMN permission_level TEXT DEFAULT '${DEFAULT_AGENT_PERMISSION_LEVEL}'`
+        );
       }
       const hasSessionPolicy = agentColumns.some((c) => c.name === "session_policy");
       if (!hasSessionPolicy) {
@@ -139,7 +147,7 @@ export class HiBossDatabase {
           UPDATE agents
           SET permission_level = json_extract(metadata, '$.permissionLevel')
           WHERE json_extract(metadata, '$.permissionLevel') IS NOT NULL
-            AND (permission_level IS NULL OR permission_level = 'standard');
+            AND (permission_level IS NULL OR permission_level = '${DEFAULT_AGENT_PERMISSION_LEVEL}');
 
           UPDATE agents
           SET session_policy = json_extract(metadata, '$.sessionPolicy')
@@ -188,11 +196,11 @@ export class HiBossDatabase {
       token,  // store raw token directly
       input.description ?? null,
       input.workspace ?? null,
-      input.provider ?? 'claude',
+      input.provider ?? DEFAULT_AGENT_PROVIDER,
       input.model ?? null,
-      input.reasoningEffort ?? 'medium',
-      input.autoLevel ?? 'high',
-      input.permissionLevel ?? 'standard',
+      input.reasoningEffort ?? DEFAULT_AGENT_REASONING_EFFORT,
+      input.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL,
+      input.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL,
       input.sessionPolicy ? JSON.stringify(input.sessionPolicy) : null,
       createdAt,
       input.metadata ? JSON.stringify(input.metadata) : null

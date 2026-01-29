@@ -1,11 +1,11 @@
 import { Telegraf, Context } from "telegraf";
 import * as fs from "fs";
 import * as path from "path";
-import * as os from "os";
 import * as crypto from "crypto";
 import type { Message as TelegramMessage } from "telegraf/types";
 import type { ChatAdapter, ChannelMessage, MessageContent, ChannelMessageHandler, Attachment, ChannelCommandHandler, ChannelCommand } from "./types.js";
 import { detectAttachmentType } from "./types.js";
+import { getDefaultMediaDir } from "../shared/defaults.js";
 
 type TextContext = Context & { message: TelegramMessage.TextMessage };
 type PhotoContext = Context & { message: TelegramMessage.PhotoMessage };
@@ -57,7 +57,7 @@ export class TelegramAdapter implements ChatAdapter {
 
   constructor(token: string) {
     this.bot = new Telegraf(token);
-    this.mediaDir = path.join(os.homedir(), ".hiboss", "media");
+    this.mediaDir = getDefaultMediaDir();
     this.setupListeners();
   }
 

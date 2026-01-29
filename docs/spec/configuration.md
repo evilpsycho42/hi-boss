@@ -9,6 +9,12 @@ Hi-Boss configuration comes from four places:
 3. **SQLite state** in `~/.hiboss/hiboss.db` (tables: `config`, `agents`, `agent_bindings`, `envelopes`, …)
 4. **Per-agent provider homes** under `~/.hiboss/agents/<agent-name>/` (Codex/Claude settings + session state)
 
+## Defaults
+
+Built-in (code) defaults are centralized in:
+
+- `src/shared/defaults.ts`
+
 ---
 
 ## Data Directory
@@ -23,7 +29,7 @@ Contents (common):
 - `~/.hiboss/daemon.sock` — local IPC socket used by the `hiboss` CLI
 - `~/.hiboss/daemon.pid` — daemon PID file (single-instance lock)
 - `~/.hiboss/daemon.log` — daemon stdout/stderr log (when started via `hiboss daemon start`)
-- `~/.hiboss/USER.md` — global user profile injected into system instructions (optional)
+- `~/.hiboss/BOSS.md` — global boss profile injected into system instructions (optional)
 - `~/.hiboss/media/` — Telegram downloads (attachments are saved here for agents to read)
 - `~/.hiboss/agents/<agent-name>/SOUL.md` — per-agent persona injected into system instructions (optional)
 - `~/.hiboss/agents/<agent-name>/codex_home/` — provider home for Codex (used as `CODEX_HOME`)
@@ -118,10 +124,12 @@ Binding constraints:
     - ISO 8601: `2026-01-27T16:30:00+08:00`
 
 - `hiboss envelope list`
+  - `--address <address>` (boss token only; required for boss token)
   - `--box <inbox|outbox>` (default: `inbox`)
   - `--status <pending|done>`
   - `-n, --limit <n>` (optional)
   - `--n <n>` (deprecated alias for `--limit`)
+  - `--as-turn` (optional; render pending inbox as a turn preview)
 
 ---
 
@@ -145,7 +153,7 @@ Keys:
 
 What `adapter_boss_id_<adapter-type>` does:
 
-- When the daemon receives a channel message, it marks `from-boss: true` if the sender username matches.
+- When the daemon receives a channel message, it marks `fromBoss: true` if the sender username matches.
 - For Telegram, it also controls whether the daemon will show “not configured” instructions when a bot is unbound (only shown to the boss).
 
 ### `agents` table
@@ -286,22 +294,25 @@ If an operation is missing from the policy, it defaults to `boss` (safe-by-defau
 
 | Operation | Default Level |
 |-----------|---------------|
-| `envelope.send` | `standard` |
-| `envelope.list` | `standard` |
-| `envelope.get` | `standard` |
-| `message.send` | `standard` |
-| `message.list` | `standard` |
-| `message.get` | `standard` |
-| `daemon.status` | `standard` |
+| `envelope.send` | `restricted` |
+| `envelope.list` | `restricted` |
+| `envelope.get` | `restricted` |
+| `turn.preview` | `restricted` |
+| `message.send` | `restricted` |
+| `message.list` | `restricted` |
+| `message.get` | `restricted` |
+| `daemon.status` | `boss` |
 | `daemon.ping` | `standard` |
 | `daemon.start` | `boss` |
 | `daemon.stop` | `boss` |
 | `agent.register` | `boss` |
-| `agent.list` | `boss` |
-| `agent.bind` | `boss` |
-| `agent.unbind` | `boss` |
+| `agent.list` | `restricted` |
+| `agent.bind` | `privileged` |
+| `agent.unbind` | `privileged` |
 | `agent.refresh` | `boss` |
-| `agent.session-policy.set` | `boss` |
+| `agent.session-policy.set` | `privileged` |
+| `agent.background` | `standard` |
+| `agent.permission.get` | `privileged` |
 | `agent.permission.set` | `boss` |
 | `permission.policy.get` | `boss` |
 | `permission.policy.set` | `boss` |

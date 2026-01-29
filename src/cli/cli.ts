@@ -12,11 +12,13 @@ import {
   bindAgent,
   unbindAgent,
   setAgentPermissionLevel,
+  getAgentPermissionLevel,
   runBackground,
   runSetup,
   getPermissionPolicy,
   setPermissionPolicy,
 } from "./commands/index.js";
+import { DEFAULT_ENVELOPE_LIST_BOX } from "../shared/defaults.js";
 
 const program = new Command();
 
@@ -93,10 +95,11 @@ envelope
   .description("List envelopes")
   .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .option("--address <address>", "List envelopes for an address (boss token only)")
-  .option("--box <box>", "inbox or outbox", "inbox")
+  .option("--box <box>", "inbox or outbox", DEFAULT_ENVELOPE_LIST_BOX)
   .option("--status <status>", "pending or done")
   .option("-n, --limit <n>", "Maximum number of results", parseInt)
   .option("--n <count>", "Deprecated: use --limit", parseInt)
+  .option("--as-turn", "Format output as a turn preview (pending inbox only)")
   .action((options) => {
     listEnvelopes({
       token: options.token,
@@ -104,6 +107,7 @@ envelope
       box: options.box as "inbox" | "outbox",
       status: options.status as "pending" | "done" | undefined,
       limit: options.limit ?? options.n,
+      asTurn: options.asTurn,
     });
   });
 
@@ -237,6 +241,18 @@ agent
 const agentPermission = agent
   .command("permission")
   .description("Agent permission management");
+
+agentPermission
+  .command("get")
+  .description("Get an agent permission level")
+  .requiredOption("--name <name>", "Agent name")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    getAgentPermissionLevel({
+      token: options.token,
+      name: options.name,
+    });
+  });
 
 agentPermission
   .command("set")

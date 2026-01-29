@@ -30,21 +30,32 @@ export interface TurnInput {
  * Output format:
  * ```
  * ## Turn Context
+ *
  * datetime: 2026-01-27T12:00:00Z
  * agent: nex
  *
+ * ---
  * ## Pending Envelopes (3)
  *
  * ### Envelope 1
- * id: abc-123
+ *
  * from: channel:telegram:12345
- * ...
+ * from-name: group "hiboss-test"
+ *
+ * Alice (@alice) at 2026-01-27T20:00:00+08:00:
+ * Hello!
+ *
+ * Bob (@bob) at 2026-01-27T20:01:00+08:00:
+ * Hi!
  *
  * ---
  *
  * ### Envelope 2
  * ...
  * ```
+ *
+ * Note: consecutive group-chat envelopes from the same `from:` address are batched under a single
+ * `### Envelope <index>` header for token efficiency (header printed once, multiple message lines).
  *
  * @param turnInput - Turn context and envelopes
  * @returns Formatted turn input text

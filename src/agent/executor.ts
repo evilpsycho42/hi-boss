@@ -24,6 +24,11 @@ import { buildTurnInput } from "./turn-input.js";
 import { HIBOSS_TOKEN_ENV } from "../shared/env.js";
 import { computeTokensUsed, parseSessionPolicyConfig } from "../shared/session-policy.js";
 import { nowLocalIso } from "../shared/time.js";
+import {
+  DEFAULT_AGENT_AUTO_LEVEL,
+  DEFAULT_AGENT_PROVIDER,
+  DEFAULT_AGENT_REASONING_EFFORT,
+} from "../shared/defaults.js";
 
 /**
  * Maximum number of pending envelopes to process in a single turn.
@@ -71,6 +76,26 @@ export class AgentExecutor {
     if (this.debug) {
       console.log(`[${nowLocalIso()}] [AgentExecutor] ${message}`);
     }
+  }
+
+  /**
+   * Fetch boss info from the database.
+   */
+  private getBossInfo(bindings: { adapterType: string }[]): { name?: string; adapterIds?: Record<string, string> } | undefined {
+    if (!this.db) return undefined;
+
+    const name = this.db.getBossName() ?? undefined;
+    const adapterIds: Record<string, string> = {};
+
+    // Get boss ID for each bound adapter type
+    for (const binding of bindings) {
+      const bossId = this.db.getAdapterBossId(binding.adapterType);
+      if (bossId) {
+        adapterIds[binding.adapterType] = bossId;
+      }
+    }
+
+    return { name, adapterIds };
   }
 
   /**
@@ -192,11 +217,13 @@ export class AgentExecutor {
       const agentRecord = this.db.getAgentByName(agentName);
       if (agentRecord) {
         const bindings = this.db.getBindingsByAgentName(agentName);
+        const boss = this.getBossInfo(bindings);
         const instructions = generateSystemInstructions({
           agent: agentRecord,
           agentToken: agentRecord.token,
           bindings,
           hibossDir: this.hibossDir,
+          boss,
         });
         await writeInstructionFiles(agentName, instructions, { debug: true, hibossDir: this.hibossDir });
       }
@@ -329,26 +356,28 @@ export class AgentExecutor {
         throw new Error(`Agent ${agent.name} not found in database`);
       }
 
-      const provider = agent.provider ?? "claude";
+      const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
       const homePath = getAgentHomePath(agent.name, provider, this.hibossDir);
       const workspace = agent.workspace ?? process.cwd();
 
       // Generate and write instruction files for new session
       const bindings = db.getBindingsByAgentName(agent.name);
+      const boss = this.getBossInfo(bindings);
       const instructions = generateSystemInstructions({
         agent,
         agentToken: agentRecord.token,
         bindings,
         hibossDir: this.hibossDir,
+        boss,
       });
       await writeInstructionFiles(agent.name, instructions, { debug: this.debug, hibossDir: this.hibossDir });
 
       // Create runtime with provider-specific configuration
       const defaultOpts = {
         workspace: { cwd: workspace },
-        access: { auto: this.mapAccessLevel(agent.autoLevel ?? "high") },
+        access: { auto: this.mapAccessLevel(agent.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL) },
         model: agent.model,
-        reasoningEffort: agent.reasoningEffort ?? "medium",
+        reasoningEffort: agent.reasoningEffort ?? DEFAULT_AGENT_REASONING_EFFORT,
       };
 
       const runtime =

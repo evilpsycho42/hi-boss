@@ -16,7 +16,9 @@ Notes:
 | `hiboss.dir` | string | Hi-Boss state directory (default `~/.hiboss`) |
 | `hiboss.tokenEnvVar` | string | Environment variable name for the agent token (`HIBOSS_TOKEN`) |
 | `hiboss.additionalContext` | string | Optional extra context appended by code (usually empty) |
-| `hiboss.files.user` | string | Contents of `{{hiboss.dir}}/USER.md` (or empty) |
+| `hiboss.files.boss` | string | Contents of `{{hiboss.dir}}/BOSS.md` (or empty) |
+| `boss.name` | string | Boss name (how agent should address the user, or empty) |
+| `boss.adapterIds` | object | Boss identity per adapter type (e.g. `{ telegram: "@kevin" }`, or `{}`) |
 | `agent.name` | string | Agent name |
 | `agent.description` | string | Agent description (or empty) |
 | `agent.workspace` | string | Agent workspace directory (resolved; falls back to `process.cwd()`) |
@@ -24,6 +26,10 @@ Notes:
 | `agent.model` | string | Model id/alias (or empty) |
 | `agent.reasoningEffort` | string | `none|low|medium|high|xhigh` (or empty) |
 | `agent.autoLevel` | string | `low|medium|high` (or empty) |
+| `agent.permissionLevel` | string | `restricted|standard|privileged` (or empty) |
+| `agent.sessionPolicy.dailyResetAt` | string | Daily reset time in `HH:MM` format (or empty) |
+| `agent.sessionPolicy.idleTimeout` | string | Idle timeout duration like `2h`, `30m` (or empty) |
+| `agent.sessionPolicy.maxTokens` | number | Max tokens before session refresh (or `0`) |
 | `agent.createdAt` | string | ISO 8601 |
 | `agent.lastSeenAt` | string | ISO 8601 (or empty) |
 | `agent.metadata` | object | Agent metadata JSON blob (or `{}`) |
@@ -46,8 +52,12 @@ Notes:
 | `envelopes[].index` | number | 1-based index |
 | `envelopes[].id` | string | Envelope id |
 | `envelopes[].from` | string | Sender address |
-| `envelopes[].fromName` | string | Human-readable sender name (or empty) |
+| `envelopes[].fromName` | string | Human-readable name: `group "<name>"` for group messages, or author name with optional `[boss]` suffix for direct messages (or empty) |
 | `envelopes[].fromBoss` | boolean | Boss flag |
+| `envelopes[].isGroup` | boolean | Whether message is from a group chat |
+| `envelopes[].groupName` | string | Group name (or empty for direct/agent messages) |
+| `envelopes[].authorName` | string | Author display name without boss marker (or empty) |
+| `envelopes[].authorLine` | string | Author with `[boss]` suffix for group messages (or empty) |
 | `envelopes[].createdAt.utcIso` | string | Created-at (UTC ISO 8601) |
 | `envelopes[].createdAt.localIso` | string | Created-at formatted in local timezone offset |
 | `envelopes[].content.text` | string | Text content (or `(none)`) |
@@ -67,8 +77,12 @@ Notes:
 | `envelope.id` | string | Envelope id |
 | `envelope.from` | string | Sender address |
 | `envelope.to` | string | Destination address |
-| `envelope.fromName` | string | Human-readable sender name (or empty) |
+| `envelope.fromName` | string | Human-readable name: `group "<name>"` for group messages, or author name with optional `[boss]` suffix for direct messages (or empty) |
 | `envelope.fromBoss` | boolean | Boss flag |
+| `envelope.isGroup` | boolean | Whether message is from a group chat |
+| `envelope.groupName` | string | Group name (or empty for direct/agent messages) |
+| `envelope.authorName` | string | Author display name without boss marker (or empty) |
+| `envelope.authorLine` | string | Author with `[boss]` suffix for group messages (or empty) |
 | `envelope.createdAt.utcIso` | string | Created-at (UTC ISO 8601) |
 | `envelope.createdAt.localIso` | string | Created-at formatted in local timezone offset |
 | `envelope.deliverAt.utcIso` | string | Deliver-at (UTC ISO 8601) or empty |

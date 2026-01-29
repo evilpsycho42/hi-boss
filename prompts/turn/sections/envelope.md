@@ -1,16 +1,31 @@
-### Envelope {{ envelope.index }}
+{% if showHeader %}
+### Envelope {{ envelopeBlockIndex }}
 
-id: {{ envelope.id }}
 from: {{ envelope.from }}
 {% if envelope.fromName %}
 from-name: {{ envelope.fromName }}
 {% endif %}
-from-boss: {{ envelope.fromBoss }}
+{% if envelope.isGroup == false %}
 created-at: {{ envelope.createdAt.localIso }}
+{% endif %}
+{% endif %}
 
-text:
+{% if isContinuation %}
+
+{% endif %}
+
+{% if envelope.isGroup %}
+{{ envelope.authorLine }} at {{ envelope.createdAt.localIso }}:
 {{ envelope.content.text }}
-
+{% if envelope.content.attachmentsText != "(none)" %}
 attachments:
 {{ envelope.content.attachmentsText }}
-
+{% endif %}
+{% else %}
+text:
+{{ envelope.content.text }}
+{% if envelope.content.attachmentsText != "(none)" %}
+attachments:
+{{ envelope.content.attachmentsText }}
+{% endif %}
+{% endif %}

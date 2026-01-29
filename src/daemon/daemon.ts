@@ -1,6 +1,5 @@
 import * as fs from "fs";
 import * as path from "path";
-import * as os from "os";
 import * as net from "net";
 import { HiBossDatabase } from "./db/database.js";
 import { IpcServer } from "./ipc/server.js";
@@ -16,6 +15,7 @@ import {
   type EnvelopeSendParams,
   type EnvelopeListParams,
   type EnvelopeGetParams,
+  type TurnPreviewParams,
   type AgentRegisterParams,
   type AgentBindParams,
   type AgentUnbindParams,
@@ -31,6 +31,14 @@ import { TelegramAdapter } from "../adapters/telegram.adapter.js";
 import { parseDateTimeInputToUtcIso, nowLocalIso } from "../shared/time.js";
 import { parseDailyResetAt, parseDurationToMs } from "../shared/session-policy.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../shared/validation.js";
+import {
+  DEFAULT_AGENT_AUTO_LEVEL,
+  DEFAULT_AGENT_PERMISSION_LEVEL,
+  DEFAULT_AGENT_PROVIDER,
+  DEFAULT_AGENT_REASONING_EFFORT,
+  DEFAULT_ENVELOPE_LIST_BOX,
+  getDefaultHiBossDir,
+} from "../shared/defaults.js";
 import {
   DEFAULT_PERMISSION_POLICY,
   type PermissionLevel,
@@ -56,7 +64,7 @@ export interface DaemonConfig {
  */
 export function getDefaultConfig(): DaemonConfig {
   return {
-    dataDir: path.join(os.homedir(), ".hiboss"),
+    dataDir: getDefaultHiBossDir(),
   };
 }
 
@@ -109,7 +117,7 @@ export class Daemon {
   }
 
   private getAgentPermissionLevel(agent: Agent): PermissionLevel {
-    return agent.permissionLevel ?? "standard";
+    return agent.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL;
   }
 
   private resolvePrincipal(token: string):
@@ -480,7 +488,7 @@ export class Daemon {
 
       const envelopes = this.db.listEnvelopes({
         address,
-        box: p.box ?? "inbox",
+        box: p.box ?? DEFAULT_ENVELOPE_LIST_BOX,
         status: p.status,
         limit: p.limit,
       });
@@ -514,11 +522,51 @@ export class Daemon {
       return { envelope };
     };
 
+    const createTurnPreview = (operation: string) => async (params: Record<string, unknown>) => {
+      const p = params as unknown as TurnPreviewParams;
+      const token = requireToken(p.token);
+      const principal = this.resolvePrincipal(token);
+      this.assertOperationAllowed(operation, principal);
+
+      let agentName: string;
+      if (principal.kind === "boss") {
+        if (typeof p.agentName !== "string" || !p.agentName.trim()) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Boss token requires agentName");
+        }
+        const agent = this.db.getAgentByNameCaseInsensitive(p.agentName.trim());
+        if (!agent) {
+          rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
+        }
+        agentName = agent.name;
+      } else {
+        if (p.agentName !== undefined) {
+          rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+        }
+        this.db.updateAgentLastSeen(principal.agent.name);
+        agentName = principal.agent.name;
+      }
+
+      let limit = 10;
+      if (p.limit !== undefined) {
+        if (typeof p.limit !== "number" || !Number.isFinite(p.limit)) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid limit");
+        }
+        if (p.limit <= 0) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid limit (must be > 0)");
+        }
+        limit = Math.trunc(p.limit);
+      }
+
+      const envelopes = this.db.getPendingEnvelopesForAgent(agentName, limit);
+      return { agentName, datetimeIso: new Date().toISOString(), envelopes };
+    };
+
     const methods: RpcMethodRegistry = {
       // Envelope methods (canonical)
       "envelope.send": createEnvelopeSend("envelope.send"),
       "envelope.list": createEnvelopeList("envelope.list"),
       "envelope.get": createEnvelopeGet("envelope.get"),
+      "turn.preview": createTurnPreview("turn.preview"),
 
       // Message methods (backwards-compatible aliases)
       "message.send": createEnvelopeSend("message.send"),
@@ -741,10 +789,10 @@ export class Daemon {
 
         this.db.updateAgentLastSeen(agent.name);
 
-        const provider = agent.provider ?? "claude";
+        const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
         const workspace = agent.workspace ?? process.cwd();
-        const reasoningEffort = agent.reasoningEffort ?? "medium";
-        const autoLevel = agent.autoLevel ?? "high";
+        const reasoningEffort = agent.reasoningEffort ?? DEFAULT_AGENT_REASONING_EFFORT;
+        const autoLevel = agent.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL;
 
         return {
           agent: {

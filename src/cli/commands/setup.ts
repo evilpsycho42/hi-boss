@@ -7,6 +7,18 @@ import { HiBossDatabase } from "../../daemon/db/database.js";
 import { setupAgentHome } from "../../agent/home-setup.js";
 import type { SetupCheckResult, SetupExecuteResult } from "../../daemon/ipc/types.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../shared/validation.js";
+import {
+  DEFAULT_SETUP_AGENT_NAME,
+  DEFAULT_SETUP_AUTO_LEVEL,
+  DEFAULT_SETUP_BIND_TELEGRAM,
+  DEFAULT_SETUP_MODEL_BY_PROVIDER,
+  DEFAULT_SETUP_PROVIDER,
+  DEFAULT_SETUP_REASONING_EFFORT,
+  SETUP_MODEL_CHOICES_BY_PROVIDER,
+  getDefaultSetupAgentDescription,
+  getDefaultSetupBossName,
+  getDefaultSetupWorkspace,
+} from "../../shared/defaults.js";
 
 /**
  * Options for default setup.
@@ -185,7 +197,7 @@ export async function runInteractiveSetup(): Promise<void> {
   // Step 2: Boss name
   const bossName = await input({
     message: "Your name (how the agent should address you):",
-    default: os.userInfo().username,
+    default: getDefaultSetupBossName(),
     validate: (value) => {
       if (value.trim().length === 0) {
         return "Boss name cannot be empty";
@@ -199,7 +211,7 @@ export async function runInteractiveSetup(): Promise<void> {
 
   const agentName = (await input({
     message: "Agent name (slug):",
-    default: "nex",
+    default: DEFAULT_SETUP_AGENT_NAME,
     validate: (value) => {
       const name = value.trim();
       if (!isValidAgentName(name)) {
@@ -211,12 +223,12 @@ export async function runInteractiveSetup(): Promise<void> {
 
   const agentDescription = await input({
     message: "Agent description (shown to other agents):",
-    default: `${agentName} - AI assistant`,
+    default: getDefaultSetupAgentDescription(agentName),
   });
 
   const workspace = await input({
     message: "Workspace directory:",
-    default: os.homedir(),
+    default: getDefaultSetupWorkspace(),
     validate: (value) => {
       if (!path.isAbsolute(value)) {
         return "Please provide an absolute path";
@@ -230,19 +242,23 @@ export async function runInteractiveSetup(): Promise<void> {
   if (provider === 'claude') {
     model = await select({
       message: "Select model:",
-      choices: [
-        { value: 'opus', name: "Opus (most capable)" },
-        { value: 'sonnet', name: "Sonnet (balanced)" },
-        { value: 'haiku', name: "Haiku (fastest)" },
-      ],
+      choices: SETUP_MODEL_CHOICES_BY_PROVIDER.claude.map((value) => ({
+        value,
+        name:
+          value === "opus"
+            ? "Opus (most capable)"
+            : value === "sonnet"
+              ? "Sonnet (balanced)"
+              : "Haiku (fastest)",
+      })),
     });
   } else {
     model = await select({
       message: "Select model:",
-      choices: [
-        { value: 'gpt-5.2', name: "GPT-5.2" },
-        { value: 'gpt-5.2-codex', name: "GPT-5.2 Codex" },
-      ],
+      choices: SETUP_MODEL_CHOICES_BY_PROVIDER.codex.map((value) => ({
+        value,
+        name: value === "gpt-5.2" ? "GPT-5.2" : "GPT-5.2 Codex",
+      })),
     });
   }
 
@@ -253,7 +269,7 @@ export async function runInteractiveSetup(): Promise<void> {
       { value: 'medium', name: "Medium - Balanced (recommended)" },
       { value: 'high', name: "High - Thorough analysis" },
     ],
-    default: 'medium',
+    default: DEFAULT_SETUP_REASONING_EFFORT,
   });
 
   console.log("\n📊 Auto-approval level determines how much the agent can do without asking:");
@@ -268,7 +284,7 @@ export async function runInteractiveSetup(): Promise<void> {
       { value: 'medium', name: "Medium - Balanced" },
       { value: 'high', name: "High - Maximum autonomy (recommended)" },
     ],
-    default: 'high',
+    default: DEFAULT_SETUP_AUTO_LEVEL,
   });
 
   // Step 4: Telegram binding
@@ -276,7 +292,7 @@ export async function runInteractiveSetup(): Promise<void> {
 
   const bindTelegram = await confirm({
     message: "Would you like to bind a Telegram bot?",
-    default: true,
+    default: DEFAULT_SETUP_BIND_TELEGRAM,
   });
 
   let adapter: SetupConfig['adapter'];
@@ -410,15 +426,15 @@ export async function runDefaultSetup(options: DefaultSetupOptions): Promise<voi
 
   // Default configuration
   const config: SetupConfig = {
-    provider: 'claude',
-    bossName: options.bossName || os.userInfo().username,
+    provider: DEFAULT_SETUP_PROVIDER,
+    bossName: options.bossName || getDefaultSetupBossName(),
     agent: {
-      name: 'nex',
-      description: 'nex - AI assistant',
-      workspace: os.homedir(),
-      model: 'opus',
-      reasoningEffort: 'medium',
-      autoLevel: 'high',
+      name: DEFAULT_SETUP_AGENT_NAME,
+      description: getDefaultSetupAgentDescription(DEFAULT_SETUP_AGENT_NAME),
+      workspace: getDefaultSetupWorkspace(),
+      model: DEFAULT_SETUP_MODEL_BY_PROVIDER.claude,
+      reasoningEffort: DEFAULT_SETUP_REASONING_EFFORT,
+      autoLevel: DEFAULT_SETUP_AUTO_LEVEL,
     },
     bossToken,
   };
@@ -445,11 +461,11 @@ export async function runDefaultSetup(options: DefaultSetupOptions): Promise<voi
     console.log("✅ Default setup complete!\n");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log(`   boss-name:   ${config.bossName}`);
-    console.log(`   agent-name:  nex`);
+    console.log(`   agent-name:  ${DEFAULT_SETUP_AGENT_NAME}`);
     console.log(`   agent-token: ${agentToken}`);
     console.log(`   boss-token:  ${bossToken}`);
-    console.log(`   provider:    claude`);
-    console.log(`   model:       opus`);
+    console.log(`   provider:    ${DEFAULT_SETUP_PROVIDER}`);
+    console.log(`   model:       ${DEFAULT_SETUP_MODEL_BY_PROVIDER.claude}`);
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("\n⚠️  Save the agent token and boss token! They won't be shown again.\n");
 
@@ -458,7 +474,9 @@ export async function runDefaultSetup(options: DefaultSetupOptions): Promise<voi
       console.log("   hiboss daemon start\n");
     } else {
       console.log("💡 No adapter was bound. You can bind one later with:");
-      console.log("   hiboss agent bind --name nex --adapter-type telegram --adapter-token <TOKEN>\n");
+      console.log(
+        `   hiboss agent bind --name ${DEFAULT_SETUP_AGENT_NAME} --adapter-type telegram --adapter-token <TOKEN>\n`
+      );
     }
   } catch (err) {
     const error = err as Error;

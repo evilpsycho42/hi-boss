@@ -4,6 +4,7 @@ import * as path from "path";
 import { fileURLToPath } from "url";
 import { getDefaultConfig, getSocketPath } from "../../daemon/daemon.js";
 import { IpcClient } from "../ipc-client.js";
+import { authorizeCliOperation } from "../authz.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -28,6 +29,7 @@ export async function runBackground(options: RunBackgroundOptions): Promise<void
   const client = new IpcClient(getSocketPath(config));
 
   try {
+    authorizeCliOperation("agent.background", options.token);
     const self = await client.call<AgentSelfResult>("agent.self", {
       token: options.token,
     });
@@ -87,4 +89,3 @@ export async function runBackground(options: RunBackgroundOptions): Promise<void
     process.exit(1);
   }
 }
-

@@ -31,7 +31,7 @@ Bootstrap methods do not require a token:
 - `setup.execute`
 - `boss.verify`
 
-All other methods require a token and are authorized by the permission policy (see `docs/configuration.md`).
+All other methods require a token and are authorized by the permission policy (see `docs/spec/configuration.md`).
 
 ---
 
@@ -42,6 +42,10 @@ Canonical envelope methods:
 - `envelope.send`
 - `envelope.list`
 - `envelope.get`
+
+Turn:
+
+- `turn.preview`
 
 Backwards-compatible aliases:
 

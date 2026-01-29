@@ -87,7 +87,7 @@ function validateSystemPrompt(): void {
   const agentName = "nex";
   fs.mkdirSync(path.join(hibossDir, "agents", agentName), { recursive: true });
   writeFile(path.join(hibossDir, "agents", agentName, "SOUL.md"), "# SOUL.md\n\nBe concise.\n");
-  writeFile(path.join(hibossDir, "USER.md"), "# USER.md\n\n- Name: Kevin\n");
+  writeFile(path.join(hibossDir, "BOSS.md"), "# BOSS.md\n\n- Name: Kevin\n");
 
   const agent = makeMockAgent(workspaceDir);
   const ctx = buildSystemPromptContext({
@@ -99,8 +99,8 @@ function validateSystemPrompt(): void {
   (ctx.hiboss as Record<string, unknown>).additionalContext = "Extra line.";
 
   const out = renderPrompt({ surface: "system", template: "system/base.md", context: ctx });
-  assert.ok(out.includes("# Agent:"), "system prompt should include agent header");
-  assert.ok(out.includes("## Your Identity"), "system prompt should include identity section");
+  assert.ok(out.includes("# nex"), "system prompt should include agent name header");
+  assert.ok(out.includes("You are a personal assistant"), "system prompt should include identity line");
   assert.ok(out.includes("## Customization"), "system prompt should include customization section");
 }
 
@@ -127,7 +127,67 @@ function validateTurnPrompt(): void {
     const out = renderPrompt({ surface: "turn", template: "turn/turn.md", context: ctx }).trimEnd();
     assert.ok(out.includes("### Envelope 1"), "turn prompt should render envelope 1");
     assert.ok(out.includes("from-name:"), "turn prompt should include from-name for channel messages");
-    assert.ok(out.includes("attachments:"), "turn prompt should include attachments section");
+    assert.ok(out.includes("group \"hiboss-test\""), "turn prompt should show group name for group messages");
+    assert.ok(out.includes("Alice (@alice)"), "turn prompt should show author for group messages");
+  }
+
+  // Batched group messages (same chat) should repeat header once
+  {
+    const group1: Envelope = {
+      id: "env-g1",
+      from: "channel:telegram:123",
+      to: "agent:nex",
+      fromBoss: false,
+      content: { text: "First message", attachments: [] },
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        platform: "telegram",
+        channelMessageId: "m-1",
+        author: { id: "u-1", username: "alice", displayName: "Alice" },
+        chat: { id: "123", name: "hiboss-test" },
+      },
+    };
+    const group2: Envelope = {
+      id: "env-g2",
+      from: "channel:telegram:123",
+      to: "agent:nex",
+      fromBoss: true,
+      content: { text: "Second message", attachments: [] },
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      metadata: {
+        platform: "telegram",
+        channelMessageId: "m-2",
+        author: { id: "u-2", username: "kky1024", displayName: "Kevin" },
+        chat: { id: "123", name: "hiboss-test" },
+      },
+    };
+    const agentEnvelope: Envelope = {
+      id: "env-a1",
+      from: "agent:scheduler",
+      to: "agent:nex",
+      fromBoss: false,
+      content: { text: "Agent message", attachments: [] },
+      status: "pending",
+      createdAt: new Date().toISOString(),
+    };
+
+    const ctx = buildTurnPromptContext({
+      agentName: "nex",
+      datetimeIso: new Date().toISOString(),
+      envelopes: [group1, group2, agentEnvelope],
+    });
+    const out = renderPrompt({ surface: "turn", template: "turn/turn.md", context: ctx }).trimEnd();
+
+    const groupFromMatches = out.match(/from: channel:telegram:123/g) ?? [];
+    assert.equal(groupFromMatches.length, 1, "batched group should print from once");
+    const groupNameMatches = out.match(/from-name: group \"hiboss-test\"/g) ?? [];
+    assert.equal(groupNameMatches.length, 1, "batched group should print from-name once");
+    assert.ok(out.includes("Alice (@alice)"), "batched group should include first author");
+    assert.ok(out.includes("Kevin (@kky1024) [boss]"), "batched group should include boss marker");
+    assert.ok(out.includes("### Envelope 1"), "turn prompt should include first envelope header");
+    assert.ok(out.includes("### Envelope 2"), "turn prompt should include next envelope header");
   }
 }
 

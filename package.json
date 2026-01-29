@@ -11,6 +11,7 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "hiboss": "tsx bin/hiboss.ts",
+    "defaults:check": "tsx scripts/check-defaults.ts",
     "prompts:check": "tsx scripts/validate-prompts.ts",
     "inventory:magic": "tsx scripts/magic-inventory.ts --out docs/spec/generated/magic-inventory.md"
   },

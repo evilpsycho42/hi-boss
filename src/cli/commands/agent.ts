@@ -7,6 +7,7 @@ import { authorizeCliOperation } from "../authz.js";
 import { resolveToken } from "../token.js";
 import { HiBossDatabase } from "../../daemon/db/database.js";
 import * as path from "path";
+import { DEFAULT_AGENT_PERMISSION_LEVEL } from "../../shared/defaults.js";
 
 interface RegisterAgentResult {
   agent: Omit<Agent, "token">;
@@ -70,6 +71,11 @@ export interface SetAgentPermissionLevelOptions {
   token?: string;
   name: string;
   permissionLevel: string;
+}
+
+export interface GetAgentPermissionLevelOptions {
+  token?: string;
+  name: string;
 }
 
 interface SetAgentSessionPolicyResult {
@@ -301,6 +307,31 @@ export async function setAgentPermissionLevel(
       console.log(`success: ${result.success ? "true" : "false"}`);
       console.log(`agent-name: ${result.agentName}`);
       console.log(`permission-level: ${result.permissionLevel}`);
+    } finally {
+      db.close();
+    }
+  } catch (err) {
+    console.error("error:", (err as Error).message);
+    process.exit(1);
+  }
+}
+
+export async function getAgentPermissionLevel(
+  options: GetAgentPermissionLevelOptions
+): Promise<void> {
+  try {
+    const token = resolveToken(options.token);
+    authorizeCliOperation("agent.permission.get", token);
+
+    const db = new HiBossDatabase(getDbPath());
+    try {
+      const agent = db.getAgentByNameCaseInsensitive(options.name);
+      if (!agent) {
+        throw new Error("Agent not found");
+      }
+
+      console.log(`agent-name: ${agent.name}`);
+      console.log(`permission-level: ${agent.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL}`);
     } finally {
       db.close();
     }

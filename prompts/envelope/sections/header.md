@@ -2,9 +2,9 @@ from: {{ envelope.from }}
 {% if envelope.fromName %}
 from-name: {{ envelope.fromName }}
 {% endif %}
-from-boss: {{ envelope.fromBoss }}
+{% if envelope.isGroup == false %}
 created-at: {{ envelope.createdAt.localIso }}
+{% endif %}
 {% if envelope.deliverAt.utcIso %}
 deliver-at: {{ envelope.deliverAt.localIso }}
 {% endif %}
-

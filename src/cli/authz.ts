@@ -8,6 +8,7 @@ import {
   isAtLeastPermissionLevel,
   parsePermissionPolicyV1OrDefault,
 } from "../shared/permissions.js";
+import { DEFAULT_AGENT_PERMISSION_LEVEL } from "../shared/defaults.js";
 
 export type Principal =
   | { kind: "boss"; level: "boss" }
@@ -33,7 +34,7 @@ export function authorizeCliOperation(operation: string, token: string): Princip
       }
       principal = {
         kind: "agent",
-        level: agent.permissionLevel ?? "standard",
+        level: agent.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL,
         agentName: agent.name,
       };
     }
@@ -53,4 +54,3 @@ export function authorizeCliOperation(operation: string, token: string): Princip
     db.close();
   }
 }
-
