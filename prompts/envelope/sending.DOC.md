@@ -1,4 +1,4 @@
-# Sending Envelopes
+# Sending Envelopes (Documentation)
 
 ## Text Input Options
 
@@ -15,7 +15,7 @@
 Avoid shell escaping issues with heredoc syntax:
 
 ```bash
-hiboss envelope send --to {{to}} --token <token> --text - <<'EOF'
+hiboss envelope send --to <address> --token <token> --text - <<'EOF'
 Multi-line text with special chars:
 > quote
 `backticks`

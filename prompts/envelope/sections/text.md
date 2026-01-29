@@ -1,0 +1,3 @@
+text:
+{{ envelope.content.text }}
+

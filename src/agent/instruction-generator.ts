@@ -8,7 +8,8 @@ import * as fs from "fs";
 import * as path from "path";
 import type { Agent } from "./types.js";
 import type { AgentBinding } from "../daemon/db/database.js";
-import { loadAndRender } from "./template-renderer.js";
+import { renderPrompt } from "../shared/prompt-renderer.js";
+import { buildSystemPromptContext } from "../shared/prompt-context.js";
 import { getCodexHomePath, getClaudeHomePath } from "./home-setup.js";
 import { nowLocalIso } from "../shared/time.js";
 
@@ -20,21 +21,12 @@ export interface InstructionContext {
   agentToken: string;
   bindings?: AgentBinding[];
   additionalContext?: string;
+  hibossDir?: string;
 }
 
 /**
  * Format bindings into a readable string.
  */
-function formatBindings(bindings?: AgentBinding[]): string {
-  if (!bindings?.length) {
-    return "(none)";
-  }
-
-  return bindings
-    .map((b) => `- ${b.adapterType} (bound)`)
-    .join("\n");
-}
-
 /**
  * Generate system instructions for an agent.
  *
@@ -44,30 +36,21 @@ function formatBindings(bindings?: AgentBinding[]): string {
 export function generateSystemInstructions(ctx: InstructionContext): string {
   const { agent, agentToken, bindings, additionalContext } = ctx;
 
-  // Build context section
-  let contextSection = "";
-
-  // Add bindings info
-  const bindingsText = formatBindings(bindings);
-  if (bindings?.length) {
-    contextSection += `\n## Bindings\n\n${bindingsText}\n`;
-  }
-
-  // Add any additional context
-  if (additionalContext) {
-    contextSection += `\n${additionalContext}\n`;
-  }
-
-  // Render base template
-  const instructions = loadAndRender("system/base", {
-    name: agent.name,
-    provider: agent.provider ?? "claude",
-    workspace: agent.workspace ?? process.cwd(),
-    token: agentToken,
-    context: contextSection,
+  const promptContext = buildSystemPromptContext({
+    agent,
+    agentToken,
+    bindings: bindings ?? [],
+    hibossDir: ctx.hibossDir,
   });
 
-  return instructions;
+  (promptContext.hiboss as Record<string, unknown>).additionalContext =
+    additionalContext ?? "";
+
+  return renderPrompt({
+    surface: "system",
+    template: "system/base.md",
+    context: promptContext,
+  });
 }
 
 /**

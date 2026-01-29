@@ -23,7 +23,9 @@ Contents (common):
 - `~/.hiboss/daemon.sock` — local IPC socket used by the `hiboss` CLI
 - `~/.hiboss/daemon.pid` — daemon PID file (single-instance lock)
 - `~/.hiboss/daemon.log` — daemon stdout/stderr log (when started via `hiboss daemon start`)
+- `~/.hiboss/USER.md` — global user profile injected into system instructions (optional)
 - `~/.hiboss/media/` — Telegram downloads (attachments are saved here for agents to read)
+- `~/.hiboss/agents/<agent-name>/SOUL.md` — per-agent persona injected into system instructions (optional)
 - `~/.hiboss/agents/<agent-name>/codex_home/` — provider home for Codex (used as `CODEX_HOME`)
 - `~/.hiboss/agents/<agent-name>/claude_home/` — provider home for Claude Code (used as `CLAUDE_CONFIG_DIR`)
 
@@ -221,4 +223,3 @@ Some settings exist in the database/schema but do not yet have dedicated CLI set
 - Changing the default data directory from `~/.hiboss/`
 
 Today, changing those requires a reset + re-setup, or direct DB edits.
-

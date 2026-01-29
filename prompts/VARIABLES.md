@@ -1,0 +1,79 @@
+# Template Variables
+
+This document lists the context variables available to templates under `prompts/`.
+
+Notes:
+- Template language is **Nunjucks** (Jinja-like).
+- Most “optional” fields are provided as empty strings or empty arrays/objects, so templates can safely do `{% if ... %}` checks.
+- `auth.agentToken` is sensitive; prefer `hiboss.tokenEnvVar` guidance instead of printing the token.
+
+---
+
+## System Instructions (`prompts/system/base.md`)
+
+| Variable | Type | Meaning |
+|---------|------|---------|
+| `hiboss.dir` | string | Hi-Boss state directory (default `~/.hiboss`) |
+| `hiboss.tokenEnvVar` | string | Environment variable name for the agent token (`HIBOSS_TOKEN`) |
+| `hiboss.additionalContext` | string | Optional extra context appended by code (usually empty) |
+| `hiboss.files.user` | string | Contents of `{{hiboss.dir}}/USER.md` (or empty) |
+| `agent.name` | string | Agent name |
+| `agent.description` | string | Agent description (or empty) |
+| `agent.workspace` | string | Agent workspace directory (resolved; falls back to `process.cwd()`) |
+| `agent.provider` | string | `claude` or `codex` |
+| `agent.model` | string | Model id/alias (or empty) |
+| `agent.reasoningEffort` | string | `none|low|medium|high|xhigh` (or empty) |
+| `agent.autoLevel` | string | `low|medium|high` (or empty) |
+| `agent.createdAt` | string | ISO 8601 |
+| `agent.lastSeenAt` | string | ISO 8601 (or empty) |
+| `agent.metadata` | object | Agent metadata JSON blob (or `{}`) |
+| `agent.files.soul` | string | Contents of `{{hiboss.dir}}/agents/{{agent.name}}/SOUL.md` (or empty) |
+| `auth.agentToken` | string | Agent token (sensitive; avoid printing) |
+| `bindings` | array | Adapter bindings (no secrets) |
+| `bindings[].adapterType` | string | Adapter type (e.g. `telegram`) |
+| `bindings[].createdAt` | string | ISO 8601 |
+| `workspace.dir` | string | Workspace directory (same as `agent.workspace`) |
+
+---
+
+## Turn Input (`prompts/turn/turn.md`)
+
+| Variable | Type | Meaning |
+|---------|------|---------|
+| `turn.datetimeIso` | string | Current turn datetime (ISO 8601) |
+| `turn.agentName` | string | Agent name |
+| `envelopes` | array | Pending envelopes for this run |
+| `envelopes[].index` | number | 1-based index |
+| `envelopes[].id` | string | Envelope id |
+| `envelopes[].from` | string | Sender address |
+| `envelopes[].fromName` | string | Human-readable sender name (or empty) |
+| `envelopes[].fromBoss` | boolean | Boss flag |
+| `envelopes[].createdAt.utcIso` | string | Created-at (UTC ISO 8601) |
+| `envelopes[].createdAt.localIso` | string | Created-at formatted in local timezone offset |
+| `envelopes[].content.text` | string | Text content (or `(none)`) |
+| `envelopes[].content.attachments` | array | Attachment objects |
+| `envelopes[].content.attachments[].type` | string | `image|video|audio|file` |
+| `envelopes[].content.attachments[].source` | string | Source path/URL |
+| `envelopes[].content.attachments[].filename` | string | Filename (or empty) |
+| `envelopes[].content.attachments[].displayName` | string | Display name (or empty) |
+| `envelopes[].content.attachmentsText` | string | Pre-rendered attachment list (or `(none)`) |
+
+---
+
+## CLI Envelope Instructions (`prompts/envelope/instruction.md`)
+
+| Variable | Type | Meaning |
+|---------|------|---------|
+| `envelope.id` | string | Envelope id |
+| `envelope.from` | string | Sender address |
+| `envelope.to` | string | Destination address |
+| `envelope.fromName` | string | Human-readable sender name (or empty) |
+| `envelope.fromBoss` | boolean | Boss flag |
+| `envelope.createdAt.utcIso` | string | Created-at (UTC ISO 8601) |
+| `envelope.createdAt.localIso` | string | Created-at formatted in local timezone offset |
+| `envelope.deliverAt.utcIso` | string | Deliver-at (UTC ISO 8601) or empty |
+| `envelope.deliverAt.localIso` | string | Deliver-at formatted in local timezone offset or empty |
+| `envelope.content.text` | string | Text content (or `(none)`) |
+| `envelope.content.attachments` | array | Attachment objects |
+| `envelope.content.attachmentsText` | string | Pre-rendered attachment list (or `(none)`) |
+| `envelope.metadata` | object | Raw metadata JSON blob (or `{}`) |

@@ -1,0 +1,3 @@
+attachments:
+{{ envelope.content.attachmentsText }}
+

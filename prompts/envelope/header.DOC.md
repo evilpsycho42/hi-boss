@@ -1,6 +1,10 @@
 # Envelope Header Format (Documentation)
 
-The envelope header is now built dynamically in `src/cli/instructions/format-envelope.ts`.
+The envelope header is rendered by the prompt template entrypoint:
+
+- `prompts/envelope/instruction.md`
+
+Hi-Boss supplies header fields as template variables (see `prompts/VARIABLES.md`).
 
 ## Fields (in order)
 

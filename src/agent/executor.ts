@@ -15,7 +15,7 @@ import {
 } from "@unified-agent-sdk/runtime";
 import type { Agent } from "./types.js";
 import type { HiBossDatabase } from "../daemon/db/database.js";
-import { getAgentHomePath } from "./home-setup.js";
+import { getAgentHomePath, getHiBossDir } from "./home-setup.js";
 import {
   generateSystemInstructions,
   writeInstructionFiles,
@@ -56,10 +56,12 @@ export class AgentExecutor {
   private pendingSessionRefresh: Map<string, SessionRefreshRequest> = new Map();
   private debug: boolean;
   private db: HiBossDatabase | null;
+  private hibossDir: string;
 
-  constructor(options: { debug?: boolean; db?: HiBossDatabase } = {}) {
+  constructor(options: { debug?: boolean; db?: HiBossDatabase; hibossDir?: string } = {}) {
     this.debug = options.debug ?? false;
     this.db = options.db ?? null;
+    this.hibossDir = options.hibossDir ?? getHiBossDir();
   }
 
   /**
@@ -195,8 +197,9 @@ export class AgentExecutor {
           agent: agentRecord,
           agentToken: agentRecord.token,
           bindings,
+          hibossDir: this.hibossDir,
         });
-        await writeInstructionFiles(agentName, instructions, { debug: true });
+        await writeInstructionFiles(agentName, instructions, { debug: true, hibossDir: this.hibossDir });
       }
     }
   }
@@ -328,7 +331,7 @@ export class AgentExecutor {
       }
 
       const provider = agent.provider ?? "claude";
-      const homePath = getAgentHomePath(agent.name, provider);
+      const homePath = getAgentHomePath(agent.name, provider, this.hibossDir);
       const workspace = agent.workspace ?? process.cwd();
 
       // Generate and write instruction files for new session
@@ -337,8 +340,9 @@ export class AgentExecutor {
         agent,
         agentToken: agentRecord.token,
         bindings,
+        hibossDir: this.hibossDir,
       });
-      await writeInstructionFiles(agent.name, instructions, { debug: this.debug });
+      await writeInstructionFiles(agent.name, instructions, { debug: this.debug, hibossDir: this.hibossDir });
 
       // Create runtime with provider-specific configuration
       const defaultOpts = {
@@ -462,6 +466,6 @@ export class AgentExecutor {
 /**
  * Create a new agent executor instance.
  */
-export function createAgentExecutor(options?: { debug?: boolean; db?: HiBossDatabase }): AgentExecutor {
+export function createAgentExecutor(options?: { debug?: boolean; db?: HiBossDatabase; hibossDir?: string }): AgentExecutor {
   return new AgentExecutor(options);
 }

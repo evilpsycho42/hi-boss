@@ -139,11 +139,14 @@ System instructions define the agent's behavior and context. Instruction files a
 
 ### Template System
 
-Located in `src/agent/instruction-generator.ts`:
+Located in:
+- `src/shared/prompt-renderer.ts` (Nunjucks renderer)
+- `src/shared/prompt-context.ts` (context builders)
+- `src/agent/instruction-generator.ts` (system instructions generation)
 
-- Base template: `prompts/system/base.md`
-- Variables: `{{name}}`, `{{provider}}`, `{{workspace}}`, `{{token}}`, `{{context}}`
-- Context includes adapter bindings
+- Template language: **Nunjucks** (Jinja-like)
+- System entrypoint: `prompts/system/base.md`
+- Context variables: see `prompts/VARIABLES.md`
 
 ### Functions
 
@@ -187,6 +190,7 @@ agent: nex
 ## Pending Envelopes (2)
 
 ### Envelope 1
+id: abc-123
 from: channel:telegram:12345
 from-name: Alice (@alice) in "hiboss-test"
 from-boss: false

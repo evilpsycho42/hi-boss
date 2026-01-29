@@ -49,13 +49,14 @@ Table: `envelopes` (see `src/daemon/db/schema.ts`)
 
 ### CLI Output (Envelope Instructions)
 
-`hiboss envelope list` and `hiboss envelope get` render an agent-facing “envelope instruction” (see `src/cli/instructions/format-envelope.ts` and `prompts/envelope/*.md`).
+`hiboss envelope list` and `hiboss envelope get` render an agent-facing “envelope instruction” (see `src/cli/instructions/format-envelope.ts` and `prompts/envelope/instruction.md`).
 
 **Header keys**
 - `from:` (always; raw address)
 - `from-name:` (only for channel messages; computed from `envelope.metadata`)
 - `from-boss:` (always)
 - `created-at:` (always; shown in local timezone offset)
+- `deliver-at:` (optional; shown when present, in local timezone offset)
 
 **Sections**
 - `text:` followed by the text (or `(none)`)

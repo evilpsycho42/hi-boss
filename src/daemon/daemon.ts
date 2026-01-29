@@ -85,7 +85,7 @@ export class Daemon {
     this.ipc = new IpcServer(socketPath);
     this.router = new MessageRouter(this.db, { debug: config.debug });
     this.bridge = new ChannelBridge(this.router, this.db, config);
-    this.executor = createAgentExecutor({ debug: config.debug, db: this.db });
+    this.executor = createAgentExecutor({ debug: config.debug, db: this.db, hibossDir: config.dataDir });
     this.scheduler = new EnvelopeScheduler(this.db, this.router, this.executor, {
       debug: config.debug,
     });
