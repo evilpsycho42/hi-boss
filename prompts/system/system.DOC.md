@@ -62,8 +62,8 @@ Currently includes:
     - Public (shared): opt-in via `--public`.
   - Core commands: `hiboss mem add short|long`, `hiboss mem search`, `hiboss mem summary`, `hiboss mem state`.
   - Files:
-    - Private long-term: `~/.hiboss/agents/<agent-name>/.mem-cli/MEMORY.md`
-    - Private short-term: `~/.hiboss/agents/<agent-name>/.mem-cli/memory/YYYY-MM-DD.md`
+    - Private long-term: `{{ hiboss.dir }}/agents/{{ agent.name }}/.mem-cli/MEMORY.md`
+    - Private short-term: `{{ hiboss.dir }}/agents/{{ agent.name }}/.mem-cli/memory/YYYY-MM-DD.md`
     - Public: `~/.mem-cli/public/...`
 
 ## Memory Section
