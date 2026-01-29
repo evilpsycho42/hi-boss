@@ -114,7 +114,13 @@ Boss token can list envelopes for any address by providing `--address`:
 hiboss envelope list --token <boss-token> --address agent:nex --box inbox --status pending -n 10
 ```
 
-`hiboss envelope list` and `hiboss envelope get` output an agent-facing “instruction” format (header + `text:` + `attachments:`). For the exact keys, see `docs/spec/definitions.md`.
+`hiboss envelope list` and `hiboss envelope get` output an agent-facing "instruction" format (header + `text:` + `attachments:`). For the exact keys, see `docs/spec/definitions.md`.
+
+If `envelope list` returns no results, it outputs:
+
+```
+no-envelopes: true
+```
 
 ---
 
