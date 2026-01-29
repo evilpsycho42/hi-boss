@@ -4,10 +4,11 @@ import { input, select, password } from "@inquirer/prompts";
 import { IpcClient } from "../ipc-client.js";
 import { getSocketPath, getDefaultConfig, isDaemonRunning } from "../../daemon/daemon.js";
 import { HiBossDatabase } from "../../daemon/db/database.js";
-import { setupAgentHome } from "../../agent/home-setup.js";
+import { getAgentDir, setupAgentHome } from "../../agent/home-setup.js";
 import type { SetupCheckResult, SetupExecuteResult } from "../../daemon/ipc/types.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../shared/validation.js";
 import { parseDailyResetAt, parseDurationToMs } from "../../shared/session-policy.js";
+import { ensureMemCliPrivateWorkspace, ensureMemCliPublicWorkspace } from "../../shared/mem-cli.js";
 import {
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_SETUP_AGENT_NAME,
@@ -363,6 +364,19 @@ async function executeSetupDirect(config: SetupConfig): Promise<string> {
       return agentResult;
     });
 
+    // Initialize public + per-agent private memory workspaces (best-effort)
+    const publicInit = ensureMemCliPublicWorkspace();
+    if (!publicInit.ok && publicInit.error) {
+      console.error(`[mem-cli] public init failed during setup: ${publicInit.error}`);
+    }
+    const privateInit = ensureMemCliPrivateWorkspace(
+      result.token,
+      getAgentDir(config.agent.name, daemonConfig.dataDir)
+    );
+    if (!privateInit.ok && privateInit.error) {
+      console.error(`[mem-cli] private init failed during setup for agent ${config.agent.name}: ${privateInit.error}`);
+    }
+
     return result.token;
   } finally {
     db.close();
@@ -654,6 +668,19 @@ export async function runInteractiveSetup(): Promise<void> {
   try {
     const agentToken = await executeSetup(config);
 
+    // If setup ran via daemon IPC, initialize memory workspaces locally (best-effort).
+    const publicInit = ensureMemCliPublicWorkspace();
+    if (!publicInit.ok && publicInit.error) {
+      console.error(`[mem-cli] public init failed during setup: ${publicInit.error}`);
+    }
+    const privateInit = ensureMemCliPrivateWorkspace(
+      agentToken,
+      getAgentDir(agentName, getDefaultConfig().dataDir)
+    );
+    if (!privateInit.ok && privateInit.error) {
+      console.error(`[mem-cli] private init failed during setup for agent ${agentName}: ${privateInit.error}`);
+    }
+
     console.log("✅ Setup complete!\n");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log(`   agent-name:  ${agentName}`);
@@ -709,6 +736,19 @@ export async function runDefaultSetup(options: DefaultSetupOptions): Promise<voi
 
   try {
     const agentToken = await executeSetup(config);
+
+    // If setup ran via daemon IPC, initialize memory workspaces locally (best-effort).
+    const publicInit = ensureMemCliPublicWorkspace();
+    if (!publicInit.ok && publicInit.error) {
+      console.error(`[mem-cli] public init failed during setup: ${publicInit.error}`);
+    }
+    const privateInit = ensureMemCliPrivateWorkspace(
+      agentToken,
+      getAgentDir(DEFAULT_SETUP_AGENT_NAME, getDefaultConfig().dataDir)
+    );
+    if (!privateInit.ok && privateInit.error) {
+      console.error(`[mem-cli] private init failed during setup for agent ${DEFAULT_SETUP_AGENT_NAME}: ${privateInit.error}`);
+    }
 
     console.log("✅ Default setup complete!\n");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");

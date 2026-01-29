@@ -11,8 +11,10 @@ Hi-Boss supplies fields as template variables (see `prompts/VARIABLES.md`).
 1. **Identity** — agent name, provider, workspace, permission level, token; plus optional SOUL.md personality
 2. **Rules** — operating guidelines (communication style, working style, group chats, trust)
 3. **Communication** — envelope system overview and CLI usage
-4. **Bindings** — bound adapters (e.g., Telegram)
-5. **Boss** — boss profile (name, adapter IDs, optional BOSS.md)
+4. **Tools** — local tooling available to the agent (e.g., memory CLI usage)
+5. **Memory** — injected memory snapshot (private workspace summary)
+6. **Bindings** — bound adapters (e.g., Telegram)
+7. **Boss** — boss profile (name, adapter IDs, optional BOSS.md)
 
 ## Identity Fields
 
@@ -47,6 +49,32 @@ Covers:
 ## Bindings Section
 
 Lists adapters the agent is bound to (e.g., `telegram (bound)`). Only bound adapters are shown.
+
+## Tools Section
+
+Lists local CLI tools the agent can use.
+
+Currently includes:
+- **Memory** via `hiboss mem` (mem-cli)
+  - Stores memory as Markdown + a local SQLite vector index (semantic retrieval).
+  - Two workspaces:
+    - Private (default): per-agent memory keyed by `$HIBOSS_TOKEN` (no `--token` needed).
+    - Public (shared): opt-in via `--public`.
+  - Core commands: `hiboss mem add short|long`, `hiboss mem search`, `hiboss mem summary`, `hiboss mem state`.
+  - Files:
+    - Private long-term: `~/.hiboss/agents/<agent-name>/.mem-cli/MEMORY.md`
+    - Private short-term: `~/.hiboss/agents/<agent-name>/.mem-cli/memory/YYYY-MM-DD.md`
+    - Public: `~/.mem-cli/public/...`
+
+## Memory Section
+
+Injects a snapshot of the agent's **private** memory workspace at session start (best-effort; token is never printed).
+
+The snapshot follows the same structure as `hiboss mem summary`:
+- Long-term memory from `MEMORY.md` (may be truncated by `~/.mem-cli/settings.json` `summary.maxChars` unless `summary.full=true`)
+- Recent daily logs from `memory/YYYY-MM-DD.md` (Hi-Boss caps this to the last 2 days for prompt injection)
+
+Hi-Boss also caps the total injected memory block size (currently 20,000 chars) to avoid runaway prompts.
 
 ## Boss Section
 
@@ -147,6 +175,44 @@ hiboss envelope send --to agent:nex --text "wake up later" --deliver-at +2m
 2. Reply to messages appropriately using the `hiboss` CLI
 3. Respect the `from-boss` marker (`[boss]`) — messages from boss may have higher priority
 4. Use your workspace for file operations when needed
+
+## Tools
+
+### Memory (`hiboss mem`)
+
+`hiboss mem` is the built-in memory CLI (mem-cli). It stores memory locally as Markdown and keeps a SQLite vector index for semantic retrieval.
+
+Quick usage:
+
+```bash
+# Short-term (daily)
+hiboss mem add short "..."
+
+# Long-term (curated)
+hiboss mem add long "..."
+
+# Semantic retrieval (searches both long + short)
+hiboss mem search "query"
+
+# Public (shared)
+hiboss mem add short "..." --public
+hiboss mem search "query" --public
+```
+
+## Memory
+
+Snapshot of your private memory workspace (generated at session start).
+
+```text
+# Summary
+
+## Long-term Memory
+- (example) Boss prefers concise answers
+... <truncated due to max-chars=8000>
+
+## Recent Daily Logs (last 2 days)
+(example) Yesterday: fixed MEM_CLI_TOKEN defaults.
+```
 ## Bindings
 
 - telegram (bound)

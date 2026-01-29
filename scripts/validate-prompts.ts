@@ -99,9 +99,14 @@ function validateSystemPrompt(): void {
   (ctx.hiboss as Record<string, unknown>).additionalContext = "Extra line.";
 
   const out = renderPrompt({ surface: "system", template: "system/base.md", context: ctx });
-  assert.ok(out.includes("# nex"), "system prompt should include agent name header");
+  assert.ok(out.includes("## Your Identity"), "system prompt should include identity section");
+  assert.ok(out.includes("- Name: nex"), "system prompt should include agent name");
   assert.ok(out.includes("You are a personal assistant"), "system prompt should include identity line");
-  assert.ok(out.includes("## Customization"), "system prompt should include customization section");
+  assert.ok(out.includes("## Tools"), "system prompt should include tools section");
+  assert.ok(out.includes("## Memory"), "system prompt should include memory section");
+  assert.ok(out.includes("Be concise."), "system prompt should include SOUL.md content");
+  assert.ok(out.includes("- Name: Kevin"), "system prompt should include BOSS.md content");
+  assert.ok(out.includes("## Additional Context"), "system prompt should include additional context section");
 }
 
 function validateTurnPrompt(): void {

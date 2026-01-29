@@ -7,6 +7,8 @@ You are a personal assistant running inside Hi-Boss.
 {% include "system/sections/customization.md" %}
 {% include "system/sections/rules.md" %}
 {% include "system/sections/communication.md" %}
+{% include "system/sections/tools.md" %}
+{% include "system/sections/memory.md" %}
 {% include "system/sections/bindings.md" %}
 {% include "system/sections/boss.md" %}
 

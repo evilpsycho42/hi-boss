@@ -12,6 +12,7 @@ import {
   listAgents,
   runBackground,
   runSetup,
+  runMem,
 } from "./commands/index.js";
 import { DEFAULT_ENVELOPE_LIST_BOX } from "../shared/defaults.js";
 
@@ -311,6 +312,16 @@ program
       token: options.token,
       task: options.task,
     });
+  });
+
+// Memory (mem-cli) passthrough
+program
+  .command("mem [args...]")
+  .description("Agent memory tools (mem-cli)")
+  .allowUnknownOption(true)
+  .helpOption(false)
+  .action(() => {
+    runMem({ args: process.argv.slice(3) });
   });
 
 // Helper to collect multiple values for an option

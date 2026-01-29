@@ -10,8 +10,9 @@ import type { Agent } from "./types.js";
 import type { AgentBinding } from "../daemon/db/database.js";
 import { renderPrompt } from "../shared/prompt-renderer.js";
 import { buildSystemPromptContext } from "../shared/prompt-context.js";
-import { getCodexHomePath, getClaudeHomePath } from "./home-setup.js";
+import { getCodexHomePath, getClaudeHomePath, getAgentDir } from "./home-setup.js";
 import { nowLocalIso } from "../shared/time.js";
+import { getMemCliPrivateSummary } from "../shared/mem-cli.js";
 
 /**
  * Context for generating system instructions.
@@ -26,6 +27,21 @@ export interface InstructionContext {
     name?: string;
     adapterIds?: Record<string, string>;
   };
+}
+
+const MAX_MEMORY_SUMMARY_CHARS = 20_000;
+
+function truncateMemorySummary(summary: string): string {
+  if (summary.length <= MAX_MEMORY_SUMMARY_CHARS) return summary;
+  return summary.slice(0, MAX_MEMORY_SUMMARY_CHARS) + "\n\n[...truncated...]\n";
+}
+
+function chooseFence(text: string): string {
+  let fence = "```";
+  while (text.includes(fence)) {
+    fence += "`";
+  }
+  return fence;
 }
 
 /**
@@ -47,6 +63,21 @@ export function generateSystemInstructions(ctx: InstructionContext): string {
     hibossDir: ctx.hibossDir,
     boss,
   });
+
+  // Inject memory summary for this agent (best-effort; never prints token).
+  const agentDir = getAgentDir(agent.name, ctx.hibossDir);
+  const memory = getMemCliPrivateSummary(agentToken, agentDir);
+  const memoryContext = promptContext.memory as Record<string, unknown>;
+  if (memory.ok && typeof memory.summaryText === "string") {
+    const summary = truncateMemorySummary(memory.summaryText);
+    memoryContext.summary = summary;
+    memoryContext.summaryFence = chooseFence(summary);
+    memoryContext.error = "";
+  } else {
+    memoryContext.summary = "";
+    memoryContext.summaryFence = "```";
+    memoryContext.error = typeof memory.error === "string" ? memory.error : "";
+  }
 
   (promptContext.hiboss as Record<string, unknown>).additionalContext =
     additionalContext ?? "";

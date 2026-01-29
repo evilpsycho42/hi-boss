@@ -17,6 +17,9 @@ Notes:
 | `hiboss.tokenEnvVar` | string | Environment variable name for the agent token (`HIBOSS_TOKEN`) |
 | `hiboss.additionalContext` | string | Optional extra context appended by code (usually empty) |
 | `hiboss.files.boss` | string | Contents of `{{hiboss.dir}}/BOSS.md` (or empty) |
+| `memory.summary` | string | Memory snapshot text (usually `hiboss mem summary` output, or empty) |
+| `memory.summaryFence` | string | Markdown code fence delimiter for `memory.summary` (e.g., ``` or ````) |
+| `memory.error` | string | Memory snapshot error message (or empty) |
 | `boss.name` | string | Boss name (how agent should address the user, or empty) |
 | `boss.adapterIds` | object | Boss identity per adapter type (e.g. `{ telegram: "@kevin" }`, or `{}`) |
 | `agent.name` | string | Agent name |

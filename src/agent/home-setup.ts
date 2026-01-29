@@ -9,6 +9,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import { fileURLToPath } from "node:url";
 import { assertValidAgentName } from "../shared/validation.js";
 import { getDefaultHiBossDir } from "../shared/defaults.js";
 
@@ -72,6 +73,43 @@ function copyFileIfExists(src: string, dest: string): boolean {
   return true;
 }
 
+function findInternalSkillsDir(): string | null {
+  const startDir = path.dirname(fileURLToPath(import.meta.url));
+  let dir = startDir;
+
+  for (let i = 0; i < 8; i++) {
+    const candidate = path.join(dir, "skills");
+    try {
+      if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
+        return candidate;
+      }
+    } catch {
+      // ignore
+    }
+
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  return null;
+}
+
+function copyDirRecursive(srcDir: string, destDir: string): void {
+  fs.mkdirSync(destDir, { recursive: true });
+  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+    const from = path.join(srcDir, entry.name);
+    const to = path.join(destDir, entry.name);
+    if (entry.isDirectory()) {
+      copyDirRecursive(from, to);
+      continue;
+    }
+    if (entry.isFile()) {
+      fs.copyFileSync(from, to);
+    }
+  }
+}
+
 /**
  * Set up the agent's home directories with provider configs.
  *
@@ -96,6 +134,16 @@ export async function setupAgentHome(
   const userCodexConfig = path.join(os.homedir(), ".codex", "config.toml");
   const agentCodexConfig = path.join(codexHome, "config.toml");
   copyFileIfExists(userCodexConfig, agentCodexConfig);
+
+  // Copy built-in skills for Codex agents (if present in the package workspace)
+  const internalSkillsDir = findInternalSkillsDir();
+  if (internalSkillsDir) {
+    const codexSkillsDir = path.join(codexHome, "skills");
+    const hibossMem = path.join(internalSkillsDir, "hiboss-mem");
+    if (fs.existsSync(hibossMem)) {
+      copyDirRecursive(hibossMem, path.join(codexSkillsDir, "hiboss-mem"));
+    }
+  }
 
   // Copy Claude configs (if exist)
   const userClaudeDir = path.join(os.homedir(), ".claude");

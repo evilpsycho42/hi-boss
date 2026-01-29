@@ -246,6 +246,11 @@ export function buildSystemPromptContext(params: {
         boss: hibossFiles.boss ?? "",
       },
     },
+    memory: {
+      summary: "",
+      summaryFence: "```",
+      error: "",
+    },
     boss: {
       name: params.boss?.name ?? "",
       adapterIds: params.boss?.adapterIds ?? {},

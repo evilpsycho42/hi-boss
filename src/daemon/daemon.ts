@@ -7,7 +7,7 @@ import { MessageRouter } from "./router/message-router.js";
 import { ChannelBridge } from "./bridges/channel-bridge.js";
 import { AgentExecutor, createAgentExecutor } from "../agent/executor.js";
 import type { Agent } from "../agent/types.js";
-import { setupAgentHome } from "../agent/home-setup.js";
+import { getAgentDir, setupAgentHome } from "../agent/home-setup.js";
 import { EnvelopeScheduler } from "./scheduler/envelope-scheduler.js";
 import type { RpcMethodRegistry } from "./ipc/types.js";
 import {
@@ -34,6 +34,7 @@ import { parseDateTimeInputToUtcIso, nowLocalIso } from "../shared/time.js";
 import { parseDailyResetAt, parseDurationToMs } from "../shared/session-policy.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../shared/validation.js";
 import { red } from "../shared/ansi.js";
+import { ensureMemCliPrivateWorkspace, ensureMemCliPublicWorkspace } from "../shared/mem-cli.js";
 import {
   DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PERMISSION_LEVEL,
@@ -787,6 +788,12 @@ export class Daemon {
 
         // Setup agent home directories
         await setupAgentHome(p.name, this.config.dataDir);
+
+        // Initialize per-agent private memory workspace (best-effort)
+        const memInit = ensureMemCliPrivateWorkspace(result.token, getAgentDir(p.name, this.config.dataDir));
+        if (!memInit.ok && memInit.error) {
+          console.error(`[Daemon] mem-cli private init failed for agent ${p.name}: ${memInit.error}`);
+        }
 
         const bindAdapterType = p.bindAdapterType;
         const bindAdapterToken = p.bindAdapterToken;
@@ -1616,6 +1623,16 @@ export class Daemon {
             console.error(`[Daemon] Agent ${p.agent.name} run failed:`, err);
           });
         });
+
+        // Initialize public + per-agent private memory workspaces (best-effort)
+        const publicInit = ensureMemCliPublicWorkspace();
+        if (!publicInit.ok && publicInit.error) {
+          console.error(`[Daemon] mem-cli public init failed during setup: ${publicInit.error}`);
+        }
+        const privateInit = ensureMemCliPrivateWorkspace(result.token, getAgentDir(p.agent.name, this.config.dataDir));
+        if (!privateInit.ok && privateInit.error) {
+          console.error(`[Daemon] mem-cli private init failed during setup for agent ${p.agent.name}: ${privateInit.error}`);
+        }
 
         return { agentToken: result.token };
       },
