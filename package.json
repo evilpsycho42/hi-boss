@@ -11,7 +11,7 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "hiboss": "tsx bin/hiboss.ts",
-    "inventory:magic": "tsx scripts/magic-inventory.ts --out docs/magic-inventory.md"
+    "inventory:magic": "tsx scripts/magic-inventory.ts --out docs/spec/generated/magic-inventory.md"
   },
   "dependencies": {
     "@unified-agent-sdk/runtime": "^0.4.1",
