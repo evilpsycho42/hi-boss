@@ -21,6 +21,16 @@ hiboss envelope send --to <address> --text "your response"
 
 Your agent token is provided via the `{{ hiboss.tokenEnvVar }}` environment variable, so `--token` is optional.
 
+**Recommended: Use heredoc for message text**
+
+To avoid shell escaping issues with special characters (like `!`), use `--text-file` with stdin:
+
+```bash
+hiboss envelope send --to <address> --text-file /dev/stdin << 'EOF'
+Your message here with special chars: Hey! What's up?
+EOF
+```
+
 {% set hasTelegram = false %}
 {% for b in bindings %}{% if b.adapterType == "telegram" %}{% set hasTelegram = true %}{% endif %}{% endfor %}
 
@@ -44,8 +54,20 @@ hiboss reaction set --to <address> --channel-message-id <channel-message-id> --e
 Default is plain text (no escaping needed). Only opt in if you want Telegram formatting.
 
 ```bash
-hiboss envelope send --to <address> --parse-mode markdownv2 --text "*bold*"
+hiboss envelope send --to <address> --parse-mode html --text-file /dev/stdin << 'EOF'
+<b>bold</b> and <i>italic</i>
+EOF
+```
+
+- **HTML (recommended)**: Simple escaping rules (only `<`, `>`, `&`)
+- **MarkdownV2**: Requires escaping many characters: `_ * [ ] ( ) ~ \` > # + - = | { } . !`
+
+```bash
+# HTML example
 hiboss envelope send --to <address> --parse-mode html --text "<b>bold</b>"
+
+# MarkdownV2 example (note escaping)
+hiboss envelope send --to <address> --parse-mode markdownv2 --text "*bold* \| special\!"
 ```
 
 {% endif %}
