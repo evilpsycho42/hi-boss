@@ -1459,11 +1459,16 @@ export class Daemon {
         }
 
         if (
+          p.agent.reasoningEffort !== "none" &&
           p.agent.reasoningEffort !== "low" &&
           p.agent.reasoningEffort !== "medium" &&
-          p.agent.reasoningEffort !== "high"
+          p.agent.reasoningEffort !== "high" &&
+          p.agent.reasoningEffort !== "xhigh"
         ) {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid reasoning-effort (expected low, medium, high)");
+          rpcError(
+            RPC_ERRORS.INVALID_PARAMS,
+            "Invalid reasoning-effort (expected none, low, medium, high, xhigh)"
+          );
         }
 
         if (p.agent.autoLevel !== "low" && p.agent.autoLevel !== "medium" && p.agent.autoLevel !== "high") {

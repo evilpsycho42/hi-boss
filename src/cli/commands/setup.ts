@@ -467,12 +467,14 @@ export async function runInteractiveSetup(): Promise<void> {
     });
   }
 
-  const reasoningEffort = await select<'low' | 'medium' | 'high'>({
+  const reasoningEffort = await select<'none' | 'low' | 'medium' | 'high' | 'xhigh'>({
     message: "Reasoning effort:",
     choices: [
+      { value: 'none', name: "None - No reasoning (fastest)" },
       { value: 'low', name: "Low - Quick responses" },
       { value: 'medium', name: "Medium - Balanced (recommended)" },
       { value: 'high', name: "High - Thorough analysis" },
+      { value: 'xhigh', name: "XHigh - Extra thorough (slowest)" },
     ],
     default: DEFAULT_SETUP_REASONING_EFFORT,
   });
@@ -611,23 +613,27 @@ export async function runInteractiveSetup(): Promise<void> {
   console.log("The boss token identifies you as the boss for administrative tasks.");
   console.log("Choose something short you'll remember.\n");
 
-  const bossToken = await password({
-    message: "Enter your boss token:",
-    validate: (value) => {
-      if (value.length < 4) {
-        return "Boss token must be at least 4 characters";
-      }
-      return true;
-    },
-  });
+  let bossToken: string;
+  while (true) {
+    bossToken = await password({
+      message: "Enter your boss token:",
+      validate: (value) => {
+        if (value.length < 4) {
+          return "Boss token must be at least 4 characters";
+        }
+        return true;
+      },
+    });
 
-  const confirmToken = await password({
-    message: "Confirm boss token:",
-  });
+    const confirmToken = await password({
+      message: "Confirm boss token:",
+    });
 
-  if (bossToken !== confirmToken) {
-    console.error("\n❌ Tokens do not match. Please run setup again.\n");
-    process.exit(1);
+    if (bossToken === confirmToken) {
+      break;
+    }
+
+    console.error("\n❌ Tokens do not match. Please try again.\n");
   }
 
   // Execute setup

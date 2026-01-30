@@ -422,7 +422,7 @@ export class HiBossDatabase {
       workspace: row.workspace ?? undefined,
       provider: (row.provider as 'claude' | 'codex') ?? undefined,
       model: row.model ?? undefined,
-      reasoningEffort: (row.reasoning_effort as 'low' | 'medium' | 'high') ?? undefined,
+      reasoningEffort: (row.reasoning_effort as 'none' | 'low' | 'medium' | 'high' | 'xhigh') ?? undefined,
       autoLevel: (row.auto_level as 'low' | 'medium' | 'high') ?? undefined,
       permissionLevel,
       sessionPolicy,
