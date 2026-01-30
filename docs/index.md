@@ -28,6 +28,7 @@ Hi-Boss has two kinds of documentation:
 - `docs/spec/ipc.md` — CLI ↔ daemon IPC (JSON-RPC over local socket)
 - `docs/spec/agent.md` — agent model, execution, bindings, providers
 - `docs/spec/session.md` — session lifecycle and refresh policy
+- `docs/spec/token_usage.md` — token usage semantics + provider differences
 - `docs/spec/configuration.md` — config sources, CLI flags, DB settings
 - `docs/spec/adapters/telegram.md` — Telegram adapter behavior and message schema
 
