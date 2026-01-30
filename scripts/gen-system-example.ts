@@ -1,5 +1,13 @@
+import * as fs from "fs";
+import * as path from "path";
+import { fileURLToPath } from "url";
 import { buildSystemPromptContext } from "../src/shared/prompt-context.js";
 import { renderPrompt } from "../src/shared/prompt-renderer.js";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const DOC_FILE = path.resolve(__dirname, "../prompts/system/system.DOC.md");
 
 const mockAgent = {
   id: 1,
@@ -26,6 +34,7 @@ const promptContext = buildSystemPromptContext({
   agentToken: "agt_abc123xyz...",
   bindings: mockBindings as any,
   boss: mockBoss,
+  hibossDir: "~/.hiboss",
 });
 
 const rendered = renderPrompt({
@@ -34,4 +43,29 @@ const rendered = renderPrompt({
   context: promptContext,
 });
 
-console.log(rendered);
+// Read the current DOC file
+const docContent = fs.readFileSync(DOC_FILE, "utf-8");
+
+// Find and replace the Full Example section
+const exampleHeader = "## Full Example";
+const headerIndex = docContent.indexOf(exampleHeader);
+
+if (headerIndex === -1) {
+  console.error("Could not find '## Full Example' section in system.DOC.md");
+  process.exit(1);
+}
+
+// Build the new example section
+const newExampleSection = `${exampleHeader}
+
+\`\`\`\`\`text
+${rendered.trim()}
+\`\`\`\`\`
+`;
+
+// Replace everything from "## Full Example" to end of file
+const updatedContent = docContent.slice(0, headerIndex) + newExampleSection;
+
+fs.writeFileSync(DOC_FILE, updatedContent, "utf-8");
+
+console.log(`Updated ${DOC_FILE} with generated system prompt example.`);
