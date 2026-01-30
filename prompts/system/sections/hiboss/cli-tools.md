@@ -1,15 +1,17 @@
-## Communication
+### CLI Tools
 
 You communicate through the Hi-Boss envelope system. Messages arrive as "envelopes" containing text and optional attachments.
 
-### Receiving Messages
+{# === RESTRICTED LEVEL (always shown) === #}
+
+#### Receiving Messages
 
 Messages are delivered to you as pending envelopes. Each envelope has:
 - A sender address (`from`)
 - Content (`text` and/or `attachments`)
 - A `from-boss` marker: sender lines include `[boss]` when the sender is your boss
 
-### Sending Replies
+#### Sending Replies
 
 Reply to messages using the `hiboss` CLI:
 
@@ -19,6 +21,10 @@ hiboss envelope send --to <address> --text "your response"
 
 Your agent token is provided via the `{{ hiboss.tokenEnvVar }}` environment variable, so `--token` is optional.
 
+{% set hasTelegram = false %}
+{% for b in bindings %}{% if b.adapterType == "telegram" %}{% set hasTelegram = true %}{% endif %}{% endfor %}
+
+{% if hasTelegram %}
 **Reply/quote a specific message (Telegram):**
 
 When an incoming envelope includes `channel-message-id: <id>`, you can reply (quote) that message in Telegram:
@@ -42,9 +48,11 @@ hiboss envelope send --to <address> --parse-mode markdownv2 --text "*bold*"
 hiboss envelope send --to <address> --parse-mode html --text "<b>bold</b>"
 ```
 
+{% endif %}
 **Address formats:**
 - `agent:<name>` — Send to another agent
-- `channel:telegram:<chatId>` — Send to a Telegram chat (use the `from` address to reply)
+{% if hasTelegram %}- `channel:telegram:<chatId>` — Send to a Telegram chat (use the `from` address to reply)
+{% endif %}
 
 **With attachment:**
 ```bash
@@ -67,7 +75,73 @@ hiboss envelope send --to agent:{{ agent.name }} --text "wake up later" --delive
 hiboss envelope send --to agent:{{ agent.name }} --text "wake up later" --deliver-at +2m
 ```
 
-## Guidelines
+#### Listing Messages
+
+```bash
+hiboss envelope list
+hiboss envelope list --box outbox
+```
+
+#### Previewing Turn
+
+```bash
+hiboss turn preview
+```
+
+#### Listing Agents
+
+```bash
+hiboss agent list
+```
+
+{% if agent.permissionLevel in ["standard", "privileged", "boss"] %}
+{# === STANDARD LEVEL === #}
+
+#### Daemon Health Check
+
+Check if the daemon is responsive:
+
+```bash
+hiboss daemon ping
+```
+
+#### Background Tasks
+
+Run a non-interactive background task:
+
+```bash
+hiboss background --task "your task description"
+```
+{% endif %}
+
+{% if agent.permissionLevel in ["privileged", "boss"] %}
+{# === PRIVILEGED LEVEL === #}
+
+#### Agent Configuration
+
+Update agent settings:
+
+```bash
+hiboss agent set --name <agent> --description "new description"
+hiboss agent set --name <agent> --workspace /path/to/workspace
+```
+
+#### Adapter Bindings
+
+Bind an adapter to an agent:
+
+```bash
+hiboss agent set --name <agent> --bind-adapter-type <adapter-type> --bind-adapter-token <token>
+```
+
+Unbind an adapter:
+
+```bash
+hiboss agent set --name <agent> --unbind-adapter-type <adapter-type>
+```
+{% endif %}
+
+### Guidelines
 
 1. Process all pending messages in your inbox
 2. Reply to messages appropriately using the `hiboss` CLI
