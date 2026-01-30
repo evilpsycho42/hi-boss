@@ -4,6 +4,7 @@ import * as path from "path";
 import { SCHEMA_SQL } from "./schema.js";
 import type { Agent, AgentPermissionLevel, RegisterAgentInput } from "../../agent/types.js";
 import type { Envelope, CreateEnvelopeInput, EnvelopeStatus } from "../../envelope/types.js";
+import type { CronSchedule, CreateCronScheduleInput } from "../../cron/types.js";
 import type { SessionPolicyConfig } from "../../shared/session-policy.js";
 import {
   DEFAULT_AGENT_AUTO_LEVEL,
@@ -45,6 +46,23 @@ interface EnvelopeRow {
   status: string;
   created_at: string;
   metadata: string | null;
+}
+
+interface CronScheduleRow {
+  id: string;
+  agent_name: string;
+  cron: string;
+  timezone: string | null;
+  enabled: number;
+  to_address: string;
+  content_text: string | null;
+  content_attachments: string | null;
+  metadata: string | null;
+  pending_envelope_id: string | null;
+  created_at: string;
+  updated_at: string | null;
+  pending_deliver_at?: string | null;
+  pending_status?: string | null;
 }
 
 interface AgentBindingRow {
@@ -536,6 +554,159 @@ export class HiBossDatabase {
       status: row.status as EnvelopeStatus,
       createdAt: row.created_at,
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+    };
+  }
+
+  // ==================== Cron Schedule Operations ====================
+
+  /**
+   * Create a new cron schedule.
+   */
+  createCronSchedule(input: CreateCronScheduleInput): CronSchedule {
+    const id = generateUUID();
+    const createdAt = new Date().toISOString();
+
+    const enabled = input.enabled ?? true;
+    const timezone =
+      input.timezone && input.timezone.trim() && input.timezone.trim().toLowerCase() !== "local"
+        ? input.timezone.trim()
+        : null;
+
+    const stmt = this.db.prepare(`
+      INSERT INTO cron_schedules (id, agent_name, cron, timezone, enabled, to_address, content_text, content_attachments, metadata, pending_envelope_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      id,
+      input.agentName,
+      input.cron,
+      timezone,
+      enabled ? 1 : 0,
+      input.to,
+      input.content.text ?? null,
+      input.content.attachments ? JSON.stringify(input.content.attachments) : null,
+      input.metadata ? JSON.stringify(input.metadata) : null,
+      null,
+      createdAt,
+      null
+    );
+
+    return this.getCronScheduleById(id)!;
+  }
+
+  /**
+   * Get a cron schedule by ID.
+   */
+  getCronScheduleById(id: string): CronSchedule | null {
+    const stmt = this.db.prepare(`
+      SELECT
+        s.*,
+        e.deliver_at AS pending_deliver_at,
+        e.status AS pending_status
+      FROM cron_schedules s
+      LEFT JOIN envelopes e ON e.id = s.pending_envelope_id
+      WHERE s.id = ?
+    `);
+    const row = stmt.get(id) as CronScheduleRow | undefined;
+    return row ? this.rowToCronSchedule(row) : null;
+  }
+
+  /**
+   * List cron schedules for an agent.
+   */
+  listCronSchedulesByAgent(agentName: string): CronSchedule[] {
+    const stmt = this.db.prepare(`
+      SELECT
+        s.*,
+        e.deliver_at AS pending_deliver_at,
+        e.status AS pending_status
+      FROM cron_schedules s
+      LEFT JOIN envelopes e ON e.id = s.pending_envelope_id
+      WHERE s.agent_name = ?
+      ORDER BY s.created_at DESC
+    `);
+    const rows = stmt.all(agentName) as CronScheduleRow[];
+    return rows.map((row) => this.rowToCronSchedule(row));
+  }
+
+  /**
+   * List all cron schedules (all agents).
+   */
+  listCronSchedules(): CronSchedule[] {
+    const stmt = this.db.prepare(`
+      SELECT
+        s.*,
+        e.deliver_at AS pending_deliver_at,
+        e.status AS pending_status
+      FROM cron_schedules s
+      LEFT JOIN envelopes e ON e.id = s.pending_envelope_id
+      ORDER BY s.created_at DESC
+    `);
+    const rows = stmt.all() as CronScheduleRow[];
+    return rows.map((row) => this.rowToCronSchedule(row));
+  }
+
+  /**
+   * Update cron schedule enabled flag.
+   */
+  updateCronScheduleEnabled(id: string, enabled: boolean): void {
+    const updatedAt = new Date().toISOString();
+    const stmt = this.db.prepare("UPDATE cron_schedules SET enabled = ?, updated_at = ? WHERE id = ?");
+    stmt.run(enabled ? 1 : 0, updatedAt, id);
+  }
+
+  /**
+   * Update cron schedule pending envelope id.
+   */
+  updateCronSchedulePendingEnvelopeId(id: string, pendingEnvelopeId: string | null): void {
+    const updatedAt = new Date().toISOString();
+    const stmt = this.db.prepare(
+      "UPDATE cron_schedules SET pending_envelope_id = ?, updated_at = ? WHERE id = ?"
+    );
+    stmt.run(pendingEnvelopeId, updatedAt, id);
+  }
+
+  /**
+   * Delete a cron schedule by id.
+   */
+  deleteCronSchedule(id: string): boolean {
+    const stmt = this.db.prepare("DELETE FROM cron_schedules WHERE id = ?");
+    const result = stmt.run(id);
+    return result.changes > 0;
+  }
+
+  private rowToCronSchedule(row: CronScheduleRow): CronSchedule {
+    const metadata = row.metadata ? JSON.parse(row.metadata) : undefined;
+    const attachments = row.content_attachments ? JSON.parse(row.content_attachments) : undefined;
+
+    const pendingEnvelopeId = row.pending_envelope_id ?? undefined;
+    const pendingStatus =
+      pendingEnvelopeId && typeof row.pending_status === "string"
+        ? (row.pending_status as EnvelopeStatus)
+        : undefined;
+    const nextDeliverAt =
+      pendingEnvelopeId && typeof row.pending_deliver_at === "string"
+        ? row.pending_deliver_at
+        : undefined;
+
+    return {
+      id: row.id,
+      agentName: row.agent_name,
+      cron: row.cron,
+      timezone: row.timezone ?? undefined,
+      enabled: row.enabled === 1,
+      to: row.to_address,
+      content: {
+        text: row.content_text ?? undefined,
+        attachments,
+      },
+      metadata,
+      pendingEnvelopeId,
+      pendingEnvelopeStatus: pendingStatus,
+      nextDeliverAt,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at ?? undefined,
     };
   }
 

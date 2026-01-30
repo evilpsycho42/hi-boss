@@ -22,6 +22,7 @@ Hi-Boss has two kinds of documentation:
 - `docs/spec/cli.md` — CLI output and rendering
 - `docs/spec/definitions.md` — field mappings (TypeScript ↔ SQLite ↔ CLI keys)
 - `docs/spec/envelope.md` — envelopes, lifecycle, status, scheduling
+- `docs/spec/cron.md` — persistent cron schedules (materialize envelopes)
 - `docs/spec/routing.md` — message routing and envelope flow
 - `docs/spec/scheduler.md` — deliver-at scheduling details
 - `docs/spec/ipc.md` — CLI ↔ daemon IPC (JSON-RPC over local socket)

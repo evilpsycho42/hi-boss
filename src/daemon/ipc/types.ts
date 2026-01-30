@@ -76,6 +76,41 @@ export interface EnvelopeGetParams {
   id: string;
 }
 
+export interface CronCreateParams {
+  token: string;
+  cron: string;
+  timezone?: string; // IANA timezone; "local" or missing means local
+  to: string;
+  text?: string;
+  attachments?: Array<{ source: string; filename?: string; telegramFileId?: string }>;
+  parseMode?: "plain" | "markdownv2" | "html";
+  replyToMessageId?: string;
+}
+
+export interface CronListParams {
+  token: string;
+}
+
+export interface CronGetParams {
+  token: string;
+  id: string;
+}
+
+export interface CronEnableParams {
+  token: string;
+  id: string;
+}
+
+export interface CronDisableParams {
+  token: string;
+  id: string;
+}
+
+export interface CronDeleteParams {
+  token: string;
+  id: string;
+}
+
 export interface TurnPreviewParams {
   token: string;
   agentName?: string;

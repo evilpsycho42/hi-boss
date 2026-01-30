@@ -1,3 +1,5 @@
+## Tools
+
 ### CLI Tools
 
 You communicate through the Hi-Boss envelope system. Messages arrive as "envelopes" containing text and optional attachments.
@@ -96,6 +98,36 @@ hiboss envelope send --to agent:{{ agent.name }} --text "wake up later" --delive
 # Relative time (from now)
 hiboss envelope send --to agent:{{ agent.name }} --text "wake up later" --deliver-at +2m
 ```
+
+#### Cron Schedules (Recurring)
+
+Create recurring schedules that materialize scheduled envelopes:
+
+```bash
+# Every 2 minutes
+hiboss cron create --cron "*/2 * * * *" --to agent:{{ agent.name }} --text "recurring ping"
+
+# Every day at 09:00 in local timezone (default)
+hiboss cron create --cron "0 9 * * *" --to agent:{{ agent.name }} --text "daily reminder"
+
+# Set timezone explicitly (IANA, or 'local')
+hiboss cron create --cron "0 9 * * *" --timezone "UTC" --to agent:{{ agent.name }} --text "daily reminder"
+```
+
+Manage schedules:
+
+```bash
+hiboss cron list
+hiboss cron get --id <cron-id>
+hiboss cron disable --id <cron-id>  # cancels the pending instance
+hiboss cron enable --id <cron-id>   # schedules the next instance
+hiboss cron delete --id <cron-id>   # cancels the pending instance
+```
+
+Notes:
+- Cron expressions support 5-field or 6-field (with seconds), and `@daily` / `@hourly` presets.
+- If the daemon was down during a scheduled time, that run is skipped (no catch-up delivery).
+- Channel destinations require you to be bound to that adapter type (e.g., `telegram`).
 
 #### Listing Messages
 

@@ -10,6 +10,7 @@ export type EnvelopeHandler = (envelope: Envelope) => void | Promise<void>;
 
 export interface MessageRouterOptions {
   debug?: boolean;
+  onEnvelopeDone?: EnvelopeHandler;
 }
 
 /**
@@ -19,9 +20,11 @@ export class MessageRouter {
   private adaptersByToken: Map<string, ChatAdapter> = new Map();
   private agentHandlers: Map<string, EnvelopeHandler> = new Map();
   private debug: boolean;
+  private onEnvelopeDone?: EnvelopeHandler;
 
   constructor(private db: HiBossDatabase, options: MessageRouterOptions = {}) {
     this.debug = options.debug ?? false;
+    this.onEnvelopeDone = options.onEnvelopeDone;
   }
 
   /**
@@ -181,6 +184,14 @@ export class MessageRouter {
           to: envelope.to,
           status: "done",
         }, null, 2));
+      }
+
+      if (this.onEnvelopeDone) {
+        try {
+          await this.onEnvelopeDone(envelope);
+        } catch (err) {
+          console.error(`[Router] onEnvelopeDone failed for envelope ${envelope.id}:`, err);
+        }
       }
     } catch (err) {
       const details = this.extractAdapterErrorDetails(adapterType, err);

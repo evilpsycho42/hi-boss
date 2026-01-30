@@ -109,11 +109,20 @@ export class AgentExecutor {
   private debug: boolean;
   private db: HiBossDatabase | null;
   private hibossDir: string;
+  private onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
 
-  constructor(options: { debug?: boolean; db?: HiBossDatabase; hibossDir?: string } = {}) {
+  constructor(
+    options: {
+      debug?: boolean;
+      db?: HiBossDatabase;
+      hibossDir?: string;
+      onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
+    } = {}
+  ) {
     this.debug = options.debug ?? false;
     this.db = options.db ?? null;
     this.hibossDir = options.hibossDir ?? getHiBossDir();
+    this.onEnvelopesDone = options.onEnvelopesDone;
   }
 
   /**
@@ -355,6 +364,14 @@ export class AgentExecutor {
       // Auto-ack all processed envelopes after successful run
       db.markEnvelopesDone(envelopeIds);
 
+      if (this.onEnvelopesDone) {
+        try {
+          await this.onEnvelopesDone(envelopeIds, db);
+        } catch (err) {
+          console.error(`[AgentExecutor] onEnvelopesDone failed for ${agent.name}:`, err);
+        }
+      }
+
       // Complete the run record
       db.completeAgentRun(run.id, response);
 
@@ -559,6 +576,11 @@ export class AgentExecutor {
 /**
  * Create a new agent executor instance.
  */
-export function createAgentExecutor(options?: { debug?: boolean; db?: HiBossDatabase; hibossDir?: string }): AgentExecutor {
+export function createAgentExecutor(options?: {
+  debug?: boolean;
+  db?: HiBossDatabase;
+  hibossDir?: string;
+  onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
+}): AgentExecutor {
   return new AgentExecutor(options);
 }

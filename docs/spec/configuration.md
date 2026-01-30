@@ -212,6 +212,25 @@ Constraints:
 | `created_at` | TEXT | `datetime('now')` | ISO 8601 timestamp |
 | `metadata` | TEXT | `NULL` | JSON blob |
 
+### `cron_schedules` table
+
+Cron schedules are stored per agent and materialize as normal envelopes (see `docs/spec/cron.md`).
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `id` | TEXT | — | Primary key |
+| `agent_name` | TEXT | — | Owner agent (also the sender of materialized envelopes) |
+| `cron` | TEXT | — | Cron expression |
+| `timezone` | TEXT | `NULL` | IANA timezone; `NULL` means daemon local timezone |
+| `enabled` | INTEGER | `1` | `1` for enabled, `0` for disabled |
+| `to_address` | TEXT | — | Destination address (`agent:*` or `channel:*`) |
+| `content_text` | TEXT | `NULL` | Template message text |
+| `content_attachments` | TEXT | `NULL` | Template attachments (JSON array) |
+| `metadata` | TEXT | `NULL` | Template metadata (JSON blob; e.g., parse mode) |
+| `pending_envelope_id` | TEXT | `NULL` | Next scheduled envelope id (nullable) |
+| `created_at` | TEXT | `datetime('now')` | ISO 8601 timestamp |
+| `updated_at` | TEXT | `NULL` | ISO 8601 timestamp |
+
 ### `agent_runs` table
 
 | Column | Type | Default | Description |

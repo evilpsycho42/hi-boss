@@ -9,6 +9,7 @@ import { AgentExecutor, createAgentExecutor } from "../agent/executor.js";
 import type { Agent } from "../agent/types.js";
 import { getAgentDir, setupAgentHome } from "../agent/home-setup.js";
 import { EnvelopeScheduler } from "./scheduler/envelope-scheduler.js";
+import { CronScheduler } from "./scheduler/cron-scheduler.js";
 import type { RpcMethodRegistry } from "./ipc/types.js";
 import {
   RPC_ERRORS,
@@ -16,6 +17,12 @@ import {
   type EnvelopeListParams,
   type EnvelopeGetParams,
   type TurnPreviewParams,
+  type CronCreateParams,
+  type CronListParams,
+  type CronGetParams,
+  type CronEnableParams,
+  type CronDisableParams,
+  type CronDeleteParams,
   type AgentRegisterParams,
   type AgentBindParams,
   type AgentUnbindParams,
@@ -91,6 +98,7 @@ export class Daemon {
   private bridge: ChannelBridge;
   private executor: AgentExecutor;
   private scheduler: EnvelopeScheduler;
+  private cronScheduler: CronScheduler | null = null;
   private adapters: Map<string, ChatAdapter> = new Map(); // token -> adapter
   private running = false;
   private startTime: Date | null = null;
@@ -104,12 +112,21 @@ export class Daemon {
 
     this.db = new HiBossDatabase(dbPath);
     this.ipc = new IpcServer(socketPath);
-    this.router = new MessageRouter(this.db, { debug: config.debug });
+    this.router = new MessageRouter(this.db, {
+      debug: config.debug,
+      onEnvelopeDone: (envelope) => this.cronScheduler?.onEnvelopeDone(envelope),
+    });
     this.bridge = new ChannelBridge(this.router, this.db, config);
-    this.executor = createAgentExecutor({ debug: config.debug, db: this.db, hibossDir: config.dataDir });
+    this.executor = createAgentExecutor({
+      debug: config.debug,
+      db: this.db,
+      hibossDir: config.dataDir,
+      onEnvelopesDone: (envelopeIds) => this.cronScheduler?.onEnvelopesDone(envelopeIds),
+    });
     this.scheduler = new EnvelopeScheduler(this.db, this.router, this.executor, {
       debug: config.debug,
     });
+    this.cronScheduler = new CronScheduler(this.db, this.scheduler, { debug: config.debug });
 
     this.registerRpcMethods();
   }
@@ -178,6 +195,9 @@ export class Daemon {
       for (const adapter of this.adapters.values()) {
         await adapter.start();
       }
+
+      // Cron: skip missed runs before any startup delivery/turn triggers.
+      this.cronScheduler?.reconcileAllSchedules({ skipMisfires: true });
 
       // Start scheduler after adapters/handlers are ready
       this.scheduler.start();
@@ -504,6 +524,277 @@ export class Daemon {
       }
     };
 
+    const createCronCreate = (operation: string) => async (params: Record<string, unknown>) => {
+      const p = params as unknown as CronCreateParams;
+      const token = requireToken(p.token);
+      const principal = this.resolvePrincipal(token);
+      this.assertOperationAllowed(operation, principal);
+
+      if (principal.kind !== "agent") {
+        rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+      }
+
+      if (typeof p.cron !== "string" || !p.cron.trim()) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid cron");
+      }
+
+      if (typeof p.to !== "string" || !p.to.trim()) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to");
+      }
+
+      let destination: ReturnType<typeof parseAddress>;
+      try {
+        destination = parseAddress(p.to);
+      } catch (err) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, err instanceof Error ? err.message : "Invalid to");
+      }
+
+      const metadata: Record<string, unknown> = {};
+
+      if (p.parseMode !== undefined) {
+        if (typeof p.parseMode !== "string") {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid parse-mode");
+        }
+        const mode = p.parseMode.trim();
+        if (mode !== "plain" && mode !== "markdownv2" && mode !== "html") {
+          rpcError(
+            RPC_ERRORS.INVALID_PARAMS,
+            "Invalid parse-mode (expected plain, markdownv2, or html)"
+          );
+        }
+        if (destination.type !== "channel") {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "parse-mode is only supported for channel destinations");
+        }
+        metadata.parseMode = mode;
+      }
+
+      if (p.replyToMessageId !== undefined) {
+        if (typeof p.replyToMessageId !== "string" || !p.replyToMessageId.trim()) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid reply-to-message-id");
+        }
+        if (destination.type !== "channel") {
+          rpcError(
+            RPC_ERRORS.INVALID_PARAMS,
+            "reply-to-message-id is only supported for channel destinations"
+          );
+        }
+        metadata.replyToMessageId = p.replyToMessageId.trim();
+      }
+
+      // Check binding for channel destinations.
+      const agent = principal.agent;
+      this.db.updateAgentLastSeen(agent.name);
+      if (destination.type === "channel") {
+        const binding = this.db.getAgentBindingByType(agent.name, destination.adapter);
+        if (!binding) {
+          rpcError(
+            RPC_ERRORS.UNAUTHORIZED,
+            `Agent '${agent.name}' is not bound to adapter '${destination.adapter}'`
+          );
+        }
+      }
+
+      let timezone: string | undefined;
+      if (p.timezone !== undefined) {
+        if (typeof p.timezone !== "string") {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid timezone");
+        }
+        timezone = p.timezone.trim();
+      }
+
+      const finalMetadata = Object.keys(metadata).length > 0 ? metadata : undefined;
+      const cron = this.cronScheduler;
+      if (!cron) {
+        rpcError(RPC_ERRORS.INTERNAL_ERROR, "Cron scheduler not initialized");
+      }
+
+      try {
+        const { schedule } = cron.createSchedule({
+          agentName: agent.name,
+          cron: p.cron.trim(),
+          timezone,
+          to: p.to.trim(),
+          content: {
+            text: p.text,
+            attachments: p.attachments,
+          },
+          metadata: finalMetadata,
+        });
+        return { id: schedule.id };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message.includes("not bound to adapter")) {
+          rpcError(RPC_ERRORS.UNAUTHORIZED, message);
+        }
+        rpcError(RPC_ERRORS.INVALID_PARAMS, message);
+      }
+    };
+
+    const createCronList = (operation: string) => async (params: Record<string, unknown>) => {
+      const p = params as unknown as CronListParams;
+      const token = requireToken(p.token);
+      const principal = this.resolvePrincipal(token);
+      this.assertOperationAllowed(operation, principal);
+
+      if (principal.kind !== "agent") {
+        rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+      }
+
+      this.db.updateAgentLastSeen(principal.agent.name);
+      const cron = this.cronScheduler;
+      if (!cron) {
+        rpcError(RPC_ERRORS.INTERNAL_ERROR, "Cron scheduler not initialized");
+      }
+
+      return { schedules: cron.listSchedules(principal.agent.name) };
+    };
+
+    const createCronGet = (operation: string) => async (params: Record<string, unknown>) => {
+      const p = params as unknown as CronGetParams;
+      const token = requireToken(p.token);
+      const principal = this.resolvePrincipal(token);
+      this.assertOperationAllowed(operation, principal);
+
+      if (principal.kind !== "agent") {
+        rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+      }
+
+      if (typeof p.id !== "string" || !p.id.trim()) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid id");
+      }
+
+      this.db.updateAgentLastSeen(principal.agent.name);
+      const cron = this.cronScheduler;
+      if (!cron) {
+        rpcError(RPC_ERRORS.INTERNAL_ERROR, "Cron scheduler not initialized");
+      }
+
+      try {
+        const schedule = cron.getSchedule(principal.agent.name, p.id.trim());
+        return { schedule };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message === "Cron schedule not found") {
+          rpcError(RPC_ERRORS.NOT_FOUND, message);
+        }
+        if (message === "Access denied") {
+          rpcError(RPC_ERRORS.UNAUTHORIZED, message);
+        }
+        rpcError(RPC_ERRORS.INTERNAL_ERROR, message);
+      }
+    };
+
+    const createCronEnable = (operation: string) => async (params: Record<string, unknown>) => {
+      const p = params as unknown as CronEnableParams;
+      const token = requireToken(p.token);
+      const principal = this.resolvePrincipal(token);
+      this.assertOperationAllowed(operation, principal);
+
+      if (principal.kind !== "agent") {
+        rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+      }
+
+      if (typeof p.id !== "string" || !p.id.trim()) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid id");
+      }
+
+      this.db.updateAgentLastSeen(principal.agent.name);
+      const cron = this.cronScheduler;
+      if (!cron) {
+        rpcError(RPC_ERRORS.INTERNAL_ERROR, "Cron scheduler not initialized");
+      }
+
+      try {
+        cron.enableSchedule(principal.agent.name, p.id.trim());
+        return { success: true };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message === "Cron schedule not found") {
+          rpcError(RPC_ERRORS.NOT_FOUND, message);
+        }
+        if (message === "Access denied") {
+          rpcError(RPC_ERRORS.UNAUTHORIZED, message);
+        }
+        if (message.includes("not bound to adapter")) {
+          rpcError(RPC_ERRORS.UNAUTHORIZED, message);
+        }
+        rpcError(RPC_ERRORS.INVALID_PARAMS, message);
+      }
+    };
+
+    const createCronDisable = (operation: string) => async (params: Record<string, unknown>) => {
+      const p = params as unknown as CronDisableParams;
+      const token = requireToken(p.token);
+      const principal = this.resolvePrincipal(token);
+      this.assertOperationAllowed(operation, principal);
+
+      if (principal.kind !== "agent") {
+        rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+      }
+
+      if (typeof p.id !== "string" || !p.id.trim()) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid id");
+      }
+
+      this.db.updateAgentLastSeen(principal.agent.name);
+      const cron = this.cronScheduler;
+      if (!cron) {
+        rpcError(RPC_ERRORS.INTERNAL_ERROR, "Cron scheduler not initialized");
+      }
+
+      try {
+        cron.disableSchedule(principal.agent.name, p.id.trim());
+        return { success: true };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message === "Cron schedule not found") {
+          rpcError(RPC_ERRORS.NOT_FOUND, message);
+        }
+        if (message === "Access denied") {
+          rpcError(RPC_ERRORS.UNAUTHORIZED, message);
+        }
+        rpcError(RPC_ERRORS.INTERNAL_ERROR, message);
+      }
+    };
+
+    const createCronDelete = (operation: string) => async (params: Record<string, unknown>) => {
+      const p = params as unknown as CronDeleteParams;
+      const token = requireToken(p.token);
+      const principal = this.resolvePrincipal(token);
+      this.assertOperationAllowed(operation, principal);
+
+      if (principal.kind !== "agent") {
+        rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+      }
+
+      if (typeof p.id !== "string" || !p.id.trim()) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid id");
+      }
+
+      this.db.updateAgentLastSeen(principal.agent.name);
+      const cron = this.cronScheduler;
+      if (!cron) {
+        rpcError(RPC_ERRORS.INTERNAL_ERROR, "Cron scheduler not initialized");
+      }
+
+      try {
+        const deleted = cron.deleteSchedule(principal.agent.name, p.id.trim());
+        if (!deleted) {
+          rpcError(RPC_ERRORS.NOT_FOUND, "Cron schedule not found");
+        }
+        return { success: true };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        if (message === "Cron schedule not found") {
+          rpcError(RPC_ERRORS.NOT_FOUND, message);
+        }
+        if (message === "Access denied") {
+          rpcError(RPC_ERRORS.UNAUTHORIZED, message);
+        }
+        rpcError(RPC_ERRORS.INTERNAL_ERROR, message);
+      }
+    };
+
     const createReactionSet = (operation: string) => async (params: Record<string, unknown>) => {
       const p = params as unknown as ReactionSetParams;
       const token = requireToken(p.token);
@@ -668,6 +959,14 @@ export class Daemon {
       "envelope.get": createEnvelopeGet("envelope.get"),
       "turn.preview": createTurnPreview("turn.preview"),
       "reaction.set": createReactionSet("reaction.set"),
+
+      // Cron schedules
+      "cron.create": createCronCreate("cron.create"),
+      "cron.list": createCronList("cron.list"),
+      "cron.get": createCronGet("cron.get"),
+      "cron.enable": createCronEnable("cron.enable"),
+      "cron.disable": createCronDisable("cron.disable"),
+      "cron.delete": createCronDelete("cron.delete"),
 
       // Message methods (backwards-compatible aliases)
       "message.send": createEnvelopeSend("message.send"),
