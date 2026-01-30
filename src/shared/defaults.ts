@@ -89,6 +89,14 @@ export const DEFAULT_PERMISSION_POLICY: PermissionPolicyV1 = {
     // Reactions
     "reaction.set": "restricted",
 
+    // Cron schedules
+    "cron.create": "restricted",
+    "cron.list": "restricted",
+    "cron.get": "restricted",
+    "cron.enable": "restricted",
+    "cron.disable": "restricted",
+    "cron.delete": "restricted",
+
     // Daemon read-only
     "daemon.status": "boss",
     "daemon.ping": "standard",

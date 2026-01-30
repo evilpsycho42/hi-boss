@@ -47,6 +47,22 @@ CREATE TABLE IF NOT EXISTS envelopes (
   metadata TEXT
 );
 
+CREATE TABLE IF NOT EXISTS cron_schedules (
+  id TEXT PRIMARY KEY,
+  agent_name TEXT NOT NULL,   -- owner agent (sender)
+  cron TEXT NOT NULL,         -- cron expression
+  timezone TEXT,              -- IANA timezone (null means local)
+  enabled INTEGER DEFAULT 1,
+  to_address TEXT NOT NULL,
+  content_text TEXT,
+  content_attachments TEXT,
+  metadata TEXT,              -- JSON blob for envelope template metadata
+  pending_envelope_id TEXT,   -- envelope id for the next scheduled occurrence (nullable)
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT,
+  FOREIGN KEY (agent_name) REFERENCES agents(name) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS agent_bindings (
   id TEXT PRIMARY KEY,
   agent_name TEXT NOT NULL,    -- references agents(name)
@@ -71,6 +87,8 @@ CREATE TABLE IF NOT EXISTS agent_runs (
 CREATE INDEX IF NOT EXISTS idx_envelopes_to ON envelopes("to", status);
 CREATE INDEX IF NOT EXISTS idx_envelopes_from ON envelopes("from", created_at);
 CREATE INDEX IF NOT EXISTS idx_envelopes_status_deliver_at ON envelopes(status, deliver_at);
+CREATE INDEX IF NOT EXISTS idx_cron_schedules_agent ON cron_schedules(agent_name, enabled);
+CREATE INDEX IF NOT EXISTS idx_cron_schedules_pending_envelope ON cron_schedules(pending_envelope_id);
 CREATE INDEX IF NOT EXISTS idx_agents_token ON agents(token);
 CREATE INDEX IF NOT EXISTS idx_agent_bindings_agent ON agent_bindings(agent_name);
 CREATE INDEX IF NOT EXISTS idx_agent_bindings_adapter ON agent_bindings(adapter_type, adapter_token);

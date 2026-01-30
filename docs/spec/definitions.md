@@ -45,6 +45,12 @@ Table: `envelopes` (see `src/daemon/db/schema.ts`)
 | `hiboss envelope send` | `--to`, `--token`, `--text`, `--text-file`, `--attachment`, `--deliver-at`, `--from` (boss only), `--from-boss` (boss only), `--from-name` (boss only) |
 | `hiboss envelope list` | `--token`, `--address` (boss only), `--box`, `--status`, `-n/--limit` (`--n` is deprecated), `--as-turn` |
 | `hiboss envelope get` | `--id`, `--token` |
+| `hiboss cron create` | `--cron`, `--to`, `--timezone`, `--token`, `--text`, `--text-file`, `--attachment`, `--parse-mode`, `--reply-to` |
+| `hiboss cron list` | `--token` |
+| `hiboss cron get` | `--id`, `--token` |
+| `hiboss cron enable` | `--id`, `--token` |
+| `hiboss cron disable` | `--id`, `--token` |
+| `hiboss cron delete` | `--id`, `--token` |
 
 ### CLI Output (Envelope Instructions)
 
@@ -79,6 +85,39 @@ Table: `envelopes` (see `src/daemon/db/schema.ts`)
 
 `hiboss envelope send` prints:
 - `id: <envelope-id>`
+
+### CLI Output (Cron Schedules)
+
+`hiboss cron list` and `hiboss cron get` print parseable key-value output.
+
+**Common keys**
+- `cron-id:`
+- `cron:`
+- `timezone:` (`local` when not set)
+- `enabled:` (`true|false`)
+- `to:`
+- `next-deliver-at:` (local timezone offset or `(none)`)
+- `pending-envelope-id:` (or `(none)`)
+- `created-at:` (local timezone offset)
+- `updated-at:` (optional; local timezone offset)
+
+**Template keys** (only when present)
+- `parse-mode:`
+- `reply-to-message-id:`
+
+**Template sections**
+- `text:` followed by the template text (or `(none)`)
+- `attachments:` followed by a rendered list (only shown if present)
+
+`hiboss cron list` prints:
+- `no-crons: true` when empty
+
+`hiboss cron create` prints:
+- `cron-id: <cron-id>`
+
+`hiboss cron enable|disable|delete` print:
+- `success: true|false`
+- `cron-id: <cron-id>`
 
 ### Example: `hiboss envelope get` (group message)
 

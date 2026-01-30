@@ -2,6 +2,8 @@
 
 Hi-Boss supports scheduled delivery via `--deliver-at`. Scheduled envelopes are stored in SQLite and delivered when due.
 
+Cron schedules (`hiboss cron ...`) build on the same mechanism by materializing normal envelopes with `deliver-at` set to the next cron occurrence (see `docs/spec/cron.md`).
+
 Key files:
 
 - `src/shared/time.ts` — parses `--deliver-at` into a UTC timestamp
@@ -79,4 +81,3 @@ This means:
 
 - scheduled envelopes are processed in increasing `deliver-at` order
 - immediate envelopes (`deliver_at IS NULL`) are interleaved by `created_at`
-

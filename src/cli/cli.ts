@@ -6,6 +6,12 @@ import {
   sendEnvelope,
   listEnvelopes,
   getEnvelope,
+  createCron,
+  listCrons,
+  getCron,
+  enableCron,
+  disableCron,
+  deleteCron,
   setReaction,
   registerAgent,
   setAgent,
@@ -149,6 +155,87 @@ envelope
       id: options.id,
       token: options.token,
     });
+  });
+
+// Cron commands
+const cron = program.command("cron").description("Cron schedules (materialize scheduled envelopes)");
+
+cron
+  .command("create")
+  .description("Create a cron schedule")
+  .requiredOption(
+    "--cron <expr>",
+    "Cron expression (5-field or 6-field with seconds; supports @daily, @hourly, ...)"
+  )
+  .requiredOption(
+    "--to <address>",
+    "Destination address (agent:<name> or channel:<adapter>:<chat-id>)"
+  )
+  .option("--timezone <iana>", "IANA timezone (defaults to local; accepts 'local')")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .option("--text <text>", "Envelope text (use - to read from stdin)")
+  .option("--text-file <path>", "Read envelope text from file")
+  .option("--attachment <path>", "Attachment path (can be used multiple times)", collect, [])
+  .option("--parse-mode <mode>", "Telegram parse mode: plain, markdownv2, html")
+  .option("--reply-to <message-id>", "Reply to a channel message by platform message id")
+  .action((options) => {
+    createCron({
+      cron: options.cron,
+      timezone: options.timezone,
+      to: options.to,
+      token: options.token,
+      text: options.text,
+      textFile: options.textFile,
+      attachment: options.attachment,
+      parseMode: options.parseMode,
+      replyTo: options.replyTo,
+    });
+  });
+
+cron
+  .command("list")
+  .description("List cron schedules for this agent")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    listCrons({ token: options.token });
+  });
+
+cron
+  .command("get")
+  .description("Get a cron schedule by ID")
+  .requiredOption("--id <id>", "Cron schedule ID")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    getCron({ id: options.id, token: options.token });
+  });
+
+cron
+  .command("enable")
+  .description(
+    "Enable a cron schedule (cancels any pending instance and schedules the next one)"
+  )
+  .requiredOption("--id <id>", "Cron schedule ID")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    enableCron({ id: options.id, token: options.token });
+  });
+
+cron
+  .command("disable")
+  .description("Disable a cron schedule (cancels the pending instance)")
+  .requiredOption("--id <id>", "Cron schedule ID")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    disableCron({ id: options.id, token: options.token });
+  });
+
+cron
+  .command("delete")
+  .description("Delete a cron schedule (cancels the pending instance)")
+  .requiredOption("--id <id>", "Cron schedule ID")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    deleteCron({ id: options.id, token: options.token });
   });
 
 // Agent commands

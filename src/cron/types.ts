@@ -1,0 +1,34 @@
+import type { Address } from "../adapters/types.js";
+import type { EnvelopeAttachment, EnvelopeStatus } from "../envelope/types.js";
+
+export interface CronSchedule {
+  id: string;
+  agentName: string; // owner/sender agent
+  cron: string;
+  timezone?: string; // IANA timezone; missing means local
+  enabled: boolean;
+  to: Address;
+  content: {
+    text?: string;
+    attachments?: EnvelopeAttachment[];
+  };
+  metadata?: Record<string, unknown>;
+  pendingEnvelopeId?: string;
+  pendingEnvelopeStatus?: EnvelopeStatus;
+  nextDeliverAt?: string; // UTC ISO timestamp for the pending envelope (if any)
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface CreateCronScheduleInput {
+  agentName: string;
+  cron: string;
+  timezone?: string;
+  enabled?: boolean;
+  to: Address;
+  content: {
+    text?: string;
+    attachments?: EnvelopeAttachment[];
+  };
+  metadata?: Record<string, unknown>;
+}

@@ -1,4 +1,4 @@
-### Memory
+## Memory
 
 Hi-Boss uses a **file-based memory system** stored locally on disk:
 
@@ -18,7 +18,7 @@ How to use it:
 {% if memory.error %}
 memory-unavailable: {{ memory.error }}
 {% else %}
-#### Longterm Memory
+### Longterm Memory
 
 {{ memory.longtermFence }}text
 {% if memory.longterm %}
@@ -28,7 +28,7 @@ memory-unavailable: {{ memory.error }}
 {% endif %}
 {{ memory.longtermFence }}
 
-#### Short term memory
+### Short term memory
 
 {{ memory.shorttermFence }}text
 {% if memory.shortterm %}

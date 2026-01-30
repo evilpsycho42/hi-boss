@@ -43,6 +43,12 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | `hiboss envelope list` | List envelopes | Yes (agent/boss token) | restricted |
 | `hiboss envelope list --as-turn` | Render pending inbox as a turn preview | Yes (agent/boss token) | restricted |
 | `hiboss envelope get` | Get an envelope by id | Yes (agent/boss token) | restricted |
+| `hiboss cron create` | Create a cron schedule | Yes (agent token) | restricted |
+| `hiboss cron list` | List cron schedules | Yes (agent token) | restricted |
+| `hiboss cron get` | Get a cron schedule by id | Yes (agent token) | restricted |
+| `hiboss cron enable` | Enable a cron schedule | Yes (agent token) | restricted |
+| `hiboss cron disable` | Disable a cron schedule | Yes (agent token) | restricted |
+| `hiboss cron delete` | Delete a cron schedule | Yes (agent token) | restricted |
 | `hiboss reaction set` | Set a reaction on a channel message | Yes (agent token) | restricted |
 | `hiboss agent register` | Register a new agent | Yes (boss token) | boss |
 | `hiboss agent set` | Update agent settings and bindings | Yes (agent/boss token) | privileged |
@@ -169,6 +175,61 @@ Default permission:
 - `restricted`
 
 ---
+
+## Cron
+
+Cron schedules are stored per agent and **materialize standard envelopes** with `deliver-at` set to the next cron occurrence (see `docs/spec/cron.md`).
+
+### `hiboss cron create`
+
+Creates a cron schedule.
+
+Flags:
+- `--cron <expr>` (required; 5-field or 6-field with optional seconds; `@daily` etc supported)
+- `--to <address>` (required)
+- `--timezone <iana>` (optional; defaults to local; accepts `local`)
+- `--text <text>` or `--text -` (stdin) or `--text-file <path>`
+- `--attachment <path>` (repeatable)
+- `--reply-to <message-id>` (optional; channel destinations only)
+- `--parse-mode <mode>` (optional; channel destinations only; `plain|markdownv2|html`)
+
+Output (parseable):
+
+```
+cron-id: <cron-id>
+```
+
+Default permission:
+- `restricted`
+
+### `hiboss cron list`
+
+Lists cron schedules for the current agent.
+
+Empty output:
+
+```
+no-crons: true
+```
+
+Default permission:
+- `restricted`
+
+### `hiboss cron get`
+
+Gets a cron schedule by id.
+
+Default permission:
+- `restricted`
+
+### `hiboss cron enable` / `hiboss cron disable` / `hiboss cron delete`
+
+Parseable output:
+- `success: true|false`
+- `cron-id: <cron-id>`
+
+Default permission:
+- `restricted`
 
 ## Reactions
 
