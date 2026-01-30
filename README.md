@@ -22,16 +22,28 @@ hiboss envelope list --token <agent-token> --box inbox --status pending -n 10
 
 ## Memory
 
-Hi-Boss uses a **pure file-based memory system** per agent:
+Hi-Boss provides two persistence mechanisms: **semantic memory** and **internal space**.
 
-- Long-term: `~/.hiboss/agents/<agent-name>/memory/MEMORY.md`
-- Short-term (daily): `~/.hiboss/agents/<agent-name>/memory/daily/YYYY-MM-DD.md`
+### Semantic memory (vector search)
 
-On every new agent session, Hi-Boss auto-injects:
-- Long-term memory (truncated)
-- Latest 2 daily files (truncated)
+Semantic memory is stored in LanceDB at:
 
-You (or the agent) can edit these files directly.
+- `~/.hiboss/memory.lance/`
+
+Manage it via:
+
+- `hiboss memory add/search/list/categories/get/delete/delete-category/clear`
+- `hiboss memory setup --default` (download default embedding model)
+- `hiboss memory setup --model-path <absolute-path-to-gguf>`
+
+### Internal space (private files)
+
+Each agent has a private working directory that is added to the agent’s workspace:
+
+- `~/.hiboss/agents/<agent-name>/internal_space/`
+
+Special file:
+- `Note.md` — injected into the system prompt on new sessions (truncated).
 
 ## Docs
 

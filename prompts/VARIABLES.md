@@ -17,11 +17,9 @@ Notes:
 | `hiboss.tokenEnvVar` | string | Environment variable name for the agent token (`HIBOSS_TOKEN`) |
 | `hiboss.additionalContext` | string | Optional extra context appended by code (usually empty) |
 | `hiboss.files.boss` | string | Contents of `{{hiboss.dir}}/BOSS.md` (or empty) |
-| `memory.longterm` | string | Long-term memory snapshot from `{{hiboss.dir}}/agents/{{agent.name}}/memory/MEMORY.md` (or empty) |
-| `memory.longtermFence` | string | Markdown code fence delimiter for `memory.longterm` (e.g., ``` or ````) |
-| `memory.shortterm` | string | Short-term memory snapshot from the latest daily logs under `{{hiboss.dir}}/agents/{{agent.name}}/memory/daily/` (or empty) |
-| `memory.shorttermFence` | string | Markdown code fence delimiter for `memory.shortterm` (e.g., ``` or ````) |
-| `memory.error` | string | Memory snapshot error message (or empty) |
+| `internalSpace.note` | string | Snapshot of `{{hiboss.dir}}/agents/{{agent.name}}/internal_space/Note.md` (or empty) |
+| `internalSpace.noteFence` | string | Markdown code fence delimiter for `internalSpace.note` (e.g., ``` or ````) |
+| `internalSpace.error` | string | Internal space snapshot error message (or empty) |
 | `boss.name` | string | Boss name (how agent should address the user, or empty) |
 | `boss.adapterIds` | object | Boss identity per adapter type (e.g. `{ telegram: "@kevin" }`, or `{}`) |
 | `agent.name` | string | Agent name |

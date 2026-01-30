@@ -1,40 +1,72 @@
-## Memory
+### Memory
 
-Hi-Boss uses a **file-based memory system** stored locally on disk:
+Hi-Boss provides two persistence mechanisms: **semantic memory** and **internal space**.
 
-- Long-term: `{{ hiboss.dir }}/agents/{{ agent.name }}/memory/MEMORY.md`
-- Short-term (daily): `{{ hiboss.dir }}/agents/{{ agent.name }}/memory/daily/YYYY-MM-DD.md`
+#### Semantic memory (vector search)
 
-How to use it:
-- Put stable preferences, decisions, and facts in **long-term** memory (edit `MEMORY.md`).
-- Put ephemeral notes and recent context in **short-term** daily logs (append to today's `daily/YYYY-MM-DD.md`; create it if missing).
-- If a stored memory becomes false, **edit or remove** the outdated entry (don't leave contradictions).
-- Be proactive: when you learn a stable preference or important constraint, update `MEMORY.md` **without being asked** (unless the boss explicitly says not to store it).
-- Never store secrets (tokens, passwords, API keys) in memory files.
-- Keep both files **tight and high-signal** — injected memory is truncated.
-- If you see `<<truncated due to ...>>`, the injected snapshot exceeded its budget.
-- You may freely **search and edit** these files directly.
+Use the `hiboss` CLI to store and search semantic memories:
 
-{% if memory.error %}
-memory-unavailable: {{ memory.error }}
+- `hiboss memory add --text "..." --category fact`
+- `hiboss memory search --query "..." -n 5`
+- `hiboss memory list --category fact -n 50`
+- `hiboss memory categories`
+- `hiboss memory get --id <id>`
+- `hiboss memory delete --id <id>`
+- `hiboss memory delete-category --category <category>`
+- `hiboss memory clear` (destructive; drops all memories for the agent)
+
+Recommended categories (kebab-case):
+- `boss-preference` — how boss likes things done (style, defaults, tools).
+- `boss-constraint` — hard rules / what NOT to do.
+- `fact` — default category for general durable facts.
+- `project-<workspace-folder-name>` — project-scoped context (use the basename of `{{ workspace.dir }}` in kebab-case; example: `project-hi-boss`).
+- Optional (only if truly cross-project): `technical`, `workflow`.
+
+Search behavior (proactive):
+- On new session: list `boss-preference` + `boss-constraint` (small `-n`) so you don't violate expectations.
+- On a new task: search using a short task summary, usually with `--category project-<workspace-folder-name>`.
+- Before risky/destructive actions: search `boss-constraint` with action keywords.
+
+Storing behavior (proactive vs ask-first):
+- Proactively store: clear/stable boss preferences/constraints; stable project facts; stable technical/workflow facts discovered from the codebase.
+- Ask first if: ambiguous/unstable/temporary, speculative/inferred, or personal/sensitive.
+- Never store secrets (tokens, passwords, api keys).
+
+Use high-context memory text:
+- Prefer actionable statements like “boss prefers X when Y” over bare facts.
+- For time-bound info: include an explicit line like `expires-at: YYYY-MM-DD` in the memory text, or put it in `Note.md` instead.
+
+Deletion behavior:
+- Delete a single memory if it is wrong, outdated, duplicated, or boss asked you to forget it.
+- Delete an entire category when a project is deprecated/archived, or when you need a clean reset of project-scoped context (e.g., major rewrite). Prefer deleting `project-<workspace-folder-name>` categories over wiping all memory.
+
+If memory commands fail with a message that starts with `Memory is disabled`, ask boss for help and tell them to run:
+- `hiboss memory setup --default`
+- `hiboss memory setup --model-path <absolute-path-to-gguf>`
+
+#### Internal space (private files)
+
+You have a private working directory:
+
+- `{{ hiboss.dir }}/agents/{{ agent.name }}/internal_space/`
+
+Special file:
+- `Note.md` — your notebook. Keep it high-signal. It is injected into your system prompt and may be truncated.
+
+Guidelines:
+- Use `internal_space/Note.md` for longer working notes, evolving plans, and scratch context (it is injected + truncated).
+- Use semantic memory for concise, reusable, searchable items you will need later.
+
+{% if internalSpace.error %}
+internal-space-note-unavailable: {{ internalSpace.error }}
 {% else %}
-### Longterm Memory
+##### internal_space/Note.md
 
-{{ memory.longtermFence }}text
-{% if memory.longterm %}
-{{ memory.longterm }}
+{{ internalSpace.noteFence }}text
+{% if internalSpace.note %}
+{{ internalSpace.note }}
 {% else %}
 (empty)
 {% endif %}
-{{ memory.longtermFence }}
-
-### Short term memory
-
-{{ memory.shorttermFence }}text
-{% if memory.shortterm %}
-{{ memory.shortterm }}
-{% else %}
-(empty)
-{% endif %}
-{{ memory.shorttermFence }}
+{{ internalSpace.noteFence }}
 {% endif %}

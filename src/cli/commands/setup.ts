@@ -7,6 +7,7 @@ import { HiBossDatabase } from "../../daemon/db/database.js";
 import { setupAgentHome } from "../../agent/home-setup.js";
 import type { SetupCheckResult, SetupExecuteResult } from "../../daemon/ipc/types.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../shared/validation.js";
+import { resolveAndValidateMemoryModel, type MemoryModelMode, type ResolvedMemoryModelConfig } from "../memory-model.js";
 import { parseDailyResetAt, parseDurationToMs } from "../../shared/session-policy.js";
 import {
   DEFAULT_AGENT_PERMISSION_LEVEL,
@@ -55,6 +56,8 @@ interface SetupConfig {
     adapterBossId: string;
   };
   bossToken: string;
+  memory?: ResolvedMemoryModelConfig;
+  memorySelection?: { mode: MemoryModelMode; modelPath?: string };
 }
 
 interface SetupConfigFileV1 {
@@ -62,6 +65,10 @@ interface SetupConfigFileV1 {
   "boss-name"?: string;
   "boss-token": string;
   provider?: "claude" | "codex";
+  memory?: {
+    mode?: "default" | "local";
+    "model-path"?: string;
+  };
   agent: {
     name?: string;
     description?: string;
@@ -256,7 +263,30 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
     bossToken,
   };
 
+  const memoryRaw = (parsed as Record<string, unknown>).memory;
+  if (isPlainObject(memoryRaw)) {
+    const modeRaw = memoryRaw.mode;
+    const mode: MemoryModelMode =
+      modeRaw === "local" || modeRaw === "default" ? modeRaw : "default";
+    const modelPathRaw = memoryRaw["model-path"];
+    const modelPath = typeof modelPathRaw === "string" && modelPathRaw.trim() ? modelPathRaw.trim() : undefined;
+    config.memorySelection = { mode, modelPath };
+  }
+
   return config;
+}
+
+function normalizeMemoryConfig(config: SetupConfig): ResolvedMemoryModelConfig {
+  return (
+    config.memory ?? {
+      enabled: false,
+      mode: "default",
+      modelPath: "",
+      modelUri: "",
+      dims: 0,
+      lastError: "Memory model is not configured",
+    }
+  );
 }
 
 /**
@@ -289,6 +319,8 @@ async function checkSetupStatus(): Promise<boolean> {
  * Execute setup (tries IPC first, falls back to direct DB).
  */
 async function executeSetup(config: SetupConfig): Promise<string> {
+  const memory = normalizeMemoryConfig(config);
+
   // Try IPC first (daemon running)
   try {
     const client = new IpcClient(getSocketPath());
@@ -298,6 +330,7 @@ async function executeSetup(config: SetupConfig): Promise<string> {
       agent: config.agent,
       bossToken: config.bossToken,
       adapter: config.adapter,
+      memory,
     });
     return result.agentToken;
   } catch (err) {
@@ -308,6 +341,15 @@ async function executeSetup(config: SetupConfig): Promise<string> {
     // Daemon not running, execute directly on database
     return executeSetupDirect(config);
   }
+}
+
+function writeMemoryConfigToDb(db: HiBossDatabase, memory: ResolvedMemoryModelConfig): void {
+  db.setConfig("memory_enabled", memory.enabled ? "true" : "false");
+  db.setConfig("memory_model_source", memory.mode);
+  db.setConfig("memory_model_uri", memory.modelUri ?? "");
+  db.setConfig("memory_model_path", memory.modelPath ?? "");
+  db.setConfig("memory_model_dims", String(memory.dims ?? 0));
+  db.setConfig("memory_model_last_error", memory.lastError ?? "");
 }
 
 /**
@@ -327,12 +369,16 @@ async function executeSetupDirect(config: SetupConfig): Promise<string> {
     // Setup agent home directories
     await setupAgentHome(config.agent.name, daemonConfig.dataDir);
 
+    const memory = normalizeMemoryConfig(config);
+
     const result = db.runInTransaction(() => {
       // Set boss name
       db.setBossName(config.bossName);
 
       // Set default provider
       db.setDefaultProvider(config.provider);
+
+      writeMemoryConfigToDb(db, memory);
 
       // Create the first agent
       const agentResult = db.registerAgent({
@@ -504,6 +550,45 @@ export async function runInteractiveSetup(): Promise<void> {
     default: DEFAULT_AGENT_PERMISSION_LEVEL,
   });
 
+  // Semantic memory model selection (downloads/validates best-effort; setup still completes if it fails).
+  console.log("\n🧠 Semantic Memory\n");
+  console.log("Hi-Boss can store semantic memories locally for agents (vector search).\n");
+
+  const daemonConfig = getDefaultConfig();
+  const memoryMode = await select<MemoryModelMode>({
+    message: "Choose an embedding model source:",
+    choices: [
+      { value: "default", name: "Download default model (Qwen3-Embedding-0.6B GGUF)" },
+      { value: "local", name: "Use a local GGUF file (absolute path)" },
+    ],
+  });
+
+  let memory: ResolvedMemoryModelConfig;
+  if (memoryMode === "default") {
+    console.log("\nDownloading and validating the default embedding model...\n");
+    memory = await resolveAndValidateMemoryModel({
+      hibossDir: daemonConfig.dataDir,
+      mode: "default",
+    });
+  } else {
+    const modelPath = (await input({
+      message: "Absolute path to GGUF model file:",
+      validate: (value) => {
+        const trimmed = value.trim();
+        if (!trimmed) return "Model path is required";
+        if (!path.isAbsolute(trimmed)) return "Please provide an absolute path";
+        return true;
+      },
+    })).trim();
+
+    console.log("\nValidating local embedding model...\n");
+    memory = await resolveAndValidateMemoryModel({
+      hibossDir: daemonConfig.dataDir,
+      mode: "local",
+      modelPath,
+    });
+  }
+
   const sessionDailyResetAt = (await input({
     message: "Session daily reset at (HH:MM) (optional):",
     default: "",
@@ -655,6 +740,7 @@ export async function runInteractiveSetup(): Promise<void> {
     },
     adapter,
     bossToken,
+    memory,
   };
 
   try {
@@ -665,6 +751,13 @@ export async function runInteractiveSetup(): Promise<void> {
     console.log(`   agent-name:  ${agentName}`);
     console.log(`   agent-token: ${agentToken}`);
     console.log(`   boss-token:  ${bossToken}`);
+    console.log(`   memory-enabled: ${memory.enabled ? "true" : "false"}`);
+    if (memory.enabled) {
+      console.log(`   memory-model-path: ${memory.modelPath}`);
+      console.log(`   memory-model-dims: ${memory.dims}`);
+    } else if (memory.lastError) {
+      console.log(`   memory-last-error: ${memory.lastError}`);
+    }
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("\n⚠️  Save these tokens! They won't be shown again.\n");
     console.log("📱 Telegram bot is configured. Start the daemon with:");
@@ -713,6 +806,16 @@ export async function runDefaultSetup(options: DefaultSetupOptions): Promise<voi
     process.exit(1);
   }
 
+  // Resolve semantic memory model from config file (best-effort; setup still completes if it fails).
+  const daemonConfig = getDefaultConfig();
+  const sel = config.memorySelection ?? { mode: "default" as const };
+  config.memory = await resolveAndValidateMemoryModel({
+    hibossDir: daemonConfig.dataDir,
+    mode: sel.mode,
+    modelPath: sel.modelPath,
+  });
+  const memory = normalizeMemoryConfig(config);
+
   try {
     const agentToken = await executeSetup(config);
 
@@ -724,6 +827,7 @@ export async function runDefaultSetup(options: DefaultSetupOptions): Promise<voi
     console.log(`   boss-token:  ${config.bossToken}`);
     console.log(`   provider:    ${config.provider}`);
     console.log(`   model:       ${config.agent.model ?? DEFAULT_SETUP_MODEL_BY_PROVIDER[config.provider]}`);
+    console.log(`   memory-enabled: ${memory.enabled ? "true" : "false"}`);
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("\n⚠️  Save the agent token and boss token! They won't be shown again.\n");
 

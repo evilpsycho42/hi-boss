@@ -10,6 +10,7 @@ export const DEFAULT_SOCKET_FILENAME = "daemon.sock";
 export const DEFAULT_PID_FILENAME = "daemon.pid";
 export const DEFAULT_MEDIA_DIRNAME = "media";
 export const DEFAULT_AGENTS_DIRNAME = "agents";
+export const DEFAULT_MODELS_DIRNAME = "models";
 
 export function getDefaultHiBossDir(): string {
   return path.join(os.homedir(), DEFAULT_HIBOSS_DIRNAME);
@@ -19,6 +20,10 @@ export function getDefaultMediaDir(): string {
   return path.join(getDefaultHiBossDir(), DEFAULT_MEDIA_DIRNAME);
 }
 
+export function getDefaultModelsDir(): string {
+  return path.join(getDefaultHiBossDir(), DEFAULT_MODELS_DIRNAME);
+}
+
 // ==================== Memory Defaults ====================
 
 export const DEFAULT_MEMORY_TOTAL_MAX_CHARS = 20_000 as const;
@@ -26,6 +31,11 @@ export const DEFAULT_MEMORY_LONGTERM_MAX_CHARS = 12_000 as const;
 export const DEFAULT_MEMORY_SHORTTERM_MAX_CHARS = 8_000 as const;
 export const DEFAULT_MEMORY_SHORTTERM_PER_DAY_MAX_CHARS = 4_000 as const;
 export const DEFAULT_MEMORY_SHORTTERM_DAYS = 2 as const;
+
+export const DEFAULT_INTERNAL_SPACE_NOTE_MAX_CHARS = 12_000 as const;
+
+export const DEFAULT_MEMORY_MODEL_URL =
+  "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf?download=true" as const;
 
 // ==================== Agent Defaults ====================
 
@@ -96,6 +106,17 @@ export const DEFAULT_PERMISSION_POLICY: PermissionPolicyV1 = {
     "cron.enable": "restricted",
     "cron.disable": "restricted",
     "cron.delete": "restricted",
+
+    // Semantic memory
+    "memory.add": "restricted",
+    "memory.search": "restricted",
+    "memory.list": "restricted",
+    "memory.categories": "restricted",
+    "memory.delete-category": "restricted",
+    "memory.get": "restricted",
+    "memory.delete": "restricted",
+    "memory.clear": "standard",
+    "memory.setup": "privileged",
 
     // Daemon read-only
     "daemon.status": "boss",

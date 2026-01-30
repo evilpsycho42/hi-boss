@@ -18,6 +18,15 @@ import {
   listAgents,
   runBackground,
   runSetup,
+  memoryAdd,
+  memorySearch,
+  memoryList,
+  memoryCategories,
+  memoryGet,
+  memoryDelete,
+  memoryDeleteCategory,
+  memoryClear,
+  memorySetup,
 } from "./commands/index.js";
 import { DEFAULT_ENVELOPE_LIST_BOX } from "../shared/defaults.js";
 
@@ -236,6 +245,139 @@ cron
   .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .action((options) => {
     deleteCron({ id: options.id, token: options.token });
+  });
+
+// Memory commands
+const memory = program.command("memory").description("Semantic memory operations");
+
+memory
+  .command("add")
+  .description("Add a memory")
+  .requiredOption("--text <text>", "Memory text")
+  .option("--category <category>", "Memory category")
+  .option("--agent-name <name>", "Target agent name (boss token only)")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    memoryAdd({
+      token: options.token,
+      agentName: options.agentName,
+      text: options.text,
+      category: options.category,
+    });
+  });
+
+memory
+  .command("search")
+  .description("Search memories by semantic similarity")
+  .requiredOption("--query <query>", "Search query")
+  .option("--category <category>", "Filter by category")
+  .option("-n, --limit <n>", "Maximum number of results", parseInt)
+  .option("--agent-name <name>", "Target agent name (boss token only)")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    memorySearch({
+      token: options.token,
+      agentName: options.agentName,
+      query: options.query,
+      category: options.category,
+      limit: options.limit,
+    });
+  });
+
+memory
+  .command("list")
+  .description("List stored memories")
+  .option("--category <category>", "Filter by category")
+  .option("-n, --limit <n>", "Maximum number of results", parseInt)
+  .option("--agent-name <name>", "Target agent name (boss token only)")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    memoryList({
+      token: options.token,
+      agentName: options.agentName,
+      category: options.category,
+      limit: options.limit,
+    });
+  });
+
+memory
+  .command("categories")
+  .description("List known memory categories")
+  .option("--agent-name <name>", "Target agent name (boss token only)")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    memoryCategories({
+      token: options.token,
+      agentName: options.agentName,
+    });
+  });
+
+memory
+  .command("get")
+  .description("Get a memory by ID")
+  .requiredOption("--id <id>", "Memory ID")
+  .option("--agent-name <name>", "Target agent name (boss token only)")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    memoryGet({
+      token: options.token,
+      agentName: options.agentName,
+      id: options.id,
+    });
+  });
+
+memory
+  .command("delete")
+  .description("Delete a memory by ID")
+  .requiredOption("--id <id>", "Memory ID")
+  .option("--agent-name <name>", "Target agent name (boss token only)")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    memoryDelete({
+      token: options.token,
+      agentName: options.agentName,
+      id: options.id,
+    });
+  });
+
+memory
+  .command("delete-category")
+  .description("Delete all memories in a category")
+  .requiredOption("--category <category>", "Memory category")
+  .option("--agent-name <name>", "Target agent name (boss token only)")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    memoryDeleteCategory({
+      token: options.token,
+      agentName: options.agentName,
+      category: options.category,
+    });
+  });
+
+memory
+  .command("clear")
+  .description("Clear all memories for an agent (drops the table)")
+  .option("--agent-name <name>", "Target agent name (boss token only)")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    memoryClear({
+      token: options.token,
+      agentName: options.agentName,
+    });
+  });
+
+memory
+  .command("setup")
+  .description("Configure the semantic memory embedding model")
+  .option("--default", "Download and use the default model")
+  .option("--model-path <path>", "Use a local GGUF model file")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    memorySetup({
+      token: options.token,
+      default: options.default,
+      modelPath: options.modelPath,
+    });
   });
 
 // Agent commands

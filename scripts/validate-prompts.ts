@@ -102,8 +102,8 @@ function validateSystemPrompt(): void {
   assert.ok(out.includes("## Your Identity"), "system prompt should include identity section");
   assert.ok(out.includes("- Name: nex"), "system prompt should include agent name");
   assert.ok(out.includes("You are a personal assistant"), "system prompt should include identity line");
-  assert.ok(out.includes("## Tools"), "system prompt should include tools section");
-  assert.ok(out.includes("## Memory"), "system prompt should include memory section");
+  assert.ok(out.includes("### CLI Tools"), "system prompt should include tools section");
+  assert.ok(out.includes("### Memory"), "system prompt should include memory section");
   assert.ok(out.includes("Be concise."), "system prompt should include SOUL.md content");
   assert.ok(out.includes("- Name: Kevin"), "system prompt should include BOSS.md content");
   assert.ok(out.includes("## Additional Context"), "system prompt should include additional context section");

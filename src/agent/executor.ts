@@ -15,7 +15,7 @@ import {
 } from "@unified-agent-sdk/runtime";
 import type { Agent } from "./types.js";
 import type { HiBossDatabase } from "../daemon/db/database.js";
-import { getAgentHomePath, getAgentMemoryDir, getHiBossDir } from "./home-setup.js";
+import { getAgentHomePath, getAgentInternalSpaceDir, getHiBossDir } from "./home-setup.js";
 import {
   generateSystemInstructions,
   writeInstructionFiles,
@@ -432,7 +432,7 @@ export class AgentExecutor {
       const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
       const homePath = getAgentHomePath(agent.name, provider, this.hibossDir);
       const workspace = agent.workspace ?? process.cwd();
-      const memoryDir = getAgentMemoryDir(agent.name, this.hibossDir);
+      const internalSpaceDir = getAgentInternalSpaceDir(agent.name, this.hibossDir);
 
       // Generate and write instruction files for new session
       const bindings = db.getBindingsByAgentName(agent.name);
@@ -448,7 +448,7 @@ export class AgentExecutor {
 
       // Create runtime with provider-specific configuration
       const defaultOpts = {
-        workspace: { cwd: workspace, additionalDirs: [memoryDir] },
+        workspace: { cwd: workspace, additionalDirs: [internalSpaceDir] },
         access: { auto: this.mapAccessLevel(agent.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL) },
         model: agent.model,
         reasoningEffort: agent.reasoningEffort ?? DEFAULT_AGENT_REASONING_EFFORT,

@@ -246,11 +246,9 @@ export function buildSystemPromptContext(params: {
         boss: hibossFiles.boss ?? "",
       },
     },
-    memory: {
-      longterm: "",
-      longtermFence: "```",
-      shortterm: "",
-      shorttermFence: "```",
+    internalSpace: {
+      note: "",
+      noteFence: "```",
       error: "",
     },
     boss: {

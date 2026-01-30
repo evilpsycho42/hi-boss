@@ -10,6 +10,7 @@ import type { Agent } from "../agent/types.js";
 import { getAgentDir, setupAgentHome } from "../agent/home-setup.js";
 import { EnvelopeScheduler } from "./scheduler/envelope-scheduler.js";
 import { CronScheduler } from "./scheduler/cron-scheduler.js";
+import { MemoryService } from "./memory/index.js";
 import type { RpcMethodRegistry } from "./ipc/types.js";
 import {
   RPC_ERRORS,
@@ -33,6 +34,24 @@ import {
   type SetupExecuteParams,
   type BossVerifyParams,
   type ReactionSetParams,
+  type MemoryAddParams,
+  type MemoryAddResult,
+  type MemorySearchParams,
+  type MemorySearchResult,
+  type MemoryListParams,
+  type MemoryListResult,
+  type MemoryCategoriesParams,
+  type MemoryCategoriesResult,
+  type MemoryDeleteCategoryParams,
+  type MemoryDeleteCategoryResult,
+  type MemoryGetParams,
+  type MemoryGetResult,
+  type MemoryDeleteParams,
+  type MemoryDeleteResult,
+  type MemoryClearParams,
+  type MemoryClearResult,
+  type MemorySetupParams,
+  type MemorySetupResult,
 } from "./ipc/types.js";
 import type { ChatAdapter } from "../adapters/types.js";
 import { formatAgentAddress, parseAddress } from "../adapters/types.js";
@@ -99,6 +118,7 @@ export class Daemon {
   private executor: AgentExecutor;
   private scheduler: EnvelopeScheduler;
   private cronScheduler: CronScheduler | null = null;
+  private memoryService: MemoryService | null = null;
   private adapters: Map<string, ChatAdapter> = new Map(); // token -> adapter
   private running = false;
   private startTime: Date | null = null;
@@ -161,6 +181,84 @@ export class Daemon {
     if (!isAtLeastPermissionLevel(principal.level, required)) {
       rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
     }
+  }
+
+  private getMemoryDisabledMessage(): string {
+    const lastError = (this.db.getConfig("memory_model_last_error") ?? "").trim();
+    const suffix = lastError ? `: ${lastError}` : "";
+    return `Memory is disabled${suffix}. Ask boss for help. Fix with: hiboss memory setup --default OR hiboss memory setup --model-path <path>`;
+  }
+
+  private writeMemoryConfigToDb(memory: {
+    enabled: boolean;
+    mode: "default" | "local";
+    modelPath: string;
+    modelUri: string;
+    dims: number;
+    lastError: string;
+  }): void {
+    this.db.setConfig("memory_enabled", memory.enabled ? "true" : "false");
+    this.db.setConfig("memory_model_source", memory.mode);
+    this.db.setConfig("memory_model_uri", memory.modelUri ?? "");
+    this.db.setConfig("memory_model_path", memory.modelPath ?? "");
+    this.db.setConfig("memory_model_dims", String(memory.dims ?? 0));
+    this.db.setConfig("memory_model_last_error", memory.lastError ?? "");
+  }
+
+  private disableMemoryWithError(message: string): void {
+    this.db.setConfig("memory_enabled", "false");
+    this.db.setConfig("memory_model_last_error", message);
+    this.db.setConfig("memory_model_dims", "0");
+  }
+
+  private async ensureMemoryService(): Promise<MemoryService> {
+    if (this.memoryService) return this.memoryService;
+
+    const enabled = this.db.getConfig("memory_enabled") === "true";
+    if (!enabled) {
+      rpcError(RPC_ERRORS.INTERNAL_ERROR, this.getMemoryDisabledMessage());
+    }
+
+    const modelPath = (this.db.getConfig("memory_model_path") ?? "").trim();
+    if (!modelPath) {
+      this.disableMemoryWithError("Missing memory model path");
+      rpcError(RPC_ERRORS.INTERNAL_ERROR, this.getMemoryDisabledMessage());
+    }
+
+    try {
+      this.memoryService = await MemoryService.create({
+        dataDir: this.config.dataDir,
+        modelPath,
+      });
+      return this.memoryService;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.disableMemoryWithError(message);
+      rpcError(RPC_ERRORS.INTERNAL_ERROR, this.getMemoryDisabledMessage());
+    }
+  }
+
+  private resolveAgentNameForMemory(
+    principal: { kind: "boss"; level: "boss" } | { kind: "agent"; level: PermissionLevel; agent: Agent },
+    requestedAgentName?: string
+  ): string {
+    if (principal.kind === "boss") {
+      if (typeof requestedAgentName !== "string" || !requestedAgentName.trim()) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Boss token requires agentName");
+      }
+      const agent = this.db.getAgentByNameCaseInsensitive(requestedAgentName.trim());
+      if (!agent) {
+        rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
+      }
+      return agent.name;
+    }
+
+    if (requestedAgentName !== undefined && requestedAgentName !== principal.agent.name) {
+      rpcError(RPC_ERRORS.UNAUTHORIZED, "Cannot access other agent's memory");
+    }
+
+    this.db.updateAgentLastSeen(principal.agent.name);
+    return principal.agent.name;
   }
 
   /**
@@ -353,6 +451,10 @@ export class Daemon {
 
     // Stop IPC server
     await this.ipc.stop();
+
+    // Close semantic memory service
+    await this.memoryService?.close().catch(() => undefined);
+    this.memoryService = null;
 
     // Close database
     this.db.close();
@@ -967,6 +1069,231 @@ export class Daemon {
       "cron.enable": createCronEnable("cron.enable"),
       "cron.disable": createCronDisable("cron.disable"),
       "cron.delete": createCronDelete("cron.delete"),
+
+      // Semantic memory methods
+      "memory.add": async (params) => {
+        const p = params as unknown as MemoryAddParams;
+        const token = requireToken(p.token);
+        const principal = this.resolvePrincipal(token);
+        this.assertOperationAllowed("memory.add", principal);
+
+        if (typeof p.text !== "string" || !p.text.trim()) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid text");
+        }
+        if (p.category !== undefined && typeof p.category !== "string") {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid category");
+        }
+
+        const agentName = this.resolveAgentNameForMemory(principal, p.agentName);
+        const memory = await this.ensureMemoryService();
+        const id = await memory.add(agentName, p.text, { category: p.category });
+        const result: MemoryAddResult = { id };
+        return result;
+      },
+
+      "memory.search": async (params) => {
+        const p = params as unknown as MemorySearchParams;
+        const token = requireToken(p.token);
+        const principal = this.resolvePrincipal(token);
+        this.assertOperationAllowed("memory.search", principal);
+
+        if (typeof p.query !== "string" || !p.query.trim()) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid query");
+        }
+        if (p.category !== undefined && typeof p.category !== "string") {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid category");
+        }
+
+        let limit = 5;
+        if (p.limit !== undefined) {
+          if (typeof p.limit !== "number" || !Number.isFinite(p.limit)) {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid limit");
+          }
+          if (p.limit <= 0) {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid limit (must be > 0)");
+          }
+          limit = Math.trunc(p.limit);
+        }
+
+        const agentName = this.resolveAgentNameForMemory(principal, p.agentName);
+        const memory = await this.ensureMemoryService();
+        const memories = await memory.search(agentName, p.query, { category: p.category, limit });
+        const result: MemorySearchResult = { memories };
+        return result;
+      },
+
+      "memory.list": async (params) => {
+        const p = params as unknown as MemoryListParams;
+        const token = requireToken(p.token);
+        const principal = this.resolvePrincipal(token);
+        this.assertOperationAllowed("memory.list", principal);
+
+        if (p.category !== undefined && typeof p.category !== "string") {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid category");
+        }
+
+        let limit = 100;
+        if (p.limit !== undefined) {
+          if (typeof p.limit !== "number" || !Number.isFinite(p.limit)) {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid limit");
+          }
+          if (p.limit <= 0) {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid limit (must be > 0)");
+          }
+          limit = Math.trunc(p.limit);
+        }
+
+        const agentName = this.resolveAgentNameForMemory(principal, p.agentName);
+        const memory = await this.ensureMemoryService();
+        const memories = await memory.list(agentName, { category: p.category, limit });
+        const result: MemoryListResult = { memories };
+        return result;
+      },
+
+      "memory.categories": async (params) => {
+        const p = params as unknown as MemoryCategoriesParams;
+        const token = requireToken(p.token);
+        const principal = this.resolvePrincipal(token);
+        this.assertOperationAllowed("memory.categories", principal);
+
+        const agentName = this.resolveAgentNameForMemory(principal, p.agentName);
+        const memory = await this.ensureMemoryService();
+        const categories = await memory.categories(agentName);
+        const result: MemoryCategoriesResult = { categories };
+        return result;
+      },
+
+      "memory.delete-category": async (params) => {
+        const p = params as unknown as MemoryDeleteCategoryParams;
+        const token = requireToken(p.token);
+        const principal = this.resolvePrincipal(token);
+        this.assertOperationAllowed("memory.delete-category", principal);
+
+        if (typeof p.category !== "string" || !p.category.trim()) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid category");
+        }
+
+        const agentName = this.resolveAgentNameForMemory(principal, p.agentName);
+        const memory = await this.ensureMemoryService();
+        const deleted = await memory.deleteCategory(agentName, p.category);
+        const result: MemoryDeleteCategoryResult = { ok: true, deleted };
+        return result;
+      },
+
+      "memory.get": async (params) => {
+        const p = params as unknown as MemoryGetParams;
+        const token = requireToken(p.token);
+        const principal = this.resolvePrincipal(token);
+        this.assertOperationAllowed("memory.get", principal);
+
+        if (typeof p.id !== "string" || !p.id.trim()) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid id");
+        }
+
+        const agentName = this.resolveAgentNameForMemory(principal, p.agentName);
+        const memory = await this.ensureMemoryService();
+        const result: MemoryGetResult = { memory: await memory.get(agentName, p.id) };
+        return result;
+      },
+
+      "memory.delete": async (params) => {
+        const p = params as unknown as MemoryDeleteParams;
+        const token = requireToken(p.token);
+        const principal = this.resolvePrincipal(token);
+        this.assertOperationAllowed("memory.delete", principal);
+
+        if (typeof p.id !== "string" || !p.id.trim()) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid id");
+        }
+
+        const agentName = this.resolveAgentNameForMemory(principal, p.agentName);
+        const memory = await this.ensureMemoryService();
+        await memory.delete(agentName, p.id);
+        const result: MemoryDeleteResult = { ok: true };
+        return result;
+      },
+
+      "memory.clear": async (params) => {
+        const p = params as unknown as MemoryClearParams;
+        const token = requireToken(p.token);
+        const principal = this.resolvePrincipal(token);
+        this.assertOperationAllowed("memory.clear", principal);
+
+        const agentName = this.resolveAgentNameForMemory(principal, p.agentName);
+        const memory = await this.ensureMemoryService();
+        await memory.clear(agentName);
+        const result: MemoryClearResult = { ok: true };
+        return result;
+      },
+
+      "memory.setup": async (params) => {
+        const p = params as unknown as MemorySetupParams;
+        const token = requireToken(p.token);
+        const principal = this.resolvePrincipal(token);
+        this.assertOperationAllowed("memory.setup", principal);
+
+        if (typeof p.memory !== "object" || p.memory === null) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config");
+        }
+        const m = p.memory as Record<string, unknown>;
+
+        const enabled = m.enabled === true;
+        const mode = m.mode;
+        if (mode !== "default" && mode !== "local") {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config mode");
+        }
+        if (typeof m.modelPath !== "string") {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config modelPath");
+        }
+        if (typeof m.modelUri !== "string") {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config modelUri");
+        }
+        if (typeof m.dims !== "number" || !Number.isFinite(m.dims) || m.dims < 0) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config dims");
+        }
+        if (typeof m.lastError !== "string") {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config lastError");
+        }
+
+        const next = {
+          enabled,
+          mode,
+          modelPath: m.modelPath,
+          modelUri: m.modelUri,
+          dims: Math.trunc(m.dims),
+          lastError: m.lastError,
+        } as const;
+
+        if (next.enabled && (!next.modelPath.trim() || next.dims <= 0)) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config (missing modelPath or dims)");
+        }
+
+        this.writeMemoryConfigToDb(next);
+
+        await this.memoryService?.close().catch(() => undefined);
+        this.memoryService = null;
+
+        if (next.enabled) {
+          try {
+            await this.ensureMemoryService();
+          } catch {
+            // ensureMemoryService updates config and returns a meaningful error for memory.* calls
+          }
+        }
+
+        const modelPath = (this.db.getConfig("memory_model_path") ?? "").trim();
+        const dims = Number(this.db.getConfig("memory_model_dims") ?? "0") || 0;
+        const lastError = (this.db.getConfig("memory_model_last_error") ?? "").trim();
+        const memoryEnabled = this.db.getConfig("memory_enabled") === "true";
+
+        const result: MemorySetupResult = {
+          memoryEnabled,
+          modelPath,
+          dims,
+          lastError,
+        };
+        return result;
+      },
 
       // Message methods (backwards-compatible aliases)
       "message.send": createEnvelopeSend("message.send"),
@@ -1837,6 +2164,34 @@ export class Daemon {
           rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid boss-token (must be at least 4 characters)");
         }
 
+        if (p.memory !== undefined) {
+          if (typeof p.memory !== "object" || p.memory === null) {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config");
+          }
+          const m = p.memory as Record<string, unknown>;
+          if (typeof m.enabled !== "boolean") {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config enabled");
+          }
+          if (m.mode !== "default" && m.mode !== "local") {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config mode");
+          }
+          if (typeof m.modelPath !== "string") {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config modelPath");
+          }
+          if (typeof m.modelUri !== "string") {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config modelUri");
+          }
+          if (typeof m.dims !== "number" || !Number.isFinite(m.dims) || m.dims < 0) {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config dims");
+          }
+          if (typeof m.lastError !== "string") {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config lastError");
+          }
+          if (m.enabled === true && (!m.modelPath.trim() || m.dims <= 0)) {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config (missing modelPath or dims)");
+          }
+        }
+
         // Setup agent home directories
         await setupAgentHome(p.agent.name, this.config.dataDir);
 
@@ -1871,6 +2226,17 @@ export class Daemon {
 
             // Set default provider
             this.db.setDefaultProvider(p.provider);
+
+            // Store semantic memory configuration (best-effort; can be disabled)
+            const memory = p.memory ?? {
+              enabled: false,
+              mode: "default" as const,
+              modelPath: "",
+              modelUri: "",
+              dims: 0,
+              lastError: "Memory model is not configured",
+            };
+            this.writeMemoryConfigToDb(memory);
 
             // Create the first agent
             const agentResult = this.db.registerAgent({
