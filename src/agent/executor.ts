@@ -22,7 +22,7 @@ import {
 } from "./instruction-generator.js";
 import { buildTurnInput } from "./turn-input.js";
 import { HIBOSS_TOKEN_ENV } from "../shared/env.js";
-import { computeTokensUsed, parseSessionPolicyConfig } from "../shared/session-policy.js";
+import { parseSessionPolicyConfig } from "../shared/session-policy.js";
 import { nowLocalIso } from "../shared/time.js";
 import { red } from "../shared/ansi.js";
 import {
@@ -51,6 +51,52 @@ interface AgentSession {
 interface SessionRefreshRequest {
   requestedAtMs: number;
   reasons: string[];
+}
+
+type TurnTokenUsage = {
+  inputTokens: number | null;
+  outputTokens: number | null;
+  cacheReadTokens: number | null;
+  cacheWriteTokens: number | null;
+  totalTokens: number | null;
+  contextWindowTokens: number | null;
+};
+
+function asFiniteNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readTurnTokenUsage(provider: "claude" | "codex", result: { usage?: unknown; raw?: unknown }): TurnTokenUsage {
+  const usage = (result.usage ?? {}) as Record<string, unknown>;
+  const inputTokens = asFiniteNumber(usage.input_tokens);
+  const outputTokens = asFiniteNumber(usage.output_tokens);
+  const cacheReadTokens = asFiniteNumber(usage.cache_read_tokens);
+  const cacheWriteTokens = asFiniteNumber(usage.cache_write_tokens);
+  const totalTokens =
+    asFiniteNumber(usage.total_tokens) ??
+    (inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null);
+
+  // Prefer unified context window limit when available (model max, not "current" usage).
+  let contextWindowTokens = asFiniteNumber(usage.context_window_tokens);
+
+  // Back-compat fallback for older Claude adapter versions.
+  if (contextWindowTokens === null && provider === "claude") {
+    const raw = result.raw;
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      const modelUsageRaw = (raw as Record<string, unknown>).modelUsage;
+      if (modelUsageRaw && typeof modelUsageRaw === "object" && !Array.isArray(modelUsageRaw)) {
+        for (const v of Object.values(modelUsageRaw as Record<string, unknown>)) {
+          if (!v || typeof v !== "object" || Array.isArray(v)) continue;
+          const cw = asFiniteNumber((v as Record<string, unknown>).contextWindow);
+          if (cw !== null && (contextWindowTokens === null || cw > contextWindowTokens)) {
+            contextWindowTokens = cw;
+          }
+        }
+      }
+    }
+  }
+
+  return { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, totalTokens, contextWindowTokens };
 }
 
 /**
@@ -458,19 +504,14 @@ export class AgentExecutor {
     }
 
     if (this.debug) {
-      const usage = (result.usage ?? {}) as Record<string, unknown>;
-      const inputTokens = typeof usage.input_tokens === "number" ? usage.input_tokens : null;
-      const outputTokens = typeof usage.output_tokens === "number" ? usage.output_tokens : null;
-      const cacheReadTokens = typeof usage.cache_read_tokens === "number" ? usage.cache_read_tokens : null;
-      const cacheWriteTokens = typeof usage.cache_write_tokens === "number" ? usage.cache_write_tokens : null;
-      const totalTokens = typeof usage.total_tokens === "number" ? usage.total_tokens : null;
+      const u = readTurnTokenUsage(session.provider, result);
 
       this.log(
-        `Token usage input=${inputTokens ?? "n/a"} output=${outputTokens ?? "n/a"} cache-read=${cacheReadTokens ?? "n/a"} cache-write=${cacheWriteTokens ?? "n/a"} total=${totalTokens ?? "n/a"}`
+        `Token usage input=${u.inputTokens ?? "n/a"} output=${u.outputTokens ?? "n/a"} cache-read=${u.cacheReadTokens ?? "n/a"} cache-write=${u.cacheWriteTokens ?? "n/a"} total=${u.totalTokens ?? "n/a"}${u.contextWindowTokens !== null ? ` context-window=${u.contextWindowTokens}` : ""}`
       );
     }
 
-    const tokensUsed = computeTokensUsed(result.usage);
+    const tokensUsed = readTurnTokenUsage(session.provider, result).totalTokens;
     return { finalText: result.finalText ?? "", tokensUsed };
   }
 
