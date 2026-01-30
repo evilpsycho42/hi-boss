@@ -19,6 +19,14 @@ export function getDefaultMediaDir(): string {
   return path.join(getDefaultHiBossDir(), DEFAULT_MEDIA_DIRNAME);
 }
 
+// ==================== Memory Defaults ====================
+
+export const DEFAULT_MEMORY_TOTAL_MAX_CHARS = 20_000 as const;
+export const DEFAULT_MEMORY_LONGTERM_MAX_CHARS = 12_000 as const;
+export const DEFAULT_MEMORY_SHORTTERM_MAX_CHARS = 8_000 as const;
+export const DEFAULT_MEMORY_SHORTTERM_PER_DAY_MAX_CHARS = 4_000 as const;
+export const DEFAULT_MEMORY_SHORTTERM_DAYS = 2 as const;
+
 // ==================== Agent Defaults ====================
 
 export const DEFAULT_AGENT_PROVIDER = "claude" as const;

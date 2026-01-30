@@ -11,8 +11,8 @@ Hi-Boss supplies fields as template variables (see `prompts/VARIABLES.md`).
 1. **Identity** — agent name, provider, workspace, permission level, token; plus optional SOUL.md personality
 2. **Rules** — operating guidelines (communication style, working style, group chats, trust)
 3. **Communication** — envelope system overview and CLI usage
-4. **Tools** — local tooling available to the agent (e.g., memory CLI usage)
-5. **Memory** — injected memory snapshot (private workspace summary)
+4. **Tools** — local tooling available to the agent (shell + Hi-Boss CLI)
+5. **Memory** — injected file-based memory snapshot (long-term + short-term)
 6. **Bindings** — bound adapters (e.g., Telegram)
 7. **Boss** — boss profile (name, adapter IDs, optional BOSS.md)
 
@@ -55,26 +55,22 @@ Lists adapters the agent is bound to (e.g., `telegram (bound)`). Only bound adap
 Lists local CLI tools the agent can use.
 
 Currently includes:
-- **Memory** via `hiboss mem` (mem-cli)
-  - Stores memory as Markdown + a local SQLite vector index (semantic retrieval).
-  - Two workspaces:
-    - Private (default): per-agent memory keyed by `$HIBOSS_TOKEN` (no `--token` needed).
-    - Public (shared): opt-in via `--public`.
-  - Core commands: `hiboss mem add short|long`, `hiboss mem search`, `hiboss mem summary`, `hiboss mem state`.
-  - Files:
-    - Private long-term: `{{ hiboss.dir }}/agents/{{ agent.name }}/.mem-cli/MEMORY.md`
-    - Private short-term: `{{ hiboss.dir }}/agents/{{ agent.name }}/.mem-cli/memory/YYYY-MM-DD.md`
-    - Public: `~/.mem-cli/public/...`
+- Standard shell tools (e.g., `rg`, `ls`, `cat`) within the workspace.
+- The `hiboss` CLI for interacting with the envelope system.
 
 ## Memory Section
 
-Injects a snapshot of the agent's **private** memory workspace at session start (best-effort; token is never printed).
+Injects a snapshot of the agent's file-based memory at session start (best-effort; token is never printed).
 
-The snapshot follows the same structure as `hiboss mem summary`:
-- Long-term memory from `MEMORY.md` (may be truncated by `~/.mem-cli/settings.json` `summary.maxChars` unless `summary.full=true`)
-- Recent daily logs from `memory/YYYY-MM-DD.md` (Hi-Boss caps this to the last 2 days for prompt injection)
+Memory layout:
+- Long-term: `{{ hiboss.dir }}/agents/{{ agent.name }}/memory/MEMORY.md`
+- Short-term (daily): `{{ hiboss.dir }}/agents/{{ agent.name }}/memory/daily/YYYY-MM-DD.md`
 
-Hi-Boss also caps the total injected memory block size (currently 20,000 chars) to avoid runaway prompts.
+Hi-Boss injects:
+- Long-term memory (truncated to 12,000 chars)
+- Latest 2 daily files (each truncated to 4,000 chars; combined truncated to 8,000 chars)
+
+When truncation occurs, Hi-Boss appends markers like `<<truncated due to ...>>` inside the injected snapshot.
 
 ## Boss Section
 
@@ -207,73 +203,38 @@ hiboss envelope send --to agent:nex --text "wake up later" --deliver-at +2m
 4. Use your workspace for file operations when needed
 ## Tools
 
-### Memory (`hiboss mem`)
+Hi-Boss provides the `hiboss` CLI for interacting with the envelope system (send messages, set reactions, etc.).
+See `## Communication` for the core commands and examples.
 
-`hiboss mem` is the built-in memory CLI (mem-cli). It stores memory locally as Markdown and keeps a SQLite vector index for **semantic retrieval**.
-
-#### How memory works in Hi-Boss
-
-- Two workspaces:
-  - **Private (default)**: per-agent memory keyed by your Hi-Boss token (already injected; no `--token` needed).
-  - **Public (shared)**: opt-in via `--public`.
-- On every new session, Hi-Boss injects a snapshot into the system prompt (`## Memory`):
-  - **Long-term**: `MEMORY.md` (truncated if too long)
-  - **Short-term**: recent daily logs (last 2 days)
-- `hiboss mem search` performs semantic retrieval across **both** long-term + short-term memory.
-
-#### Safety rules
-
-- Never print or share your token.
-- Do **not** edit `~/.mem-cli/settings.json` (it affects all workspaces).
-- Avoid `hiboss mem reindex` / `hiboss mem reindex --all` (expensive). Indexing updates automatically on `add`/`search`; ask your boss before running manual reindex.
-
-#### How to use it
-
-Private (default):
-
-```bash
-# If you see "Workspace not initialized", run:
-hiboss mem init
-
-# Short-term (daily)
-hiboss mem add short "..."
-
-# Long-term (curated)
-hiboss mem add long "..."
-echo "..." | hiboss mem add long --stdin
-
-# Semantic retrieval (searches both long + short)
-hiboss mem search "query"
-```
-
-Public (shared):
-
-```bash
-hiboss mem add short "..." --public
-hiboss mem add long "..." --public
-hiboss mem search "query" --public
-```
-
-#### Where files live (you may edit them directly)
-
-Private (per agent):
-- Long-term: `~/.hiboss/agents/nex/.mem-cli/MEMORY.md`
-- Short-term: `~/.hiboss/agents/nex/.mem-cli/memory/YYYY-MM-DD.md`
-
-Public (shared):
-- Long-term: `~/.mem-cli/public/MEMORY.md`
-- Short-term: `~/.mem-cli/public/memory/YYYY-MM-DD.md`
-
-#### How to use it better
-
-- Keep `MEMORY.md` short and high-signal (it’s truncated when injected). Prefer concise bullet points and remove stale/duplicate items.
-- Use `hiboss mem search` before answering when prior context/preferences might matter.
-- Save stable preferences/decisions in long-term memory; put ephemeral notes in daily logs.
+For local work, you can use standard shell tools (e.g., `rg`, `ls`, `cat`) within your workspace and any configured additional directories.
 ## Memory
 
-Snapshot of your private memory workspace (generated by `hiboss mem summary` at session start).
+Hi-Boss uses a **file-based memory system** stored locally on disk:
 
-no-memory: true
+- Long-term: `~/.hiboss/agents/nex/memory/MEMORY.md`
+- Short-term (daily): `~/.hiboss/agents/nex/memory/daily/YYYY-MM-DD.md`
+
+How to use it:
+- Put stable preferences, decisions, and facts in **long-term** memory (edit `MEMORY.md`).
+- Put ephemeral notes and recent context in **short-term** daily logs (append to today’s `daily/YYYY-MM-DD.md`; create it if missing).
+- If a stored memory becomes false, **edit or remove** the outdated entry (don’t leave contradictions).
+- Be proactive: when you learn a stable preference or important constraint, update `MEMORY.md` **without being asked** (unless the boss explicitly says not to store it).
+- Never store secrets (tokens, passwords, API keys) in memory files.
+- Keep both files **tight and high-signal** — injected memory is truncated.
+- If you see `<<truncated due to ...>>`, the injected snapshot exceeded its budget.
+- You may freely **search and edit** these files directly.
+
+## Longterm Memory
+
+```text
+(empty)
+```
+
+## Short term memory
+
+```text
+(empty)
+```
 
 ## Bindings
 

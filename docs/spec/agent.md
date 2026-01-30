@@ -142,6 +142,10 @@ Each agent has provider-specific home directories for configuration and state.
 
 ```
 ~/.hiboss/agents/<agent-name>/
+├── memory/
+│   ├── MEMORY.md        # Long-term memory (file-based)
+│   └── daily/
+│       └── YYYY-MM-DD.md # Short-term memory (daily logs)
 ├── codex_home/
 │   ├── config.toml      # Copied from ~/.codex/config.toml
 │   └── AGENTS.md        # Generated system instructions
@@ -159,12 +163,18 @@ Located in `src/agent/home-setup.ts`:
 |----------|---------|
 | `setupAgentHome(agentName)` | Creates home directories, copies provider configs |
 | `getAgentHomePath(agentName, provider)` | Returns provider-specific home path |
+| `getAgentMemoryDir(agentName)` | Returns `~/.hiboss/agents/<name>/memory/` |
+| `getAgentMemoryDailyDir(agentName)` | Returns `~/.hiboss/agents/<name>/memory/daily/` |
 | `agentHomeExists(agentName)` | Checks if home directories exist |
 | `removeAgentHome(agentName)` | Deletes agent home directory |
 
 ## Instruction Generation
 
 System instructions define the agent's behavior and context. Instruction files are regenerated each time a new session is created (see [Session Management](session.md#creation)).
+
+On each new session, Hi-Boss injects a truncated snapshot of:
+- Long-term memory (`memory/MEMORY.md`)
+- Short-term memory (latest 2 `memory/daily/YYYY-MM-DD.md` files)
 
 ### Files
 

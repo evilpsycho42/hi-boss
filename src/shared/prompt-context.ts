@@ -247,8 +247,10 @@ export function buildSystemPromptContext(params: {
       },
     },
     memory: {
-      summary: "",
-      summaryFence: "```",
+      longterm: "",
+      longtermFence: "```",
+      shortterm: "",
+      shorttermFence: "```",
       error: "",
     },
     boss: {

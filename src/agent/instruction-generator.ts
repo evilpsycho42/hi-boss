@@ -10,9 +10,9 @@ import type { Agent } from "./types.js";
 import type { AgentBinding } from "../daemon/db/database.js";
 import { renderPrompt } from "../shared/prompt-renderer.js";
 import { buildSystemPromptContext } from "../shared/prompt-context.js";
-import { getCodexHomePath, getClaudeHomePath, getAgentDir } from "./home-setup.js";
+import { getCodexHomePath, getClaudeHomePath } from "./home-setup.js";
 import { nowLocalIso } from "../shared/time.js";
-import { getMemCliPrivateSummary } from "../shared/mem-cli.js";
+import { ensureAgentMemoryLayout, readAgentMemorySnapshot } from "../shared/agent-memory.js";
 
 /**
  * Context for generating system instructions.
@@ -27,13 +27,6 @@ export interface InstructionContext {
     name?: string;
     adapterIds?: Record<string, string>;
   };
-}
-
-const MAX_MEMORY_SUMMARY_CHARS = 20_000;
-
-function truncateMemorySummary(summary: string): string {
-  if (summary.length <= MAX_MEMORY_SUMMARY_CHARS) return summary;
-  return summary.slice(0, MAX_MEMORY_SUMMARY_CHARS) + "\n\n[...truncated...]\n";
 }
 
 function chooseFence(text: string): string {
@@ -64,19 +57,31 @@ export function generateSystemInstructions(ctx: InstructionContext): string {
     boss,
   });
 
-  // Inject memory summary for this agent (best-effort; never prints token).
-  const agentDir = getAgentDir(agent.name, ctx.hibossDir);
-  const memory = getMemCliPrivateSummary(agentToken, agentDir);
+  // Inject file-based memory snapshot for this agent (best-effort; never prints token).
+  const hibossDir = ctx.hibossDir ?? (promptContext.hiboss as Record<string, unknown>).dir as string;
   const memoryContext = promptContext.memory as Record<string, unknown>;
-  if (memory.ok && typeof memory.summaryText === "string") {
-    const summary = truncateMemorySummary(memory.summaryText);
-    memoryContext.summary = summary;
-    memoryContext.summaryFence = chooseFence(summary);
-    memoryContext.error = "";
+  const ensured = ensureAgentMemoryLayout({ hibossDir, agentName: agent.name });
+  if (!ensured.ok) {
+    memoryContext.longterm = "";
+    memoryContext.longtermFence = "```";
+    memoryContext.shortterm = "";
+    memoryContext.shorttermFence = "```";
+    memoryContext.error = ensured.error;
   } else {
-    memoryContext.summary = "";
-    memoryContext.summaryFence = "```";
-    memoryContext.error = typeof memory.error === "string" ? memory.error : "";
+    const snapshot = readAgentMemorySnapshot({ hibossDir, agentName: agent.name });
+    if (snapshot.ok) {
+      memoryContext.longterm = snapshot.longterm;
+      memoryContext.longtermFence = chooseFence(snapshot.longterm);
+      memoryContext.shortterm = snapshot.shortterm;
+      memoryContext.shorttermFence = chooseFence(snapshot.shortterm);
+      memoryContext.error = "";
+    } else {
+      memoryContext.longterm = "";
+      memoryContext.longtermFence = "```";
+      memoryContext.shortterm = "";
+      memoryContext.shorttermFence = "```";
+      memoryContext.error = snapshot.error;
+    }
   }
 
   (promptContext.hiboss as Record<string, unknown>).additionalContext =

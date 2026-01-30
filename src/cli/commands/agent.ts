@@ -1,14 +1,12 @@
 import { getDefaultConfig, getSocketPath } from "../../daemon/daemon.js";
 import { IpcClient } from "../ipc-client.js";
 import type { Agent } from "../../agent/types.js";
-import { getAgentDir } from "../../agent/home-setup.js";
 import { formatUtcIsoAsLocalOffset } from "../../shared/time.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../shared/validation.js";
 import { resolveToken } from "../token.js";
 import * as path from "path";
 import * as fs from "fs";
 import { DEFAULT_AGENT_PERMISSION_LEVEL } from "../../shared/defaults.js";
-import { ensureMemCliPrivateWorkspace } from "../../shared/mem-cli.js";
 
 interface RegisterAgentResult {
   agent: Omit<Agent, "token">;
@@ -194,15 +192,6 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
       console.log(`workspace: ${result.agent.workspace}`);
     }
     console.log(`token: ${result.token}`);
-
-    // Initialize per-agent private memory workspace (best-effort)
-    const init = ensureMemCliPrivateWorkspace(
-      result.token,
-      getAgentDir(result.agent.name, config.dataDir)
-    );
-    if (!init.ok && init.error) {
-      console.error(`[mem-cli] private init failed for agent ${result.agent.name}: ${init.error}`);
-    }
   } catch (err) {
     console.error("error:", (err as Error).message);
     process.exit(1);

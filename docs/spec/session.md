@@ -13,7 +13,7 @@ Hi-Boss uses **stateless/ephemeral session management**. Sessions exist only in 
 Sessions are created on-demand when an agent needs to process envelopes:
 
 1. `AgentExecutor.getOrCreateSession()` checks if a session exists in memory
-2. If not (or if refresh is needed), generates fresh instruction files (AGENTS.md/CLAUDE.md) to home directory
+2. If not (or if refresh is needed), generates fresh instruction files (AGENTS.md/CLAUDE.md) to home directory (including injected memory snapshot)
 3. Creates a new `UnifiedAgentRuntime` with home path pointing to instruction files
 4. Opens a `UnifiedSession` via `runtime.openSession({})` which loads instructions from home directory
 5. Caches the session in memory by agent name
