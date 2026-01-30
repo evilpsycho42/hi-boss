@@ -218,7 +218,7 @@ export interface SetupExecuteParams {
     description?: string;
     workspace?: string;
     model?: string;
-    reasoningEffort?: 'low' | 'medium' | 'high';
+    reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
     autoLevel?: 'low' | 'medium' | 'high';
     permissionLevel?: 'restricted' | 'standard' | 'privileged';
     sessionPolicy?: {

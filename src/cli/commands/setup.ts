@@ -39,7 +39,7 @@ interface SetupConfig {
     description?: string;
     workspace: string;
     model?: string;
-    reasoningEffort: 'low' | 'medium' | 'high';
+    reasoningEffort: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
     autoLevel: 'low' | 'medium' | 'high';
     permissionLevel?: 'restricted' | 'standard' | 'privileged';
     sessionPolicy?: {
@@ -67,7 +67,7 @@ interface SetupConfigFileV1 {
     description?: string;
     workspace?: string;
     model?: string;
-    "reasoning-effort"?: "low" | "medium" | "high";
+    "reasoning-effort"?: "none" | "low" | "medium" | "high" | "xhigh";
     "auto-level"?: "low" | "medium" | "high";
     "permission-level"?: "restricted" | "standard" | "privileged";
     "session-policy"?: {
@@ -151,7 +151,7 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
 
   const reasoningEffortRaw = agentRaw["reasoning-effort"];
   const reasoningEffort =
-    reasoningEffortRaw === "low" || reasoningEffortRaw === "medium" || reasoningEffortRaw === "high"
+    reasoningEffortRaw === "none" || reasoningEffortRaw === "low" || reasoningEffortRaw === "medium" || reasoningEffortRaw === "high" || reasoningEffortRaw === "xhigh"
       ? reasoningEffortRaw
       : DEFAULT_SETUP_REASONING_EFFORT;
 

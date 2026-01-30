@@ -186,6 +186,23 @@ Table: `agent_bindings` (see `src/daemon/db/schema.ts`)
 
 ---
 
+## Reaction
+
+Reactions allow agents to add emoji reactions to channel messages.
+
+### CLI Flags
+
+| Command | Flags |
+|--------|-------|
+| `hiboss reaction set` | `--to`, `--channel-message-id` (`--message-id` is deprecated), `--emoji`, `--token` |
+
+### CLI Output Keys
+
+`hiboss reaction set` prints:
+- `success:`
+
+---
+
 ## Daemon
 
 The daemon is the background process that manages adapters, routes envelopes, and runs agents.
