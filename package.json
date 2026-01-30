@@ -12,12 +12,13 @@
     "typecheck": "tsc --noEmit",
     "hiboss": "tsx bin/hiboss.ts",
     "defaults:check": "tsx scripts/check-defaults.ts",
+    "verify:token-usage:real": "tsx scripts/verify-token-usage-real.ts",
     "prompts:check": "tsx scripts/validate-prompts.ts",
     "inventory:magic": "tsx scripts/magic-inventory.ts --out docs/spec/generated/magic-inventory.md"
   },
   "dependencies": {
     "@inquirer/prompts": "^7.0.0",
-    "@unified-agent-sdk/runtime": "^0.4.1",
+    "@unified-agent-sdk/runtime": "^0.4.3",
     "better-sqlite3": "^11.7.0",
     "commander": "^13.0.0",
     "dotenv": "^16.4.5",
