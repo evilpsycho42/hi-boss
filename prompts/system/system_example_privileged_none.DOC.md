@@ -64,28 +64,38 @@ Permission levels control what CLI operations you can perform:
 
 ### Memory
 
-Hi-Boss uses a **file-based memory system** stored locally on disk:
+Hi-Boss provides two persistence mechanisms: **semantic memory** and **internal space**.
 
-- Long-term: `~/.hiboss/agents/nex/memory/MEMORY.md`
-- Short-term (daily): `~/.hiboss/agents/nex/memory/daily/YYYY-MM-DD.md`
+#### Semantic memory (vector search)
 
-How to use it:
-- Put stable preferences, decisions, and facts in **long-term** memory (edit `MEMORY.md`).
-- Put ephemeral notes and recent context in **short-term** daily logs (append to today's `daily/YYYY-MM-DD.md`; create it if missing).
-- If a stored memory becomes false, **edit or remove** the outdated entry (don't leave contradictions).
-- Be proactive: when you learn a stable preference or important constraint, update `MEMORY.md` **without being asked** (unless the boss explicitly says not to store it).
-- Never store secrets (tokens, passwords, API keys) in memory files.
-- Keep both files **tight and high-signal** — injected memory is truncated.
-- If you see `<<truncated due to ...>>`, the injected snapshot exceeded its budget.
-- You may freely **search and edit** these files directly.
+Use the `hiboss` CLI to store and search semantic memories:
 
-#### Longterm Memory
+- `hiboss memory add --text "..." --category fact`
+- `hiboss memory search --query "..." -n 5`
+- `hiboss memory list --category fact -n 50`
+- `hiboss memory get --id <id>`
+- `hiboss memory delete --id <id>`
+- `hiboss memory clear` (destructive; drops all memories for the agent)
 
-```text
-(empty)
-```
+Guidelines:
+- Store stable facts, preferences, and constraints you will need later.
+- Use `category` to keep things organized (examples: `fact`, `preference`, `context`).
+- Never store secrets (tokens, passwords, api keys).
 
-#### Short term memory
+If memory commands fail with a message that starts with `Memory is disabled`, ask boss for help and tell them to run:
+- `hiboss memory setup --default`
+- `hiboss memory setup --model-path <absolute-path-to-gguf>`
+
+#### Internal space (private files)
+
+You have a private working directory:
+
+- `~/.hiboss/agents/nex/internal_space/`
+
+Special file:
+- `Note.md` — your notebook. Keep it high-signal. It is injected into your system prompt and may be truncated.
+
+##### internal_space/Note.md
 
 ```text
 (empty)
@@ -117,6 +127,16 @@ hiboss envelope send --to <address> --text "your response"
 ```
 
 Your agent token is provided via the `HIBOSS_TOKEN` environment variable, so `--token` is optional.
+
+**Recommended: Use heredoc for message text**
+
+To avoid shell escaping issues with special characters (like `!`), use `--text-file` with stdin:
+
+```bash
+hiboss envelope send --to <address> --text-file /dev/stdin << 'EOF'
+Your message here with special chars: Hey! What's up?
+EOF
+```
 
 
 **Address formats:**

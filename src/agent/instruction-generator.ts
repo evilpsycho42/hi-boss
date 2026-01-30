@@ -12,7 +12,7 @@ import { renderPrompt } from "../shared/prompt-renderer.js";
 import { buildSystemPromptContext } from "../shared/prompt-context.js";
 import { getCodexHomePath, getClaudeHomePath } from "./home-setup.js";
 import { nowLocalIso } from "../shared/time.js";
-import { ensureAgentMemoryLayout, readAgentMemorySnapshot } from "../shared/agent-memory.js";
+import { ensureAgentInternalSpaceLayout, readAgentInternalNoteSnapshot } from "../shared/internal-space.js";
 
 /**
  * Context for generating system instructions.
@@ -57,30 +57,24 @@ export function generateSystemInstructions(ctx: InstructionContext): string {
     boss,
   });
 
-  // Inject file-based memory snapshot for this agent (best-effort; never prints token).
+  // Inject internal space Note.md snapshot for this agent (best-effort; never prints token).
   const hibossDir = ctx.hibossDir ?? (promptContext.hiboss as Record<string, unknown>).dir as string;
-  const memoryContext = promptContext.memory as Record<string, unknown>;
-  const ensured = ensureAgentMemoryLayout({ hibossDir, agentName: agent.name });
+  const spaceContext = promptContext.internalSpace as Record<string, unknown>;
+  const ensured = ensureAgentInternalSpaceLayout({ hibossDir, agentName: agent.name });
   if (!ensured.ok) {
-    memoryContext.longterm = "";
-    memoryContext.longtermFence = "```";
-    memoryContext.shortterm = "";
-    memoryContext.shorttermFence = "```";
-    memoryContext.error = ensured.error;
+    spaceContext.note = "";
+    spaceContext.noteFence = "```";
+    spaceContext.error = ensured.error;
   } else {
-    const snapshot = readAgentMemorySnapshot({ hibossDir, agentName: agent.name });
+    const snapshot = readAgentInternalNoteSnapshot({ hibossDir, agentName: agent.name });
     if (snapshot.ok) {
-      memoryContext.longterm = snapshot.longterm;
-      memoryContext.longtermFence = chooseFence(snapshot.longterm);
-      memoryContext.shortterm = snapshot.shortterm;
-      memoryContext.shorttermFence = chooseFence(snapshot.shortterm);
-      memoryContext.error = "";
+      spaceContext.note = snapshot.note;
+      spaceContext.noteFence = chooseFence(snapshot.note);
+      spaceContext.error = "";
     } else {
-      memoryContext.longterm = "";
-      memoryContext.longtermFence = "```";
-      memoryContext.shortterm = "";
-      memoryContext.shorttermFence = "```";
-      memoryContext.error = snapshot.error;
+      spaceContext.note = "";
+      spaceContext.noteFence = "```";
+      spaceContext.error = snapshot.error;
     }
   }
 

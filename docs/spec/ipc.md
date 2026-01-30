@@ -47,6 +47,18 @@ Turn:
 
 - `turn.preview`
 
+Memory:
+
+- `memory.add`
+- `memory.search`
+- `memory.list`
+- `memory.categories`
+- `memory.delete-category`
+- `memory.get`
+- `memory.delete`
+- `memory.clear`
+- `memory.setup`
+
 Backwards-compatible aliases:
 
 - `message.send`

@@ -11,7 +11,7 @@ import * as path from "path";
 import * as os from "os";
 import { assertValidAgentName } from "../shared/validation.js";
 import { getDefaultHiBossDir } from "../shared/defaults.js";
-import { ensureAgentMemoryLayout } from "../shared/agent-memory.js";
+import { ensureAgentInternalSpaceLayout } from "../shared/internal-space.js";
 
 /**
  * Get the default hi-boss directory path.
@@ -29,12 +29,8 @@ export function getAgentDir(agentName: string, hibossDir?: string): string {
   return path.join(baseDir, "agents", agentName);
 }
 
-export function getAgentMemoryDir(agentName: string, hibossDir?: string): string {
-  return path.join(getAgentDir(agentName, hibossDir), "memory");
-}
-
-export function getAgentMemoryDailyDir(agentName: string, hibossDir?: string): string {
-  return path.join(getAgentMemoryDir(agentName, hibossDir), "daily");
+export function getAgentInternalSpaceDir(agentName: string, hibossDir?: string): string {
+  return path.join(getAgentDir(agentName, hibossDir), "internal_space");
 }
 
 /**
@@ -102,10 +98,10 @@ export async function setupAgentHome(
   fs.mkdirSync(codexHome, { recursive: true });
   fs.mkdirSync(claudeHome, { recursive: true });
 
-  // Ensure agent memory layout exists (best-effort).
-  const ensuredMemory = ensureAgentMemoryLayout({ hibossDir: baseDir, agentName });
-  if (!ensuredMemory.ok) {
-    throw new Error(`Failed to initialize agent memory: ${ensuredMemory.error}`);
+  // Ensure agent internal space exists (best-effort).
+  const ensuredSpace = ensureAgentInternalSpaceLayout({ hibossDir: baseDir, agentName });
+  if (!ensuredSpace.ok) {
+    throw new Error(`Failed to initialize agent internal space: ${ensuredSpace.error}`);
   }
 
   // Copy Codex config (if exists)

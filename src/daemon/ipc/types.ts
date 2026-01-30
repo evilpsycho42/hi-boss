@@ -234,6 +234,14 @@ export interface SetupExecuteParams {
     adapterToken: string;
     adapterBossId: string;
   };
+  memory?: {
+    enabled: boolean;
+    mode: "default" | "local";
+    modelPath: string;
+    modelUri: string;
+    dims: number;
+    lastError: string;
+  };
 }
 
 export interface SetupExecuteResult {
@@ -246,4 +254,124 @@ export interface BossVerifyParams {
 
 export interface BossVerifyResult {
   valid: boolean;
+}
+
+// ==================== Memory Parameters ====================
+
+export interface MemoryAddParams {
+  token: string;
+  text: string;
+  agentName?: string;  // Required for boss, ignored for agent
+  category?: string;
+}
+
+export interface MemoryAddResult {
+  id: string;
+}
+
+export interface MemorySearchParams {
+  token: string;
+  query: string;
+  agentName?: string;
+  category?: string;
+  limit?: number;
+}
+
+export interface MemorySearchResult {
+  memories: Array<{
+    id: string;
+    text: string;
+    category: string;
+    createdAt: string;
+    similarity?: number;
+  }>;
+}
+
+export interface MemoryListParams {
+  token: string;
+  agentName?: string;
+  category?: string;
+  limit?: number;
+}
+
+export interface MemoryListResult {
+  memories: Array<{
+    id: string;
+    text: string;
+    category: string;
+    createdAt: string;
+  }>;
+}
+
+export interface MemoryCategoriesParams {
+  token: string;
+  agentName?: string;
+}
+
+export interface MemoryCategoriesResult {
+  categories: string[];
+}
+
+export interface MemoryDeleteCategoryParams {
+  token: string;
+  agentName?: string;
+  category: string;
+}
+
+export interface MemoryDeleteCategoryResult {
+  ok: true;
+  deleted: number;
+}
+
+export interface MemoryGetParams {
+  token: string;
+  agentName?: string;
+  id: string;
+}
+
+export interface MemoryGetResult {
+  memory: {
+    id: string;
+    text: string;
+    category: string;
+    createdAt: string;
+  } | null;
+}
+
+export interface MemoryDeleteParams {
+  token: string;
+  agentName?: string;
+  id: string;
+}
+
+export interface MemoryDeleteResult {
+  ok: true;
+}
+
+export interface MemoryClearParams {
+  token: string;
+  agentName?: string;
+}
+
+export interface MemoryClearResult {
+  ok: true;
+}
+
+export interface MemorySetupParams {
+  token: string;
+  memory: {
+    enabled: boolean;
+    mode: "default" | "local";
+    modelPath: string;
+    modelUri: string;
+    dims: number;
+    lastError: string;
+  };
+}
+
+export interface MemorySetupResult {
+  memoryEnabled: boolean;
+  modelPath: string;
+  dims: number;
+  lastError: string;
 }
