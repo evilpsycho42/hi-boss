@@ -20,7 +20,7 @@ interface Agent {
   model?: string;                                    // Model selection
   reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
   autoLevel?: 'low' | 'medium' | 'high';             // Access/automation level
-  permissionLevel?: AgentPermissionLevel;            // Authorization level for CLI/RPC ops
+  permissionLevel?: 'restricted' | 'standard' | 'privileged';  // Authorization level for CLI/RPC ops
   sessionPolicy?: SessionPolicyConfig;               // Session refresh policy
   createdAt: string;                                 // ISO 8601
   lastSeenAt?: string;                               // ISO 8601
@@ -142,7 +142,7 @@ Each agent has provider-specific home directories for configuration and state.
 
 ```
 ~/.hiboss/agents/<agent-name>/
-├── internal_space/
+├── internal_space/      # Agent's private space, automatically added into additional directories
 │   └── Note.md          # Agent notebook (injected into system prompt; truncated)
 ├── codex_home/
 │   ├── config.toml      # Copied from ~/.codex/config.toml
