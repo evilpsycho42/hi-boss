@@ -564,3 +564,21 @@ Default permission:
 ### `hiboss background`
 
 Runs a fire-and-forget background task as the agent identified by `--token`.
+
+Flags:
+- `--token <agent-token>` (required)
+- `--task <text>` (required)
+
+Daemon dependency:
+- Requires the daemon to be running (uses `agent.self` over IPC to resolve provider/model/workspace).
+
+Behavior:
+- Spawns a detached worker process that runs the agent SDK once (no daemon-side queueing).
+- When the background run completes, Hi-Boss sends a single envelope back to `agent:<self>` whose `text:` is the run’s final response.
+- If the background run fails, it sends `text: error: ...` back to `agent:<self>`.
+
+Output:
+- No stdout output on success (launch failures print `error:` and exit non-zero).
+
+Default permission:
+- `standard`

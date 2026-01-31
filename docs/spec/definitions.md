@@ -42,7 +42,7 @@ Table: `envelopes` (see `src/daemon/db/schema.ts`)
 
 | Command | Flags |
 |--------|-------|
-| `hiboss envelope send` | `--to`, `--token`, `--text`, `--text-file`, `--attachment`, `--deliver-at`, `--from` (boss only), `--from-boss` (boss only), `--from-name` (boss only) |
+| `hiboss envelope send` | `--to`, `--token`, `--text`, `--text-file`, `--attachment`, `--deliver-at`, `--parse-mode`, `--reply-to`, `--from` (boss only), `--from-boss` (boss only), `--from-name` (boss only) |
 | `hiboss envelope list` | `--token`, `--address` (boss only), `--box`, `--status`, `-n/--limit` (`--n` is deprecated), `--as-turn` |
 | `hiboss envelope get` | `--id`, `--token` |
 | `hiboss cron create` | `--cron`, `--to`, `--timezone`, `--token`, `--text`, `--text-file`, `--attachment`, `--parse-mode`, `--reply-to` |

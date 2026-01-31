@@ -7,7 +7,8 @@ Hi-Boss is a local daemon + `hiboss` CLI for routing messages (“envelopes”) 
 ```bash
 npm i -g hiboss
 hiboss setup
-hiboss daemon start
+# Save the printed boss-token and agent-token (they are only shown once)
+hiboss daemon start --token <boss-token>
 ```
 
 ## Quickstart

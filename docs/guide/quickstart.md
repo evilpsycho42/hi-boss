@@ -8,14 +8,16 @@ This is the “happy path” for using Hi-Boss locally.
 |------|---------|
 | Install | `npm i -g hiboss` |
 | Setup | `hiboss setup` |
-| Start daemon | `hiboss daemon start` |
+| Start daemon | `hiboss daemon start --token <boss-token>` |
+
+Setup prints `boss-token:` and `agent-token:` once. Save them somewhere safe.
 
 ## 2) Register an agent (optional)
 
 If setup already created one agent for you, you can skip this.
 
 ```bash
-hiboss agent register --name nex --description "AI assistant" --workspace "$PWD"
+hiboss agent register --token <boss-token> --name nex --description "AI assistant" --workspace "$PWD"
 ```
 
 This prints `token: ...` once. Save it.

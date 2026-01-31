@@ -1,36 +1,41 @@
-# Hi-Boss Developer / Agent Guide
+# Hi-Boss: Developer / Agent Guide
 
-Hi-Boss is a local daemon + `hiboss` CLI for routing messages (“envelopes”) between agents and chat channels (e.g., Telegram).
+Hi-Boss is a local daemon + `hiboss` CLI for routing durable messages (“envelopes”) between agents and chat channels (e.g., Telegram).
 
-## Must-do (after code changes)
+## Global rules (source of truth)
 
-```bash
-npm run build && npm link
-```
+- `docs/spec/` is canonical. If behavior and spec disagree, update the spec first (or fix the code to match).
+- Keep CLI flags, CLI output keys, and agent instruction keys **stable and parseable** (kebab-case).
+- If you change CLI surface/output/DB fields, update `docs/spec/cli.md` + `docs/spec/definitions.md` in the same PR.
 
-## Fast path (dev)
+Start here: `docs/index.md`, `docs/spec/goals.md`, `docs/spec/architecture.md`, `docs/spec/definitions.md`.
 
-```bash
-npm i
-npm run build && npm link
+## Goals & design philosophy (summary)
 
-hiboss setup
-hiboss daemon start --debug
-hiboss agent register --name nex --description "AI assistant" --workspace "$PWD"
-```
+- Local-first: the daemon is the authority and runs on your machine.
+- Envelopes are the interface: persisted, routable, schedulable.
+- Predictable automation: stable CLI surface and instruction formats.
+- Extensible: adapters bridge external chat apps without changing core semantics.
+- Operator-friendly: one data dir + logs + simple reset.
 
-## Naming rules (parsing safety)
+## Core architecture (mental model)
+
+- Daemon owns state and routing; CLI is a thin JSON-RPC client (`docs/spec/ipc.md`).
+- SQLite is the durable queue + audit log (`~/.hiboss/hiboss.db`).
+- Scheduler wakes due `deliver-at` envelopes (`docs/spec/scheduler.md`).
+- Agent executor runs provider sessions and marks envelopes done (`docs/spec/agent.md`, `docs/spec/session.md`).
+- Adapters bridge chat apps ↔ envelopes (e.g. Telegram: `docs/spec/adapters/telegram.md`).
+
+## Naming & parsing safety (must follow)
 
 | Context | Convention | Example |
 |---------|------------|---------|
 | Code (TypeScript) | camelCase | `envelope.fromBoss` |
 | CLI flags | kebab-case, lowercase | `--deliver-at` |
 | CLI output keys | kebab-case, lowercase | `from-name:` |
-| Agent instructions | kebab-case, lowercase | `from-boss` |
+| Agent instruction keys | kebab-case, lowercase | `from-boss` |
 
-Rule: CLI flags, CLI output keys, and agent instructions **must** all stay kebab-case so agents can parse output without translation.
-
-Canonical mapping:
+Canonical mapping (see `docs/spec/definitions.md`):
 ```
 envelope.deliverAt  -> --deliver-at   (flag)
 envelope.fromBoss   -> --from-boss    (flag; boss token only)
@@ -42,26 +47,68 @@ Boss marker:
   - direct: `from-name: <author> [boss]`
   - group: `Author [boss] at <timestamp>:`
 
-## Core operational rules
+## Important settings / operational invariants
 
-- Tokens are printed once by `hiboss setup` / `hiboss agent register` (there is no “show token” command).
+- Runtime: Node.js 18+ (ES2022) recommended (`docs/spec/goals.md`).
+- Tokens are printed once by `hiboss setup` / `hiboss agent register` (no “show token” command).
+- `HIBOSS_TOKEN` is used when `--token` is omitted (`docs/spec/configuration.md`).
 - Sending to `channel:<adapter>:...` is only allowed if the sending agent is bound to that adapter type.
 - `--deliver-at` supports relative (`+2h`, `+1Y2M3D`) and ISO 8601; units are case-sensitive (`Y/M/D/h/m/s`).
+- Security: agent tokens are stored plaintext in `~/.hiboss/hiboss.db`; protect `~/.hiboss/`.
+
+## Dev workflow
+
+Must-do (after code changes):
+```bash
+npm run build && npm link
+```
+
+Fast path (dev):
+```bash
+npm i
+npm run build && npm link
+
+hiboss setup
+hiboss daemon start --debug --token <boss-token>
+hiboss agent register --token <boss-token> --name nex --description "AI assistant" --workspace "$PWD"
+```
+
+Useful checks (run when relevant):
+- `npm run typecheck`
+- `npm run prompts:check`
+- `npm run defaults:check`
+- `npm run verify:token-usage:real` (talks to a real provider; use intentionally)
+- `npm run inventory:magic` (updates `docs/spec/generated/magic-inventory.md`; do not hand-edit that file)
+
+## Repo layout (what lives where)
+
+- `bin/` — TypeScript CLI entry for dev (`npm run hiboss`)
+- `dist/` — build output used by the published `hiboss` binary (do not hand-edit)
+- `scripts/` — dev/CI helper scripts (prompt validation, inventory generation, etc.)
+- `src/daemon/` — daemon core (routing, scheduler, IPC server, DB)
+- `src/cli/` — CLI surface, RPC calls, and instruction rendering
+- `src/agent/` — provider integration + session policy
+- `src/adapters/` — channel adapters (Telegram, …)
+- `src/envelope/`, `src/cron/`, `src/shared/` — core models + shared utilities
+- `prompts/` — Nunjucks templates for agent instructions / turns
+- `docs/spec/` — developer-facing specs (canonical)
+- `docs/guide/` — user-facing guides
 
 ## State & debugging
 
+Default data dir: `~/.hiboss/` (no `--data-dir` flag today)
+
 | Item | Path |
 |------|------|
-| State dir | `~/.hiboss/` |
 | DB | `~/.hiboss/hiboss.db` |
 | IPC socket | `~/.hiboss/daemon.sock` |
+| Daemon PID | `~/.hiboss/daemon.pid` |
 | Daemon log | `~/.hiboss/daemon.log` |
+| Media downloads | `~/.hiboss/media/` |
+| Boss profile (optional) | `~/.hiboss/BOSS.md` |
+| Per-agent homes | `~/.hiboss/agents/<agent-name>/` |
 
-Reset: `hiboss daemon stop && rm -rf ~/.hiboss && hiboss setup`
-
-## Docs policy
-
-- Specs: `docs/spec/` (developer-facing; implementations must align)
-- Guides: `docs/guide/` and root `README.md` (user-facing; readable/concise)
-
-Start here: `docs/index.md` and `docs/spec/definitions.md`.
+Reset:
+```bash
+hiboss daemon stop --token <boss-token> && rm -rf ~/.hiboss && hiboss setup
+```
