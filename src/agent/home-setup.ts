@@ -104,10 +104,13 @@ export async function setupAgentHome(
     throw new Error(`Failed to initialize agent internal space: ${ensuredSpace.error}`);
   }
 
-  // Copy Codex config (if exists)
-  const userCodexConfig = path.join(os.homedir(), ".codex", "config.toml");
-  const agentCodexConfig = path.join(codexHome, "config.toml");
-  copyFileIfExists(userCodexConfig, agentCodexConfig);
+  // Copy Codex configs (if exist)
+  const userCodexDir = path.join(os.homedir(), ".codex");
+  const userCodexConfig = path.join(userCodexDir, "config.toml");
+  const userCodexAuth = path.join(userCodexDir, "auth.json");
+
+  copyFileIfExists(userCodexConfig, path.join(codexHome, "config.toml"));
+  copyFileIfExists(userCodexAuth, path.join(codexHome, "auth.json"));
 
   // Copy Claude configs (if exist)
   const userClaudeDir = path.join(os.homedir(), ".claude");
