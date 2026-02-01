@@ -19,7 +19,7 @@ interface Agent {
   provider?: 'claude' | 'codex';                     // SDK provider (default: 'claude')
   model?: string;                                    // Model selection
   reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
-  autoLevel?: 'low' | 'medium' | 'high';             // Access/automation level
+  autoLevel?: 'medium' | 'high';                     // Access/automation level
   permissionLevel?: 'restricted' | 'standard' | 'privileged';  // Authorization level for CLI/RPC ops
   sessionPolicy?: SessionPolicyConfig;               // Session refresh policy
   createdAt: string;                                 // ISO 8601
@@ -83,7 +83,7 @@ hiboss agent register \
   --provider <claude|codex> \
   --model <model> \
   --reasoning-effort <none|low|medium|high|xhigh> \
-  --auto-level <low|medium|high> \
+  --auto-level <medium|high> \
   --permission-level <restricted|standard|privileged>
 ```
 
@@ -120,7 +120,7 @@ Set at registration or via agent settings:
 | `provider` | SDK provider | `claude`, `codex` |
 | `model` | Model to use | Provider-specific model ID |
 | `reasoningEffort` | Extended reasoning level | `none`, `low`, `medium`, `high`, `xhigh` |
-| `autoLevel` | Automation/access level | `low`, `medium`, `high` |
+| `autoLevel` | Automation/access level | `medium`, `high` |
 | `permissionLevel` | Authorization for CLI/RPC ops | `restricted`, `standard`, `privileged` |
 | `sessionPolicy` | Session refresh policy | See [Session Policy](#session-policy) |
 
@@ -130,11 +130,22 @@ The `autoLevel` setting maps to SDK access permissions:
 
 | autoLevel | Behavior |
 |-----------|----------|
-| `low` | Read-only filesystem; no writes; web search allowed |
-| `medium` | Sandboxed writes; web search; network including localhost |
-| `high` | Unrestricted; no sandbox |
+| `medium` | Workspace-sandboxed tool execution |
+| `high` | Full access to this computer (recommended) |
 
-Note: Hi-Boss agent instructions rely on running the `hiboss` CLI, which talks to the daemon over a local Unix socket (`~/.hiboss/daemon.sock`). Some provider sandboxes (notably Claude Code sandbox mode) block Unix sockets by default unless they are explicitly allow-listed. Ensure your SDK sandbox config permits the Hi-Boss daemon socket (or use `autoLevel=high` for unsandboxed runs).
+Note: Hi-Boss agent instructions rely on running the `hiboss` CLI, which talks to the daemon over a local Unix socket (`~/.hiboss/daemon.sock`). `autoLevel=low` is no longer supported because it can block that local IPC; `autoLevel=medium` is the lowest supported setting that still allows agents to use the Hi-Boss envelope system; `autoLevel=high` is recommended for operator-friendly automation.
+
+### Real-provider behavior test
+
+To validate that agents can actually use the Hi-Boss envelope system end-to-end (including `hiboss envelope send`) under **real** provider calls:
+
+1) Stop the daemon and delete `~/.hiboss`
+2) Run `hiboss setup default` using a known-good template (see `scripts/test-auto-level/`)
+3) Start the daemon with `--debug`
+4) Send a boss-marked envelope that instructs a `high` and a `medium` agent to send to a non-existent sink address (e.g., `agent:test-sink`)
+5) Verify the sink inbox contains the expected `pong` messages via `hiboss envelope list --address ...`
+
+This test incurs real provider usage (cost). See `scripts/test-auto-level/README.md` for the exact repeatable command sequence.
 
 ## Home Directories
 

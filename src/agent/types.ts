@@ -17,7 +17,7 @@ export interface Agent {
   provider?: 'claude' | 'codex';
   model?: string;
   reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
-  autoLevel?: 'low' | 'medium' | 'high';
+  autoLevel?: 'medium' | 'high';
   permissionLevel?: AgentPermissionLevel;   // authorization level for CLI/RPC ops
   sessionPolicy?: SessionPolicyConfig;      // session refresh policy
   createdAt: string;       // ISO 8601
@@ -35,7 +35,7 @@ export interface RegisterAgentInput {
   provider?: 'claude' | 'codex';
   model?: string;
   reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
-  autoLevel?: 'low' | 'medium' | 'high';
+  autoLevel?: 'medium' | 'high';
   permissionLevel?: AgentPermissionLevel;
   sessionPolicy?: SessionPolicyConfig;
   metadata?: Record<string, unknown>;
