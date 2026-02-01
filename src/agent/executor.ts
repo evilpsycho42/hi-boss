@@ -473,6 +473,9 @@ export class AgentExecutor {
                   "Bash(hiboss envelope:*)",
                   "Bash(hiboss:*)",
                 ],
+                // Only use project settings, not user settings from ~/.claude which may conflict
+                // with the agent's CLAUDE_CONFIG_DIR settings (e.g., different ANTHROPIC_BASE_URL).
+                settingSources: ["project", "user"],
               },
             },
           }

@@ -497,16 +497,13 @@ export async function runInteractiveSetup(): Promise<void> {
   });
 
   const PROVIDER_SOURCE_HOME_CUSTOM = "__custom__";
+  const defaultProviderHome = provider === "codex" ? "~/.codex" : "~/.claude";
   const providerSourceHomeChoice = await select<string>({
     message: "Choose provider source home (where to import settings/auth from):",
     choices: [
       {
-        value: provider === "codex" ? "~/.codex" : "~/.claude",
-        name: provider === "codex" ? "~/.codex (recommended)" : "~/.claude (recommended)",
-      },
-      {
-        value: provider === "codex" ? "~/.claude" : "~/.codex",
-        name: provider === "codex" ? "~/.claude" : "~/.codex",
+        value: defaultProviderHome,
+        name: `${defaultProviderHome} (recommended)`,
       },
       { value: PROVIDER_SOURCE_HOME_CUSTOM, name: "Custom path..." },
     ],
