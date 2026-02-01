@@ -16,7 +16,7 @@ export class ChannelBridge {
   private static getUnboundAdapterText(platform: string): string {
     return [
       `not-configured: no agent is bound to this ${platform} bot`,
-      `fix: hiboss agent bind --name <agent-name> --adapter-type ${platform} --adapter-token <adapter-token>`,
+      `fix: hiboss agent set --token <boss-token> --name <agent-name> --bind-adapter-type ${platform} --bind-adapter-token <adapter-token>`,
     ].join("\n");
   }
 
