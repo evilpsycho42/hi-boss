@@ -15,6 +15,8 @@ Messages are delivered to you as pending envelopes. Each envelope has:
 
 #### Sending Replies
 
+**Important:** Your text output is NOT sent to users. To deliver a reply, you MUST use `hiboss envelope send`. Simply outputting text will only log it internally — the recipient will not see it.
+
 Reply to messages using the `hiboss` CLI:
 
 ```bash
