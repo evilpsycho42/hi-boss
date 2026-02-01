@@ -134,6 +134,8 @@ The `autoLevel` setting maps to SDK access permissions:
 | `medium` | Sandboxed writes; web search; network including localhost |
 | `high` | Unrestricted; no sandbox |
 
+Note: Hi-Boss agent instructions rely on running the `hiboss` CLI, which talks to the daemon over a local Unix socket (`~/.hiboss/daemon.sock`). Some provider sandboxes (notably Claude Code sandbox mode) block Unix sockets by default unless they are explicitly allow-listed. Ensure your SDK sandbox config permits the Hi-Boss daemon socket (or use `autoLevel=high` for unsandboxed runs).
+
 ## Home Directories
 
 Each agent has provider-specific home directories for configuration and state.

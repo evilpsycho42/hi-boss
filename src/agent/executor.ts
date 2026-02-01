@@ -448,7 +448,7 @@ export class AgentExecutor {
 
       // Create runtime with provider-specific configuration
       const defaultOpts = {
-        workspace: { cwd: workspace, additionalDirs: [internalSpaceDir] },
+        workspace: { cwd: workspace, additionalDirs: [internalSpaceDir, this.hibossDir] },
         access: { auto: this.mapAccessLevel(agent.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL) },
         model: agent.model,
         reasoningEffort: agent.reasoningEffort ?? DEFAULT_AGENT_REASONING_EFFORT,
@@ -457,20 +457,38 @@ export class AgentExecutor {
       const runtime =
         provider === "claude"
           ? createRuntime({
-              provider: "@anthropic-ai/claude-agent-sdk",
-              home: homePath,
-              env: { [HIBOSS_TOKEN_ENV]: agentRecord.token },
-              defaultOpts,
-            })
+            provider: "@anthropic-ai/claude-agent-sdk",
+            home: homePath,
+            env: { [HIBOSS_TOKEN_ENV]: agentRecord.token },
+            defaultOpts,
+          })
           : createRuntime({
-              provider: "@openai/codex-sdk",
-              home: homePath,
-              env: { [HIBOSS_TOKEN_ENV]: agentRecord.token },
-              defaultOpts,
-            });
+            provider: "@openai/codex-sdk",
+            home: homePath,
+            env: { [HIBOSS_TOKEN_ENV]: agentRecord.token },
+            defaultOpts,
+          });
 
       // Open a session (instructions are loaded from home directory files)
-      const unifiedSession = await runtime.openSession({});
+      const unifiedSession = await runtime.openSession(
+        provider === "claude"
+          ? {
+            config: {
+              provider: {
+                // Allow the agent to send envelopes via the Hi-Boss CLI without permission prompts.
+                allowedTools: [
+                  // Claude Code often permission-gates Bash at the command-prefix level (e.g. `git diff`).
+                  // Hi-Boss replies are sent via `hiboss envelope send`, so allow the full prefix and a
+                  // couple of best-effort fallbacks for prefix extractors that truncate.
+                  "Bash(hiboss envelope send:*)",
+                  "Bash(hiboss envelope:*)",
+                  "Bash(hiboss:*)",
+                ],
+              },
+            },
+          }
+          : {}
+      );
 
       session = {
         runtime,
