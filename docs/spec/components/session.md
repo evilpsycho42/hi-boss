@@ -4,7 +4,7 @@ This document describes how Hi-Boss manages agent sessions.
 
 ## Overview
 
-Hi-Boss uses **stateless/ephemeral session management**. Sessions exist only in memory and are not persisted across daemon restarts. This design prioritizes envelope delivery guarantees over session continuity.
+Hi-Boss uses **ephemeral sessions**: sessions exist only in memory and are not persisted across daemon restarts. This prioritizes envelope delivery guarantees over session continuity.
 
 ## Session Lifecycle
 
@@ -13,7 +13,7 @@ Hi-Boss uses **stateless/ephemeral session management**. Sessions exist only in 
 Sessions are created on-demand when an agent needs to process envelopes:
 
 1. `AgentExecutor.getOrCreateSession()` checks if a session exists in memory
-2. If not (or if refresh is needed), generates fresh instruction files (AGENTS.md/CLAUDE.md) to home directory (including injected memory snapshot)
+2. If not (or if refresh is needed), generates fresh instruction files (AGENTS.md/CLAUDE.md) in the agent home directory (including injected `internal_space/Note.md` snapshot and optional customization files)
 3. Creates a new `UnifiedAgentRuntime` with home path pointing to instruction files
 4. Opens a `UnifiedSession` via `runtime.openSession({})` which loads instructions from home directory
 5. Caches the session in memory by agent name
@@ -30,7 +30,7 @@ Sessions are refreshed (disposed and recreated) when:
 |---------|-------------|
 | `dailyResetAt` | Configured time of day (e.g., `"09:00"`) |
 | `idleTimeout` | No activity for configured duration (e.g., `"2h"`) |
-| `maxTokens` | Token usage exceeds threshold (uses `total_usage` when available) |
+| `maxTokens` | Token usage exceeds threshold (evaluated after a successful run; uses `total_usage` when available) |
 | Manual `/new` | User sends `/new` command via Telegram |
 | Daemon restart | All sessions are lost and recreated as needed |
 
@@ -68,7 +68,7 @@ interface AgentSession {
 ### Persistent (Survives Restart)
 
 - **Database** (`~/.hiboss/hiboss.db`): Agent metadata, envelope queue, bindings, session policies
-- **Home directories**: Provider configs and instruction files (see [Agent System](agent.md#home-directories))
+- **Home directories**: Provider configs and instruction files (see [Agents](agent.md#home-directories))
 
 ## Daemon Restart Recovery
 
@@ -83,12 +83,16 @@ This ensures no envelopes are lost during daemon downtime.
 
 ## Session Policy Evaluation
 
-Session policies are configured per-agent (see [Agent System](agent.md#session-policy)). Before reusing a session, `getRefreshReasonForPolicy()` in `src/agent/executor.ts` checks:
+Session policies are configured per-agent (see [Agents](agent.md#session-policy)).
+
+Before starting a run, `getRefreshReasonForPolicy()` in `src/agent/executor.ts` checks:
 
 1. **Daily reset**: Has the configured reset time passed since session creation?
 2. **Idle timeout**: Has the session been inactive longer than the threshold?
 
 If any condition is met, the session is marked for refresh.
+
+After a successful run completes, the daemon may also refresh the session based on `maxTokens` (so the *next* run starts fresh).
 
 ## Concurrency
 

@@ -32,6 +32,7 @@ Contents (common):
 - `~/.hiboss/BOSS.md` — global boss profile injected into system instructions (optional)
 - `~/.hiboss/media/` — Telegram downloads (attachments are saved here for agents to read)
 - `~/.hiboss/agents/<agent-name>/SOUL.md` — per-agent persona injected into system instructions (optional)
+- `~/.hiboss/agents/<agent-name>/internal_space/Note.md` — per-agent notebook injected into system instructions (may be truncated)
 - `~/.hiboss/agents/<agent-name>/codex_home/` — provider home for Codex (used as `CODEX_HOME`)
 - `~/.hiboss/agents/<agent-name>/claude_home/` — provider home for Claude Code (used as `CLAUDE_CONFIG_DIR`)
 
@@ -61,89 +62,32 @@ hiboss envelope list --box inbox --status pending
 
 ---
 
-## CLI Configuration
+## CLI Surfaces
 
-### Daemon
+The CLI is the primary way to change runtime settings and persisted configuration.
 
-- `hiboss daemon start --token <boss-token> [--debug]`
-  - Enables debug logging for message/envelope routing in the daemon process.
-  - Not persisted; only affects that daemon run.
+Specifications:
+- Setup: `docs/spec/cli/setup.md`
+- Daemon: `docs/spec/cli/daemon.md`
+- Agents: `docs/spec/cli/agents.md`
+- Envelopes: `docs/spec/cli/envelopes.md`
+- Cron: `docs/spec/cli/cron.md`
+- Reactions: `docs/spec/cli/reactions.md`
+- Memory: `docs/spec/cli/memory.md`
 
-### Setup
+### Setup persistence (`hiboss setup default`)
 
-Setup writes to the SQLite `config` table and creates the first agent.
+The `--config` JSON fields are persisted as:
+- `boss-name` → `config.boss_name`
+- `boss-token` → hashed into `config.boss_token_hash`
+- `provider` → `config.default_provider`
+- `telegram.adapter-boss-id` → `config.adapter_boss_id_telegram` (stored without `@`)
+- `telegram.adapter-token` → creates an initial `agent_bindings` row for the first agent
+- `memory.*` → stored in `config.memory_*` keys (model source/path/dims/last error)
 
-- `hiboss setup` (interactive)
-- `hiboss setup default`
-  - `--config <path>`: JSON setup config file
-    - `boss-name`: stored as `config.boss_name`
-    - `boss-token`: stored hashed as `config.boss_token_hash`
-    - `provider`: stored as `config.default_provider`
-    - `memory.mode` / `memory.model-path`: resolved + validated during setup, then stored in:
-      - `config.memory_enabled`
-      - `config.memory_model_source`
-      - `config.memory_model_uri`
-      - `config.memory_model_path`
-      - `config.memory_model_dims`
-      - `config.memory_model_last_error`
-    - `telegram.adapter-boss-id`: stored as `config.adapter_boss_id_telegram` (stored without `@`)
-    - `telegram.adapter-token`: creates an initial `agent_bindings` row for the first agent
+### Daemon debug (`hiboss daemon start --debug`)
 
-### Agents
-
-- `hiboss agent register`
-  - `--token <boss-token>`
-  - `--name <name>`
-  - `--description <text>`
-  - `--workspace <path>`
-  - `--provider <claude|codex>`
-  - `--model <model>`
-  - `--reasoning-effort <none|low|medium|high|xhigh>`
-  - `--auto-level <medium|high>`
-  - `--permission-level <restricted|standard|privileged>`
-  - `--metadata-json <json>` / `--metadata-file <path>`
-  - `--bind-adapter-type <type>` / `--bind-adapter-token <token>`
-  - Session policy (optional):
-    - `--session-daily-reset-at <HH:MM>`
-    - `--session-idle-timeout <duration>`
-    - `--session-max-tokens <n>`
-
-Auto-level meaning:
-- `medium` — workspace-sandboxed tool execution
-- `high` — full access to this computer (recommended)
-
-- `hiboss agent set`
-  - Updates agent settings and bindings (see `docs/spec/cli.md` for full flags)
-
-Binding management is done via `hiboss agent set`:
-
-- Bind: `hiboss agent set --name <agent-name> --bind-adapter-type telegram --bind-adapter-token <token>`
-- Unbind: `hiboss agent set --name <agent-name> --unbind-adapter-type telegram`
-
-Binding constraints:
-
-- A single bot token can only be bound to **one** agent (`UNIQUE(adapter_type, adapter_token)`).
-- An agent can only have **one** binding per adapter type (so no “two telegram bots for one agent” today).
-
-### Envelopes
-
-- `hiboss envelope send`
-  - `--to <address>` (required)
-  - `--token <token>` (defaults to `HIBOSS_TOKEN`)
-  - `--text <text>` (or `--text -` for stdin)
-  - `--text-file <path>`
-  - `--attachment <path>` (repeatable)
-  - `--deliver-at <time>`: schedule future delivery
-    - Relative: `+2h`, `+30m`, `+1Y2M3D`, `-15m` (units: `Y/M/D/h/m/s`)
-    - ISO 8601: `2026-01-27T16:30:00+08:00`
-
-- `hiboss envelope list`
-  - `--address <address>` (boss token only; required for boss token)
-  - `--box <inbox|outbox>` (default: `inbox`)
-  - `--status <pending|done>`
-  - `-n, --limit <n>` (optional)
-  - `--n <n>` (deprecated alias for `--limit`)
-  - `--as-turn` (optional; render pending inbox as a turn preview)
+Debug logging is not persisted; it only affects that daemon run.
 
 ---
 
@@ -225,7 +169,7 @@ Constraints:
 
 ### `cron_schedules` table
 
-Cron schedules are stored per agent and materialize as normal envelopes (see `docs/spec/cron.md`).
+Cron schedules are stored per agent and materialize as normal envelopes (see `docs/spec/components/cron.md`).
 
 | Column | Type | Default | Description |
 |--------|------|---------|-------------|
@@ -257,47 +201,26 @@ Cron schedules are stored per agent and materialize as normal envelopes (see `do
 
 ---
 
-## Session Reset Policy (Per Agent)
+## Session Policy (Per Agent)
 
-Session reset strategy is configured per agent in:
+Session refresh behavior is configured per agent in:
+- `agents.session_policy` (`Agent.sessionPolicy`)
 
-- `agents.metadata.sessionPolicy`
+Fields are optional (unset = disabled):
+- `dailyResetAt`: `"HH:MM"` (24-hour), interpreted in the daemon host’s local timezone
+- `idleTimeout`: duration string (units: `d/h/m/s`; examples: `2h`, `30m`, `1h30m`)
+- `maxTokens`: number; if a successful run uses more than this, the daemon refreshes the session so the *next* run starts fresh
 
-Important behavior:
+Set/clear via `hiboss agent set` (see `docs/spec/cli/agents.md`):
+- `--session-daily-reset-at`
+- `--session-idle-timeout`
+- `--session-max-tokens`
+- `--clear-session-policy`
 
-- The daemon maintains **one shared provider session per agent** (not per chat).
-- Session resets are applied at **safe points** (before a run, or after the current queue drains), not mid-run.
-- Policy-based resets are **silent** (no adapter message), except that Telegram `/new` always replies `Session refresh requested.`
+Manual refresh:
+- Telegram `/new` requests a session refresh for the bound agent (applies at the next safe point).
 
-### Policy fields
-
-All fields are optional (unset = disabled):
-
-- `session-daily-reset-at` (`dailyResetAt` in metadata)
-  - Format: `HH:MM` (24-hour), interpreted in the daemon host’s **local timezone**.
-  - On the next run, if the current session was created before the most recent daily boundary, the daemon refreshes the session first.
-
-- `session-idle-timeout` (`idleTimeout` in metadata)
-  - Format: `<n><unit>[<n><unit>]...` where unit is `d/h/m/s` (e.g. `2h`, `30m`, `1h30m`).
-  - Idle is measured from the **last completed run** (or session creation if no runs yet).
-  - On the next run, if idle time is greater than the threshold, the daemon refreshes first.
-
-- `session-max-tokens` (`maxTokens` in metadata)
-  - After each successful run completes, the daemon computes `tokensUsed`:
-    - Prefer `total_usage.total_tokens` (provider aggregate, when available)
-    - Else `total_usage.input_tokens + total_usage.output_tokens`
-    - Else fall back to `usage.total_tokens`
-    - Else `usage.input_tokens + usage.output_tokens`
-    - If usage is missing, the token rule is skipped
-  - If `tokensUsed > session-max-tokens`, the daemon refreshes the session so the **next** run starts fresh.
-
-### Manual refresh (`/new`)
-
-If a Telegram bot is bound to an agent:
-
-- Sending `/new` in Telegram requests a refresh for the bound agent.
-- The adapter acknowledges immediately with `Session refresh requested.`
-- The refresh is queued safely and takes effect at the next safe point.
+See `docs/spec/components/session.md` for lifecycle and evaluation details.
 
 ---
 
@@ -305,8 +228,8 @@ If a Telegram bot is bound to an agent:
 
 Some settings exist in the database/schema but do not yet have dedicated CLI setters:
 
-- Updating an agent’s `provider`, `model`, `reasoning_effort`, or `auto_level` after creation
 - Updating `boss_name`, `default_provider`, `adapter_boss_id_<type>` after setup
+- Editing `config.permission_policy`
 - Changing the default data directory from `~/.hiboss/`
 
 Today, changing those requires a reset + re-setup, or direct DB edits.

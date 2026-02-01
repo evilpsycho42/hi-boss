@@ -2,7 +2,7 @@
 
 Hi-Boss supports scheduled delivery via `--deliver-at`. Scheduled envelopes are stored in SQLite and delivered when due.
 
-Cron schedules (`hiboss cron ...`) build on the same mechanism by materializing normal envelopes with `deliver-at` set to the next cron occurrence (see `docs/spec/cron.md`).
+Cron schedules (`hiboss cron ...`) build on the same mechanism by materializing normal envelopes with `deliver-at` set to the next cron occurrence (see `docs/spec/components/cron.md`).
 
 Key files:
 

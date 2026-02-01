@@ -55,6 +55,5 @@ Cron-created envelopes include `metadata.cronScheduleId` so the daemon can advan
 
 ## CLI / RPC
 
-- CLI: `hiboss cron ...` (see `docs/spec/cli.md`)
+- CLI: `hiboss cron ...` (see `docs/spec/cli/cron.md`)
 - RPC: `cron.*` methods (see `docs/spec/ipc.md`)
-

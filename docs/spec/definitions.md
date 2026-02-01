@@ -1,10 +1,17 @@
 # Hi-Boss Definitions
 
-This document defines the field mappings between code (TypeScript), SQLite, CLI flags, and CLI output keys for core Hi-Boss entities.
+This document defines the field mappings between code (TypeScript), SQLite, and stable CLI output keys for core Hi-Boss entities.
+
+For command flags and examples, see `docs/spec/cli.md` and the topic files under `docs/spec/cli/`.
 
 Naming conventions:
 - CLI flags: kebab-case, lowercase
 - CLI output keys: kebab-case, lowercase
+
+Canonical mapping (selected):
+- `envelope.deliverAt` → SQLite `deliver_at` → `--deliver-at` → `deliver-at:`
+- `envelope.createdAt` → SQLite `created_at` → `created-at:` (direct/agent messages only)
+- `envelope.fromBoss` → SQLite `from_boss` → `--from-boss` → `[boss]` suffix in rendered sender lines
 
 ---
 
@@ -38,19 +45,11 @@ Table: `envelopes` (see `src/daemon/db/schema.ts`)
 | `envelope.createdAt` | `created_at` | ISO 8601 UTC |
 | `envelope.metadata` | `metadata` | JSON (nullable); used for channel semantics |
 
-### CLI Flags
+### CLI
 
-| Command | Flags |
-|--------|-------|
-| `hiboss envelope send` | `--to`, `--token`, `--text`, `--text-file`, `--attachment`, `--deliver-at`, `--parse-mode`, `--reply-to`, `--from` (boss only), `--from-boss` (boss only), `--from-name` (boss only) |
-| `hiboss envelope list` | `--token`, `--address` (boss only), `--box`, `--status`, `-n/--limit` (`--n` is deprecated), `--as-turn` |
-| `hiboss envelope get` | `--id`, `--token` |
-| `hiboss cron create` | `--cron`, `--to`, `--timezone`, `--token`, `--text`, `--text-file`, `--attachment`, `--parse-mode`, `--reply-to` |
-| `hiboss cron list` | `--token` |
-| `hiboss cron get` | `--id`, `--token` |
-| `hiboss cron enable` | `--id`, `--token` |
-| `hiboss cron disable` | `--id`, `--token` |
-| `hiboss cron delete` | `--id`, `--token` |
+Command flags:
+- `hiboss envelope ...`: `docs/spec/cli/envelopes.md`
+- `hiboss cron ...`: `docs/spec/cli/cron.md`
 
 ### CLI Output (Envelope Instructions)
 
@@ -171,13 +170,10 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 | `agent.lastSeenAt` | `last_seen_at` | Nullable |
 | `agent.metadata` | `metadata` | JSON (nullable) |
 
-### CLI Flags
+### CLI
 
-| Command | Flags |
-|--------|-------|
-| `hiboss agent register` | `--token`, `--name`, `--description`, `--workspace`, `--provider`, `--model`, `--reasoning-effort`, `--auto-level`, `--permission-level`, `--metadata-json`, `--metadata-file`, `--bind-adapter-type`, `--bind-adapter-token`, `--session-daily-reset-at`, `--session-idle-timeout`, `--session-max-tokens` |
-| `hiboss agent set` | `--token`, `--name`, `--description`, `--workspace`, `--provider`, `--model`, `--reasoning-effort`, `--auto-level`, `--permission-level`, `--session-daily-reset-at`, `--session-idle-timeout`, `--session-max-tokens`, `--clear-session-policy`, `--metadata-json`, `--metadata-file`, `--clear-metadata`, `--bind-adapter-type`, `--bind-adapter-token`, `--unbind-adapter-type` |
-| `hiboss agent list` | `--token` |
+Command flags:
+- `hiboss agent ...`: `docs/spec/cli/agents.md`
 
 ### CLI Output Keys
 
@@ -208,11 +204,9 @@ Table: `agent_bindings` (see `src/daemon/db/schema.ts`)
 | `binding.adapterToken` | `adapter_token` | Adapter credential |
 | `binding.createdAt` | `created_at` | ISO 8601 UTC |
 
-### CLI Flags
+### CLI
 
-| Command | Flags |
-|--------|-------|
-| `hiboss agent set` | `--name`, `--bind-adapter-type`, `--bind-adapter-token`, `--unbind-adapter-type` |
+Binding flags are on `hiboss agent set` (see `docs/spec/cli/agents.md`).
 
 ### CLI Output Keys
 
@@ -227,11 +221,10 @@ Table: `agent_bindings` (see `src/daemon/db/schema.ts`)
 
 Reactions allow agents to add emoji reactions to channel messages.
 
-### CLI Flags
+### CLI
 
-| Command | Flags |
-|--------|-------|
-| `hiboss reaction set` | `--to`, `--channel-message-id` (`--message-id` is deprecated), `--emoji`, `--token` |
+Command flags:
+- `hiboss reaction ...`: `docs/spec/cli/reactions.md`
 
 ### CLI Output Keys
 
@@ -244,13 +237,10 @@ Reactions allow agents to add emoji reactions to channel messages.
 
 The daemon is the background process that manages adapters, routes envelopes, and runs agents.
 
-### CLI Flags
+### CLI
 
-| Command | Flags |
-|--------|-------|
-| `hiboss daemon start` | `--token`, `--debug` |
-| `hiboss daemon stop` | `--token` |
-| `hiboss daemon status` | `--token` |
+Command flags:
+- `hiboss daemon ...`: `docs/spec/cli/daemon.md`
 
 ### CLI Output Keys
 
@@ -260,46 +250,6 @@ The daemon is the background process that manages adapters, routes envelopes, an
 - `debug:`
 - `adapters:`
 - `data-dir:`
-
----
-
-## Setup
-
-Setup configures Hi-Boss for first use by initializing `~/.hiboss/hiboss.db` (configuration is stored in the SQLite `config` table) and creating the first agent (including provider home directories under `~/.hiboss/agents/<agent-name>/`).
-
-### CLI Commands
-
-```bash
-hiboss setup                    # Interactive setup (default)
-hiboss setup interactive        # Interactive setup
-hiboss setup default --config <path>
-```
-
-### Default Setup Options
-
-```bash
-hiboss setup default \
-  --config <path>
-```
-
----
-
-## Permission
-
-Permissions are enforced by the daemon per operation using a configurable policy stored in `config.permission_policy`.
-
----
-
-## Config
-
-System configuration is stored in the `config` table as key-value pairs.
-
-Common keys:
-- `setup_completed`
-- `boss_name`
-- `boss_token_hash`
-- `default_provider`
-- `adapter_boss_id_<adapter-type>`
 
 ---
 

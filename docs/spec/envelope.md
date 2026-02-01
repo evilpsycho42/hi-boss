@@ -51,7 +51,7 @@ New envelopes are stored as `status = pending`.
 ### Immediate vs scheduled delivery
 
 - If `deliver-at` is **missing** or **due** (`<= now`), the daemon attempts immediate delivery.
-- If `deliver-at` is in the **future**, the envelope remains `pending` until the scheduler wakes it up (see `docs/spec/scheduler.md`).
+- If `deliver-at` is in the **future**, the envelope remains `pending` until the scheduler wakes it up (see `docs/spec/components/scheduler.md`).
 
 ### When does an envelope become `done`?
 
@@ -62,71 +62,37 @@ If delivery/run fails, the envelope generally remains `pending` and will be retr
 
 ---
 
-## CLI Usage
+## CLI (quick use)
 
-### Send
+See `docs/spec/cli/envelopes.md` for the full command surface and output behavior.
+
+Send:
 
 ```bash
 hiboss envelope send --to agent:nex --token <agent-token> --text "hello"
 ```
 
-Boss token can also send envelopes, but must provide an explicit sender address:
-
-```bash
-hiboss envelope send --to agent:nex --token <boss-token> --from channel:telegram:12345 --text "hello"
-```
-
-With scheduling:
+Schedule delivery:
 
 ```bash
 hiboss envelope send --to agent:nex --token <agent-token> --text "reminder" --deliver-at +2h
 ```
 
-Multiline text (recommended):
+List pending inbox:
 
 ```bash
-hiboss envelope send --to agent:nex --token <agent-token> --text - <<'EOF'
-line 1
-line 2
-EOF
+hiboss envelope list --token <agent-token> --box inbox --status pending --limit 10
 ```
 
-Attachments (repeatable):
-
-```bash
-hiboss envelope send --to agent:nex --token <agent-token> --text "see attached" \
-  --attachment ./report.pdf \
-  --attachment ./diagram.png
-```
-
-### List / Get
-
-```bash
-hiboss envelope list --token <agent-token> --box inbox --status pending -n 10
-hiboss envelope get --id <envelope-id> --token <agent-token>
-```
-
-Boss token can list envelopes for any address by providing `--address`:
-
-```bash
-hiboss envelope list --token <boss-token> --address agent:nex --box inbox --status pending -n 10
-```
-
-`hiboss envelope list` and `hiboss envelope get` output an agent-facing “instruction” format. Direct/agent messages use `text:` (and optional `attachments:`); group messages use `Author [boss] at timestamp:` lines (and optional `attachments:`). For the exact keys, see `docs/spec/definitions.md`.
-
-If you want a token-efficient format that matches what agents receive during a run, use:
+Turn preview (same shape as agent input):
 
 ```bash
 hiboss envelope list --as-turn --token <agent-token>
 ```
 
-If `envelope list` returns no results, it outputs:
-
-```
-no-envelopes: true
-```
-
----
+Notes:
+- Boss token must specify an explicit sender (`--from`) when sending.
+- Boss token must specify a target address (`--address agent:<name>`) when listing.
 
 ## Permissions
 
@@ -143,4 +109,4 @@ Sending **to a channel** (e.g. `channel:telegram:...`) is only allowed if the se
 
 The daemon parses the input and stores `deliver-at` as a UTC ISO timestamp.
 
-See `docs/spec/scheduler.md` for delivery behavior and wake-up logic.
+See `docs/spec/components/scheduler.md` for delivery behavior and wake-up logic.

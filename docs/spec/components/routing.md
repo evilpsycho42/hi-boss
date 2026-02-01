@@ -87,7 +87,7 @@ Scheduled delivery uses the same envelope record, but delays actual delivery unt
   - delivers due channel envelopes (via `router.deliverEnvelope(...)`)
   - triggers agent runs for agents with due envelopes (via `executor.checkAndRun(...)`)
 
-See `docs/spec/scheduler.md` for the exact wake-up algorithm.
+See `docs/spec/components/scheduler.md` for the exact wake-up algorithm.
 
 ---
 

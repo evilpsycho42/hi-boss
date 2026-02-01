@@ -161,21 +161,12 @@ metadata: {
 
 ## Binding an Agent to Telegram
 
-```bash
-hiboss agent set \
-  --token <boss-token> \
-  --name <agent-name> \
-  --bind-adapter-type telegram \
-  --bind-adapter-token <telegram-bot-token>
-```
+Use `hiboss agent set` with `--bind-adapter-type telegram` + `--bind-adapter-token ...` (see `docs/spec/cli/agents.md`).
 
 ## Boss Identification
 
 The `adapter-boss-id` config (set during `hiboss setup`) identifies the "boss" user. Messages from this username have `fromBoss: true` in envelopes.
 
-```bash
-# During setup
-hiboss setup default --config ./setup.json
-```
+See `docs/spec/cli/setup.md` and `docs/spec/configuration.md` for setup config fields and persistence.
 
 Comparison is case-insensitive and handles `@` prefix automatically.

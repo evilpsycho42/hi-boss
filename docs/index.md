@@ -2,7 +2,7 @@
 
 Hi-Boss has two kinds of documentation:
 
-- **Specifications** (`docs/spec/`) — for developers; goals, roadmap, architecture, and design. Implementations should align with these docs.
+- **Specifications** (`docs/spec/`) — for developers; goals, architecture, and design. Implementations should align with these docs.
 - **User Guides** (`docs/guide/`) — for users; what you can do with Hi-Boss, how to install it, and how to use it. Keep these readable and concise (tables/diagrams preferred, minimal internals).
 
 ## User Guides
@@ -16,21 +16,36 @@ Hi-Boss has two kinds of documentation:
 
 ## Specifications
 
-- `docs/spec/goals.md` — product goal, non-goals, principles
-- `docs/spec/roadmap.md` — TODO roadmap placeholder
+Core (top-level):
+- `docs/spec/goals.md` — product goals, non-goals, principles
 - `docs/spec/architecture.md` — system architecture + invariants
-- `docs/spec/cli.md` — CLI output and rendering
-- `docs/spec/definitions.md` — field mappings (TypeScript ↔ SQLite ↔ CLI keys)
-- `docs/spec/envelope.md` — envelopes, lifecycle, status, scheduling
-- `docs/spec/cron.md` — persistent cron schedules (materialize envelopes)
-- `docs/spec/routing.md` — message routing and envelope flow
-- `docs/spec/scheduler.md` — deliver-at scheduling details
+- `docs/spec/envelope.md` — envelope concept, lifecycle, and semantics
+- `docs/spec/definitions.md` — field mappings (TypeScript ↔ SQLite ↔ CLI output keys)
+- `docs/spec/cli.md` — CLI index (command summary + links to topic specs)
 - `docs/spec/ipc.md` — CLI ↔ daemon IPC (JSON-RPC over local socket)
-- `docs/spec/agent.md` — agent model, execution, bindings, providers
-- `docs/spec/session.md` — session lifecycle and refresh policy
-- `docs/spec/token_usage.md` — token usage semantics + provider differences
-- `docs/spec/configuration.md` — config sources, CLI flags, DB settings
+- `docs/spec/configuration.md` — config sources, persistence, permission policy
+
+Components:
+- `docs/spec/components/routing.md` — message routing and envelope flow
+- `docs/spec/components/scheduler.md` — `deliver-at` scheduling details
+- `docs/spec/components/cron.md` — persistent cron schedules (materialized envelopes)
+- `docs/spec/components/agent.md` — agent model, execution, bindings, providers
+- `docs/spec/components/session.md` — session lifecycle and refresh policy
+
+CLI topics (details):
+- `docs/spec/cli/setup.md`
+- `docs/spec/cli/daemon.md`
+- `docs/spec/cli/envelopes.md`
+- `docs/spec/cli/cron.md`
+- `docs/spec/cli/reactions.md`
+- `docs/spec/cli/agents.md`
+- `docs/spec/cli/memory.md`
+
+Adapters:
 - `docs/spec/adapters/telegram.md` — Telegram adapter behavior and message schema
+
+Reference:
+- `docs/spec/reference/token-usage.md` — token usage semantics + provider differences
 
 ## Generated
 
