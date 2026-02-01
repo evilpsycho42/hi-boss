@@ -178,7 +178,6 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 | `hiboss agent register` | `--token`, `--name`, `--description`, `--workspace`, `--provider`, `--model`, `--reasoning-effort`, `--auto-level`, `--permission-level`, `--metadata-json`, `--metadata-file`, `--bind-adapter-type`, `--bind-adapter-token`, `--session-daily-reset-at`, `--session-idle-timeout`, `--session-max-tokens` |
 | `hiboss agent set` | `--token`, `--name`, `--description`, `--workspace`, `--provider`, `--model`, `--reasoning-effort`, `--auto-level`, `--permission-level`, `--session-daily-reset-at`, `--session-idle-timeout`, `--session-max-tokens`, `--clear-session-policy`, `--metadata-json`, `--metadata-file`, `--clear-metadata`, `--bind-adapter-type`, `--bind-adapter-token`, `--unbind-adapter-type` |
 | `hiboss agent list` | `--token` |
-| `hiboss background` | `--token`, `--task` |
 
 ### CLI Output Keys
 
@@ -186,7 +185,6 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 - `hiboss setup` / `hiboss setup default` prints `agent-token:` once.
 - `hiboss setup` / `hiboss setup default` also prints `boss-token:` once.
 - `hiboss agent list` prints fields like `provider:`, `reasoning-effort:`, `auto-level:`, `permission-level:`, `created-at:` (timestamps are shown in local timezone offset).
-- `hiboss background` prints no output; it sends an envelope to `agent:<self>` whose text is the background run's final response.
 - Session policy is printed as:
   - `session-daily-reset-at:`
   - `session-idle-timeout:`

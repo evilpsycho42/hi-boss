@@ -56,7 +56,6 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | `hiboss agent register` | Register a new agent | Yes (boss token) | boss |
 | `hiboss agent set` | Update agent settings and bindings | Yes (agent/boss token) | privileged |
 | `hiboss agent list` | List agents | Yes (agent/boss token) | restricted |
-| `hiboss background` | Run a background task as an agent | Yes (agent token) | standard |
 
 ---
 
@@ -560,25 +559,3 @@ Output (parseable, one block per agent):
 
 Default permission:
 - `restricted`
-
-### `hiboss background`
-
-Runs a fire-and-forget background task as the agent identified by `--token`.
-
-Flags:
-- `--token <agent-token>` (required)
-- `--task <text>` (required)
-
-Daemon dependency:
-- Requires the daemon to be running (uses `agent.self` over IPC to resolve provider/model/workspace).
-
-Behavior:
-- Spawns a detached worker process that runs the agent SDK once (no daemon-side queueing).
-- When the background run completes, Hi-Boss sends a single envelope back to `agent:<self>` whose `text:` is the run’s final response.
-- If the background run fails, it sends `text: error: ...` back to `agent:<self>`.
-
-Output:
-- No stdout output on success (launch failures print `error:` and exit non-zero).
-
-Default permission:
-- `standard`

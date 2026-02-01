@@ -334,4 +334,3 @@ If an operation is missing from the policy, it defaults to `boss` (safe-by-defau
 | `agent.refresh` | `boss` |
 | `agent.set` | `privileged` |
 | `agent.session-policy.set` | `privileged` |
-| `agent.background` | `standard` |

@@ -132,6 +132,5 @@ export const DEFAULT_PERMISSION_POLICY: PermissionPolicyV1 = {
     "agent.refresh": "boss",
     "agent.set": "privileged",
     "agent.session-policy.set": "privileged",
-    "agent.background": "standard",
   },
 };
