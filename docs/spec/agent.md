@@ -46,7 +46,7 @@ Session refresh policy configuration:
 interface SessionPolicyConfig {
   dailyResetAt?: string;   // "HH:MM" format (24h)
   idleTimeout?: string;    // Duration: "2h", "30m", "1h30m"
-  maxTokens?: number;      // Token limit per run
+  maxTokens?: number;      // Token limit per run (uses total_usage when available)
 }
 ```
 
@@ -306,7 +306,7 @@ Session policies control when agent sessions are refreshed. Stored as a first-cl
 interface SessionPolicyConfig {
   dailyResetAt?: string;   // "HH:MM" format (24h)
   idleTimeout?: string;    // Duration: "2h", "30m", "1h30m"
-  maxTokens?: number;      // Token limit per run
+  maxTokens?: number;      // Token limit per run (uses total_usage when available)
 }
 ```
 

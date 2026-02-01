@@ -30,7 +30,7 @@ Sessions are refreshed (disposed and recreated) when:
 |---------|-------------|
 | `dailyResetAt` | Configured time of day (e.g., `"09:00"`) |
 | `idleTimeout` | No activity for configured duration (e.g., `"2h"`) |
-| `maxTokens` | Token usage exceeds threshold |
+| `maxTokens` | Token usage exceeds threshold (uses `total_usage` when available) |
 | Manual `/new` | User sends `/new` command via Telegram |
 | Daemon restart | All sessions are lost and recreated as needed |
 

@@ -273,7 +273,9 @@ All fields are optional (unset = disabled):
 
 - `session-max-tokens` (`maxTokens` in metadata)
   - After each successful run completes, the daemon computes `tokensUsed`:
-    - Prefer `usage.total_tokens`
+    - Prefer `total_usage.total_tokens` (provider aggregate, when available)
+    - Else `total_usage.input_tokens + total_usage.output_tokens`
+    - Else fall back to `usage.total_tokens`
     - Else `usage.input_tokens + usage.output_tokens`
     - If usage is missing, the token rule is skipped
   - If `tokensUsed > session-max-tokens`, the daemon refreshes the session so the **next** run starts fresh.

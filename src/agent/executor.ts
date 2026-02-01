@@ -22,7 +22,7 @@ import {
 } from "./instruction-generator.js";
 import { buildTurnInput } from "./turn-input.js";
 import { HIBOSS_TOKEN_ENV } from "../shared/env.js";
-import { parseSessionPolicyConfig } from "../shared/session-policy.js";
+import { computeTokensUsed, parseSessionPolicyConfig } from "../shared/session-policy.js";
 import { nowLocalIso } from "../shared/time.js";
 import { red } from "../shared/ansi.js";
 import {
@@ -59,15 +59,14 @@ type TurnTokenUsage = {
   cacheReadTokens: number | null;
   cacheWriteTokens: number | null;
   totalTokens: number | null;
-  contextWindowTokens: number | null;
 };
 
 function asFiniteNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function readTurnTokenUsage(provider: "claude" | "codex", result: { usage?: unknown; raw?: unknown }): TurnTokenUsage {
-  const usage = (result.usage ?? {}) as Record<string, unknown>;
+function readTokenUsage(usageRaw: unknown): TurnTokenUsage {
+  const usage = (usageRaw ?? {}) as Record<string, unknown>;
   const inputTokens = asFiniteNumber(usage.input_tokens);
   const outputTokens = asFiniteNumber(usage.output_tokens);
   const cacheReadTokens = asFiniteNumber(usage.cache_read_tokens);
@@ -75,28 +74,7 @@ function readTurnTokenUsage(provider: "claude" | "codex", result: { usage?: unkn
   const totalTokens =
     asFiniteNumber(usage.total_tokens) ??
     (inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null);
-
-  // Prefer unified context window limit when available (model max, not "current" usage).
-  let contextWindowTokens = asFiniteNumber(usage.context_window_tokens);
-
-  // Back-compat fallback for older Claude adapter versions.
-  if (contextWindowTokens === null && provider === "claude") {
-    const raw = result.raw;
-    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-      const modelUsageRaw = (raw as Record<string, unknown>).modelUsage;
-      if (modelUsageRaw && typeof modelUsageRaw === "object" && !Array.isArray(modelUsageRaw)) {
-        for (const v of Object.values(modelUsageRaw as Record<string, unknown>)) {
-          if (!v || typeof v !== "object" || Array.isArray(v)) continue;
-          const cw = asFiniteNumber((v as Record<string, unknown>).contextWindow);
-          if (cw !== null && (contextWindowTokens === null || cw > contextWindowTokens)) {
-            contextWindowTokens = cw;
-          }
-        }
-      }
-    }
-  }
-
-  return { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, totalTokens, contextWindowTokens };
+  return { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, totalTokens };
 }
 
 /**
@@ -539,14 +517,17 @@ export class AgentExecutor {
     }
 
     if (this.debug) {
-      const u = readTurnTokenUsage(session.provider, result);
+      const u = readTokenUsage(result.usage);
+      const tu = readTokenUsage(result.total_usage ?? result.usage);
+      const totalUsageSuffix =
+        tu.totalTokens !== null && tu.totalTokens !== u.totalTokens ? ` total-usage=${tu.totalTokens}` : "";
 
       this.log(
-        `Token usage input=${u.inputTokens ?? "n/a"} output=${u.outputTokens ?? "n/a"} cache-read=${u.cacheReadTokens ?? "n/a"} cache-write=${u.cacheWriteTokens ?? "n/a"} total=${u.totalTokens ?? "n/a"}${u.contextWindowTokens !== null ? ` context-window=${u.contextWindowTokens}` : ""}`
+        `Token usage input=${u.inputTokens ?? "n/a"} output=${u.outputTokens ?? "n/a"} cache-read=${u.cacheReadTokens ?? "n/a"} cache-write=${u.cacheWriteTokens ?? "n/a"} total=${u.totalTokens ?? "n/a"}${totalUsageSuffix}`
       );
     }
 
-    const tokensUsed = readTurnTokenUsage(session.provider, result).totalTokens;
+    const tokensUsed = computeTokensUsed(result.total_usage ?? result.usage);
     return { finalText: result.finalText ?? "", tokensUsed };
   }
 

@@ -11,17 +11,16 @@ In debug mode, Hi-Boss logs per-turn usage from `UnifiedSession.run()` results:
 - `total_tokens`: `input_tokens + output_tokens`
 - `cache_read_tokens`: input tokens served from prompt cache (if the provider supports it)
 - `cache_write_tokens`: input tokens written to prompt cache (if the provider supports it)
-- `context_window_tokens` (when available): the model’s maximum context window (a limit, not current usage)
+- `total_usage` (when available): provider aggregate usage for the overall run (same breakdown fields; can exceed per-turn usage)
 
-Important: these are intended to reflect **the model call that produced the final assistant response for that turn**, not an aggregate across internal retries or tool sub-calls.
+Important: the per-turn fields above are intended to reflect **the model call that produced the final assistant response for that turn**, not an aggregate across internal retries or tool sub-calls. When available, `total_usage` reflects the provider’s aggregate usage summary for the overall run.
 
 ## Provider behavior differences
 
 ### Claude (Claude Code)
 
-- Claude Code usage reported at the end of a run can be **aggregated across multiple internal model calls**.
+- Claude Code usage reported at the end of a run can be **aggregated across multiple internal model calls** (reported as `total_usage`).
 - For “context length / per-turn usage”, Hi-Boss uses the **latest model-call usage** (the one that produced the final assistant message), so the next turn’s `input_tokens` is typically close to the previous turn’s `total_tokens` (modulo small overhead and caching effects).
-- Claude’s max context window is typically **200K** tokens (exposed as `context_window_tokens=200000` when available).
 
 ### Codex (Codex CLI)
 
