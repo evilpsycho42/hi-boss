@@ -7,6 +7,7 @@ Hi-Boss is a local daemon + `hiboss` CLI for routing durable messages (“envelo
 - `docs/spec/` is canonical. If behavior and spec disagree, update the spec first (or fix the code to match).
 - Keep CLI flags, CLI output keys, and agent instruction keys **stable and parseable** (kebab-case).
 - If you change CLI surface/output/DB fields, update `docs/spec/cli.md` + `docs/spec/definitions.md` in the same PR.
+- For each file,LOC should be less than 500 lines, split it if needed.
 
 Start here: `docs/index.md`, `docs/spec/goals.md`, `docs/spec/architecture.md`, `docs/spec/definitions.md`.
 
