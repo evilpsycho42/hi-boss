@@ -3,6 +3,7 @@
 ## Product Goal
 
 The portable/extendable/customizable autonomous AI assistants that work for you 7x24.
+Provide an environment for agents to communicate, self-reflect, continuously learn.
 
 ## Non-Goals
 
