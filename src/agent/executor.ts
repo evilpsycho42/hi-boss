@@ -77,6 +77,14 @@ function readTokenUsage(usageRaw: unknown): TurnTokenUsage {
   return { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, totalTokens };
 }
 
+function readTotalUsageMaybe(result: unknown): unknown | undefined {
+  const rec = result as Record<string, unknown> | null;
+  if (!rec || typeof rec !== "object") return undefined;
+  const totalUsage = rec["total_usage"];
+  if (!totalUsage || typeof totalUsage !== "object") return undefined;
+  return totalUsage;
+}
+
 /**
  * Agent executor manages agent sessions and runs.
  */
@@ -518,16 +526,19 @@ export class AgentExecutor {
 
     if (this.debug) {
       const u = readTokenUsage(result.usage);
-      const tu = readTokenUsage(result.total_usage ?? result.usage);
+      const totalUsage = readTotalUsageMaybe(result);
+      const tu = totalUsage ? readTokenUsage(totalUsage) : u;
       const totalUsageSuffix =
-        tu.totalTokens !== null && tu.totalTokens !== u.totalTokens ? ` total-usage=${tu.totalTokens}` : "";
+        totalUsage && tu.totalTokens !== null && tu.totalTokens !== u.totalTokens
+          ? ` total-usage=${tu.totalTokens}`
+          : "";
 
       this.log(
         `Token usage input=${u.inputTokens ?? "n/a"} output=${u.outputTokens ?? "n/a"} cache-read=${u.cacheReadTokens ?? "n/a"} cache-write=${u.cacheWriteTokens ?? "n/a"} total=${u.totalTokens ?? "n/a"}${totalUsageSuffix}`
       );
     }
 
-    const tokensUsed = computeTokensUsed(result.total_usage ?? result.usage);
+    const tokensUsed = computeTokensUsed((readTotalUsageMaybe(result) as any) ?? result.usage);
     return { finalText: result.finalText ?? "", tokensUsed };
   }
 
