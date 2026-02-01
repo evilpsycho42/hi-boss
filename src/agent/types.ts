@@ -33,8 +33,8 @@ export interface RegisterAgentInput {
   description?: string;
   workspace?: string;
   provider?: 'claude' | 'codex';
-  model?: string;
-  reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
+  model?: string | null;
+  reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null;
   autoLevel?: 'medium' | 'high';
   permissionLevel?: AgentPermissionLevel;
   sessionPolicy?: SessionPolicyConfig;

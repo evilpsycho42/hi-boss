@@ -125,9 +125,9 @@ Per-agent settings:
 | `description` | TEXT | `NULL` | Optional description |
 | `workspace` | TEXT | `NULL` | Passed to the provider runtime as the session working directory |
 | `provider` | TEXT | `'claude'` | `"claude"` or `"codex"` |
-| `model` | TEXT | `NULL` | Optional model name (set by setup for the initial agent) |
-| `reasoning_effort` | TEXT | `'medium'` | `"none"`, `"low"`, `"medium"`, `"high"`, or `"xhigh"` |
-| `auto_level` | TEXT | `'high'` | `"medium"` or `"high"` (legacy `"low"` is migrated to `"medium"`) |
+| `model` | TEXT | `NULL` | Optional model name. `NULL` means “use the provider default model”. |
+| `reasoning_effort` | TEXT | `'medium'` | `"none"`, `"low"`, `"medium"`, `"high"`, or `"xhigh"`. `NULL` means “use the provider default reasoning effort”. |
+| `auto_level` | TEXT | `'high'` | `"medium"` or `"high"`. Note: unified-agent-sdk also supports `"low"`, but Hi-Boss disallows it because it can prevent the agent from running `hiboss` commands; any stored `"low"` values are migrated to `"medium"`. |
 | `permission_level` | TEXT | `'standard'` | `"restricted"`, `"standard"`, or `"privileged"` |
 | `session_policy` | TEXT | `NULL` | JSON blob for SessionPolicyConfig |
 | `created_at` | TEXT | `datetime('now')` | ISO 8601 timestamp |

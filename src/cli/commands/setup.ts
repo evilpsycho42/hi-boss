@@ -39,8 +39,8 @@ interface SetupConfig {
     name: string;
     description?: string;
     workspace: string;
-    model?: string;
-    reasoningEffort: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
+    model: string | null;
+    reasoningEffort: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null;
     autoLevel: 'medium' | 'high';
     permissionLevel?: 'restricted' | 'standard' | 'privileged';
     sessionPolicy?: {
@@ -73,8 +73,15 @@ interface SetupConfigFileV1 {
     name?: string;
     description?: string;
     workspace?: string;
-    model?: string;
-    "reasoning-effort"?: "none" | "low" | "medium" | "high" | "xhigh";
+    model?: string | null;
+    "reasoning-effort"?:
+      | "none"
+      | "low"
+      | "medium"
+      | "high"
+      | "xhigh"
+      | "default"
+      | null;
     "auto-level"?: "medium" | "high";
     "permission-level"?: "restricted" | "standard" | "privileged";
     "session-policy"?: {
@@ -151,16 +158,39 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
   }
 
   const modelRaw = agentRaw.model;
-  const model =
-    typeof modelRaw === "string" && modelRaw.trim()
-      ? modelRaw.trim()
-      : DEFAULT_SETUP_MODEL_BY_PROVIDER[provider];
+  const model: SetupConfig["agent"]["model"] = (() => {
+    if (modelRaw === null) return null;
+    if (typeof modelRaw === "string" && modelRaw.trim()) {
+      const trimmed = modelRaw.trim();
+      if (trimmed === "provider_default") {
+        throw new Error("Invalid setup config (agent.model no longer supports 'provider_default'; use 'default' or null)");
+      }
+      if (trimmed === "default") return null;
+      return trimmed;
+    }
+    return DEFAULT_SETUP_MODEL_BY_PROVIDER[provider];
+  })();
 
   const reasoningEffortRaw = agentRaw["reasoning-effort"];
-  const reasoningEffort =
-    reasoningEffortRaw === "none" || reasoningEffortRaw === "low" || reasoningEffortRaw === "medium" || reasoningEffortRaw === "high" || reasoningEffortRaw === "xhigh"
-      ? reasoningEffortRaw
-      : DEFAULT_SETUP_REASONING_EFFORT;
+  const reasoningEffort: SetupConfig["agent"]["reasoningEffort"] = (() => {
+    if (reasoningEffortRaw === null) return null;
+    if (reasoningEffortRaw === "provider_default") {
+      throw new Error(
+        "Invalid setup config (agent.reasoning-effort no longer supports 'provider_default'; use 'default' or null)"
+      );
+    }
+    if (reasoningEffortRaw === "default") return null;
+    if (
+      reasoningEffortRaw === "none" ||
+      reasoningEffortRaw === "low" ||
+      reasoningEffortRaw === "medium" ||
+      reasoningEffortRaw === "high" ||
+      reasoningEffortRaw === "xhigh"
+    ) {
+      return reasoningEffortRaw;
+    }
+    return DEFAULT_SETUP_REASONING_EFFORT;
+  })();
 
   const autoLevelRaw = agentRaw["auto-level"];
   const autoLevel: SetupConfig["agent"]["autoLevel"] = (() => {
@@ -493,33 +523,51 @@ export async function runInteractiveSetup(): Promise<void> {
   });
 
   // Model selection based on provider
-  let model: string;
-  if (provider === 'claude') {
-    model = await select({
-      message: "Select model:",
-      choices: SETUP_MODEL_CHOICES_BY_PROVIDER.claude.map((value) => ({
-        value,
-        name:
-          value === "opus"
-            ? "Opus (most capable)"
-            : value === "sonnet"
-              ? "Sonnet (balanced)"
-              : "Haiku (fastest)",
-      })),
-    });
+  const MODEL_PROVIDER_DEFAULT = "default";
+  const MODEL_CUSTOM = "__custom__";
+
+  const modelChoice = await select<string>({
+    message: "Select model:",
+    choices: [
+      { value: MODEL_PROVIDER_DEFAULT, name: "default (use provider default; do not override)" },
+      ...(provider === "claude"
+        ? SETUP_MODEL_CHOICES_BY_PROVIDER.claude.map((value) => ({
+          value,
+          name: value,
+        }))
+        : SETUP_MODEL_CHOICES_BY_PROVIDER.codex.map((value) => ({
+          value,
+          name: value,
+        }))),
+      { value: MODEL_CUSTOM, name: "Custom model id..." },
+    ],
+    default: DEFAULT_SETUP_MODEL_BY_PROVIDER[provider],
+  });
+
+  let model: string | null;
+  if (modelChoice === MODEL_PROVIDER_DEFAULT) {
+    model = null;
+  } else if (modelChoice === MODEL_CUSTOM) {
+    const customModel = (await input({
+      message: "Custom model id:",
+      validate: (value) => {
+        const trimmed = value.trim();
+        if (!trimmed) return "Model id cannot be empty";
+        if (trimmed === "provider_default") return "Use 'default' to clear; or enter a real model id";
+        return true;
+      },
+    })).trim();
+    model = customModel === "default" ? null : customModel;
   } else {
-    model = await select({
-      message: "Select model:",
-      choices: SETUP_MODEL_CHOICES_BY_PROVIDER.codex.map((value) => ({
-        value,
-        name: value === "gpt-5.2" ? "GPT-5.2" : "GPT-5.2 Codex",
-      })),
-    });
+    model = modelChoice;
   }
 
-  const reasoningEffort = await select<'none' | 'low' | 'medium' | 'high' | 'xhigh'>({
+  const reasoningEffortChoice = await select<
+    "default" | "none" | "low" | "medium" | "high" | "xhigh"
+  >({
     message: "Reasoning effort:",
     choices: [
+      { value: "default", name: "default (use provider default; do not override)" },
       { value: 'none', name: "None - No reasoning (fastest)" },
       { value: 'low', name: "Low - Quick responses" },
       { value: 'medium', name: "Medium - Balanced (recommended)" },
@@ -528,16 +576,18 @@ export async function runInteractiveSetup(): Promise<void> {
     ],
     default: DEFAULT_SETUP_REASONING_EFFORT,
   });
+  const reasoningEffort: SetupConfig["agent"]["reasoningEffort"] =
+    reasoningEffortChoice === "default" ? null : reasoningEffortChoice;
 
   console.log("\n📊 Auto-level controls the agent sandbox:");
-  console.log("   • Medium: Workspace-sandboxed");
-  console.log("   • High: Full access to this computer (recommended)\n");
+  console.log("   • Medium: Workspace-scoped (can write workspace + additional dirs; runs many commands)");
+  console.log("   • High: Full computer access (can run almost anything)\n");
 
   const autoLevel = await select<'medium' | 'high'>({
     message: "Auto-level:",
     choices: [
       { value: 'high', name: "High - Full access (recommended)" },
-      { value: 'medium', name: "Medium - Workspace-sandboxed" },
+      { value: 'medium', name: "Medium - Workspace-scoped" },
     ],
     default: DEFAULT_SETUP_AUTO_LEVEL,
   });
@@ -828,7 +878,9 @@ export async function runDefaultSetup(options: DefaultSetupOptions): Promise<voi
     console.log(`   agent-token: ${agentToken}`);
     console.log(`   boss-token:  ${config.bossToken}`);
     console.log(`   provider:    ${config.provider}`);
-    console.log(`   model:       ${config.agent.model ?? DEFAULT_SETUP_MODEL_BY_PROVIDER[config.provider]}`);
+    console.log(
+      `   model:       ${config.agent.model === null ? "(provider default)" : config.agent.model}`
+    );
     console.log(`   memory-enabled: ${memory.enabled ? "true" : "false"}`);
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("\n⚠️  Save the agent token and boss token! They won't be shown again.\n");

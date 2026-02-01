@@ -237,7 +237,10 @@ export async function setAgent(options: SetAgentOptions): Promise<void> {
               idleTimeout: options.sessionIdleTimeout,
               maxTokens: options.sessionMaxTokens,
             }
-        : undefined;
+      : undefined;
+
+    const model = normalizeDefaultSentinel(options.model);
+    const reasoningEffort = normalizeDefaultSentinel(options.reasoningEffort);
 
     const result = await client.call<AgentSetResult>("agent.set", {
       token,
@@ -245,8 +248,8 @@ export async function setAgent(options: SetAgentOptions): Promise<void> {
       description: options.description,
       workspace: options.workspace,
       provider: options.provider,
-      model: options.model,
-      reasoningEffort: options.reasoningEffort,
+      model,
+      reasoningEffort,
       autoLevel: options.autoLevel,
       permissionLevel: options.permissionLevel,
       sessionPolicy,
@@ -298,6 +301,17 @@ export async function setAgent(options: SetAgentOptions): Promise<void> {
     console.error("error:", (err as Error).message);
     process.exit(1);
   }
+}
+
+function normalizeDefaultSentinel(value: string | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  if (trimmed === "provider_default") {
+    throw new Error("Invalid value 'provider_default' (use 'default' to clear and use provider defaults)");
+  }
+  if (trimmed === "default") return null;
+  return trimmed;
 }
 
 /**

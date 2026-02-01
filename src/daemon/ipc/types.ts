@@ -175,7 +175,7 @@ export interface AgentSelfResult {
     provider: 'claude' | 'codex';
     workspace: string;
     model?: string;
-    reasoningEffort: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
     autoLevel: 'medium' | 'high';
   };
 }
@@ -218,7 +218,7 @@ export interface AgentSetResult {
     workspace?: string;
     provider: "claude" | "codex";
     model?: string;
-    reasoningEffort: "none" | "low" | "medium" | "high" | "xhigh";
+    reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
     autoLevel: "medium" | "high";
     permissionLevel: "restricted" | "standard" | "privileged";
     sessionPolicy?: unknown;
@@ -252,8 +252,8 @@ export interface SetupExecuteParams {
     name: string;
     description?: string;
     workspace?: string;
-    model?: string;
-    reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
+    model?: string | null;
+    reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null;
     autoLevel?: 'medium' | 'high';
     permissionLevel?: 'restricted' | 'standard' | 'privileged';
     sessionPolicy?: {

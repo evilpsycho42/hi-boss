@@ -14,7 +14,6 @@ import {
   DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
-  DEFAULT_AGENT_REASONING_EFFORT,
 } from "../../shared/defaults.js";
 
 /**
@@ -334,7 +333,7 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
           workspace: updated.workspace,
           provider: updated.provider ?? DEFAULT_AGENT_PROVIDER,
           model: updated.model,
-          reasoningEffort: updated.reasoningEffort ?? DEFAULT_AGENT_REASONING_EFFORT,
+          reasoningEffort: updated.reasoningEffort,
           autoLevel: updated.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL,
           permissionLevel: updated.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL,
           sessionPolicy: updated.sessionPolicy,

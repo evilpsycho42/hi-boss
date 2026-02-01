@@ -28,7 +28,6 @@ import { red } from "../shared/ansi.js";
 import {
   DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PROVIDER,
-  DEFAULT_AGENT_REASONING_EFFORT,
 } from "../shared/defaults.js";
 
 /**
@@ -433,12 +432,16 @@ export class AgentExecutor {
       await writeInstructionFiles(agent.name, instructions, { debug: this.debug, hibossDir: this.hibossDir });
 
       // Create runtime with provider-specific configuration
-      const defaultOpts = {
+      const defaultOpts: Record<string, unknown> = {
         workspace: { cwd: workspace, additionalDirs: [internalSpaceDir, this.hibossDir] },
         access: { auto: this.mapAccessLevel(agent.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL) },
-        model: agent.model,
-        reasoningEffort: agent.reasoningEffort ?? DEFAULT_AGENT_REASONING_EFFORT,
       };
+      if (agent.model !== undefined) {
+        defaultOpts.model = agent.model;
+      }
+      if (agent.reasoningEffort !== undefined) {
+        defaultOpts.reasoningEffort = agent.reasoningEffort;
+      }
 
       const runtime =
         provider === "claude"

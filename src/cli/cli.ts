@@ -446,10 +446,13 @@ agent
   .option("--description <description>", "Agent description")
   .option("--workspace <path>", "Workspace path for unified-agent-sdk")
   .option("--provider <provider>", "Provider (claude or codex)")
-  .option("--model <model>", "Model name (provider-specific)")
+  .option(
+    "--model <model>",
+    "Model override (provider-specific; use 'default' to clear)"
+  )
   .option(
     "--reasoning-effort <effort>",
-    "Reasoning effort (none, low, medium, high, xhigh)"
+    "Reasoning effort (default, none, low, medium, high, xhigh)"
   )
   .option("--auto-level <level>", "Auto-level (medium, high)")
   .option(

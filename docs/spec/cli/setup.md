@@ -50,8 +50,8 @@ Example (`setup.json`):
     "name": "nex",
     "description": "nex - AI assistant",
     "workspace": "/absolute/path/to/workspace",
-    "model": "opus",
-    "reasoning-effort": "medium",
+    "model": null,
+    "reasoning-effort": null,
     "auto-level": "high",
     "permission-level": "standard"
   },
@@ -61,6 +61,11 @@ Example (`setup.json`):
   }
 }
 ```
+
+Notes:
+- `agent.model: null` means “use the provider default model”.
+- `agent.reasoning-effort: null` means “use the provider default reasoning effort”.
+- For parity with `hiboss agent set`, the string `"default"` is also accepted for both fields (treated as `null`).
 
 Output:
 - Prints `agent-token:` and `boss-token:` once.

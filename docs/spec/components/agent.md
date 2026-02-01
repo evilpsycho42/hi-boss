@@ -54,8 +54,8 @@ Set at registration or via agent settings:
 | Setting | Description | Values |
 |---------|-------------|--------|
 | `provider` | SDK provider | `claude`, `codex` |
-| `model` | Model to use | Provider-specific model ID |
-| `reasoningEffort` | Extended reasoning level | `none`, `low`, `medium`, `high`, `xhigh` |
+| `model` | Model override | Provider-specific model ID (`null`/unset means “use provider default”) |
+| `reasoningEffort` | Reasoning effort override | `none`, `low`, `medium`, `high`, `xhigh` (`null`/unset means “use provider default”) |
 | `autoLevel` | Automation/access level | `medium`, `high` |
 | `permissionLevel` | Authorization for CLI/RPC ops | `restricted`, `standard`, `privileged` |
 | `sessionPolicy` | Session refresh policy | See [Session Policy](#session-policy) |
@@ -66,10 +66,10 @@ The `autoLevel` setting maps to SDK access permissions:
 
 | autoLevel | Behavior |
 |-----------|----------|
-| `medium` | Workspace-sandboxed tool execution |
-| `high` | Full access to this computer (recommended) |
+| `medium` | Workspace-scoped automation: can write files in the workspace (including configured additional dirs) and run a broad set of commands, but stays workspace-scoped |
+| `high` | Full-computer automation: can run almost anything on this machine (recommended only when you trust the agent) |
 
-Note: Hi-Boss agent instructions rely on running the `hiboss` CLI, which talks to the daemon over a local Unix socket (`~/.hiboss/daemon.sock`). `autoLevel=low` is no longer supported because it can block that local IPC; `autoLevel=medium` is the lowest supported setting that still allows agents to use the Hi-Boss envelope system; `autoLevel=high` is recommended for operator-friendly automation.
+Note: unified-agent-sdk supports `autoLevel=low`, but Hi-Boss disallows it because Hi-Boss agent instructions rely on running the `hiboss` CLI (local IPC via `~/.hiboss/daemon.sock`), and `low` can block that. `autoLevel=medium` is the lowest supported setting that still allows agents to use the Hi-Boss envelope system.
 
 ### Real-provider behavior test
 

@@ -161,9 +161,9 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 | `agent.description` | `description` | Nullable |
 | `agent.workspace` | `workspace` | Nullable |
 | `agent.provider` | `provider` | `claude` or `codex` |
-| `agent.model` | `model` | Nullable |
-| `agent.reasoningEffort` | `reasoning_effort` | See `src/agent/types.ts` for allowed values |
-| `agent.autoLevel` | `auto_level` | `medium`, `high` (legacy `low` is migrated to `medium`) |
+| `agent.model` | `model` | Nullable; `NULL` means “use provider default model” |
+| `agent.reasoningEffort` | `reasoning_effort` | See `src/agent/types.ts` for allowed values; `NULL` means “use provider default reasoning effort” |
+| `agent.autoLevel` | `auto_level` | `medium`, `high` (unified-agent-sdk supports `low`, but Hi-Boss disallows it; any stored `low` values are migrated to `medium`) |
 | `agent.permissionLevel` | `permission_level` | `restricted`, `standard`, `privileged` |
 | `agent.sessionPolicy` | `session_policy` | JSON (nullable) |
 | `agent.createdAt` | `created_at` | ISO 8601 UTC |
@@ -174,6 +174,10 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 
 Command flags:
 - `hiboss agent ...`: `docs/spec/cli/agents.md`
+
+Clearing nullable overrides:
+- `hiboss agent set --model default` sets `agent.model = NULL` (provider default model)
+- `hiboss agent set --reasoning-effort default` sets `agent.reasoningEffort = NULL` (provider default reasoning effort)
 
 ### CLI Output Keys
 

@@ -211,6 +211,9 @@ export class HiBossDatabase {
     const token = generateToken();
     const createdAt = new Date().toISOString();
 
+    const reasoningEffortToStore =
+      input.reasoningEffort === undefined ? DEFAULT_AGENT_REASONING_EFFORT : input.reasoningEffort;
+
     const stmt = this.db.prepare(`
       INSERT INTO agents (name, token, description, workspace, provider, model, reasoning_effort, auto_level, permission_level, session_policy, created_at, metadata)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -223,7 +226,7 @@ export class HiBossDatabase {
       input.workspace ?? null,
       input.provider ?? DEFAULT_AGENT_PROVIDER,
       input.model ?? null,
-      input.reasoningEffort ?? DEFAULT_AGENT_REASONING_EFFORT,
+      reasoningEffortToStore,
       input.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL,
       input.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL,
       input.sessionPolicy ? JSON.stringify(input.sessionPolicy) : null,

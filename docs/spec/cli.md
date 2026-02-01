@@ -17,6 +17,14 @@ Implementation references:
 
 Many commands accept `--token`; if omitted, the CLI uses the `HIBOSS_TOKEN` environment variable.
 
+### Clearing optional values
+
+Some agent settings are nullable (e.g., `model`, `reasoning-effort`). When cleared, Hi-Boss omits these overrides when opening provider sessions so provider defaults apply.
+
+To clear via CLI, use the sentinel value `default`, for example:
+- `hiboss agent set --name <agent> --model default`
+- `hiboss agent set --name <agent> --reasoning-effort default`
+
 ### Output stability
 
 - Most operational commands print key-value lines like `key: value` with kebab-case keys (intended to be parseable).

@@ -35,17 +35,20 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
         rpcError(RPC_ERRORS.INVALID_PARAMS, AGENT_NAME_ERROR_MESSAGE);
       }
 
-      if (
-        p.agent.reasoningEffort !== "none" &&
-        p.agent.reasoningEffort !== "low" &&
-        p.agent.reasoningEffort !== "medium" &&
-        p.agent.reasoningEffort !== "high" &&
-        p.agent.reasoningEffort !== "xhigh"
-      ) {
-        rpcError(
-          RPC_ERRORS.INVALID_PARAMS,
-          "Invalid reasoning-effort (expected none, low, medium, high, xhigh)"
-        );
+      if (p.agent.reasoningEffort !== undefined) {
+        if (
+          p.agent.reasoningEffort !== null &&
+          p.agent.reasoningEffort !== "none" &&
+          p.agent.reasoningEffort !== "low" &&
+          p.agent.reasoningEffort !== "medium" &&
+          p.agent.reasoningEffort !== "high" &&
+          p.agent.reasoningEffort !== "xhigh"
+        ) {
+          rpcError(
+            RPC_ERRORS.INVALID_PARAMS,
+            "Invalid reasoning-effort (expected none, low, medium, high, xhigh)"
+          );
+        }
       }
 
       if (p.agent.autoLevel !== "medium" && p.agent.autoLevel !== "high") {

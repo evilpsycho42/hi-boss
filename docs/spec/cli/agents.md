@@ -1,8 +1,9 @@
 # CLI: Agents
 
 Auto-level:
-- `medium` — workspace-sandboxed tool execution
-- `high` — full access to this computer (recommended)
+- `medium` — workspace + additional dirs access (can write files and run a broad set of commands, but stays workspace-scoped)
+- `high` — full access to this computer (can run almost anything; recommended only when you trust the agent)
+- Note: unified-agent-sdk supports `low`, but Hi-Boss disallows it because it can block `hiboss` CLI usage.
 
 ## `hiboss agent register`
 
@@ -43,8 +44,8 @@ Flags:
 - `--description <description>` (optional)
 - `--workspace <path>` (optional)
 - `--provider <claude|codex>` (optional)
-- `--model <model>` (optional)
-- `--reasoning-effort <none|low|medium|high|xhigh>` (optional)
+- `--model <model>` (optional; use `default` to clear and use provider default)
+- `--reasoning-effort <default|none|low|medium|high|xhigh>` (optional)
 - `--auto-level <medium|high>` (optional)
 - `--permission-level <restricted|standard|privileged>` (optional; boss token only)
 - Session policy:

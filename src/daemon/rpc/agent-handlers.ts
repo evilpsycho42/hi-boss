@@ -24,7 +24,6 @@ import { setupAgentHome } from "../../agent/home-setup.js";
 import {
   DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PROVIDER,
-  DEFAULT_AGENT_REASONING_EFFORT,
 } from "../../shared/defaults.js";
 
 /**
@@ -357,7 +356,7 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
 
       const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
       const workspace = agent.workspace ?? process.cwd();
-      const reasoningEffort = agent.reasoningEffort ?? DEFAULT_AGENT_REASONING_EFFORT;
+      const reasoningEffort = agent.reasoningEffort;
       const autoLevel = agent.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL;
 
       return {
