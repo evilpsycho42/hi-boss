@@ -390,6 +390,10 @@ agent
   .option("--description <description>", "Agent description")
   .option("--workspace <path>", "Workspace path for unified-agent-sdk")
   .option("--provider <provider>", "Provider (claude or codex)")
+  .option(
+    "--provider-source-home <path>",
+    "Provider source home to import config from (default: ~/.codex or ~/.claude)"
+  )
   .option("--model <model>", "Model name (provider-specific)")
   .option(
     "--reasoning-effort <effort>",
@@ -424,6 +428,7 @@ agent
       description: options.description,
       workspace: options.workspace,
       provider: options.provider,
+      providerSourceHome: options.providerSourceHome,
       model: options.model,
       reasoningEffort: options.reasoningEffort,
       autoLevel: options.autoLevel,
@@ -446,6 +451,10 @@ agent
   .option("--description <description>", "Agent description")
   .option("--workspace <path>", "Workspace path for unified-agent-sdk")
   .option("--provider <provider>", "Provider (claude or codex)")
+  .option(
+    "--provider-source-home <path>",
+    "Provider source home to import config from (default: ~/.codex or ~/.claude)"
+  )
   .option(
     "--model <model>",
     "Model override (provider-specific; use 'default' to clear)"
@@ -486,6 +495,7 @@ agent
       description: options.description,
       workspace: options.workspace,
       provider: options.provider,
+      providerSourceHome: options.providerSourceHome,
       model: options.model,
       reasoningEffort: options.reasoningEffort,
       autoLevel: options.autoLevel,

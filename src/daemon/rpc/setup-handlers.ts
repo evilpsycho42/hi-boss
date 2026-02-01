@@ -147,7 +147,26 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
       }
 
       // Setup agent home directories
-      await setupAgentHome(p.agent.name, ctx.config.dataDir);
+      let providerSourceHome: string | undefined;
+      if (p.providerSourceHome !== undefined) {
+        if (typeof p.providerSourceHome !== "string" || !p.providerSourceHome.trim()) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid provider-source-home");
+        }
+        providerSourceHome = p.providerSourceHome.trim();
+      }
+
+      try {
+        await setupAgentHome(p.agent.name, ctx.config.dataDir, {
+          provider: p.provider,
+          providerSourceHome,
+        });
+      } catch (err) {
+        const message = (err as Error).message || String(err);
+        if (message.includes("provider-source-home")) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, message);
+        }
+        throw err;
+      }
 
       // If an adapter is provided and the daemon is running, create/start it first.
       // This validates adapter credentials and avoids committing setup state if startup fails.

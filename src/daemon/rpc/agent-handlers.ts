@@ -142,7 +142,27 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
       });
 
       // Setup agent home directories
-      await setupAgentHome(p.name, ctx.config.dataDir);
+      let providerSourceHome: string | undefined;
+      if (p.providerSourceHome !== undefined) {
+        if (typeof p.providerSourceHome !== "string" || !p.providerSourceHome.trim()) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid provider-source-home");
+        }
+        providerSourceHome = p.providerSourceHome.trim();
+      }
+
+      const effectiveProvider = provider ?? DEFAULT_AGENT_PROVIDER;
+      try {
+        await setupAgentHome(p.name, ctx.config.dataDir, {
+          provider: effectiveProvider,
+          providerSourceHome,
+        });
+      } catch (err) {
+        const message = (err as Error).message || String(err);
+        if (message.includes("provider-source-home")) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, message);
+        }
+        throw err;
+      }
 
       const bindAdapterType = p.bindAdapterType;
       const bindAdapterToken = p.bindAdapterToken;

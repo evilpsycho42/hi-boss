@@ -128,6 +128,7 @@ export interface AgentRegisterParams {
   description?: string;
   workspace?: string;
   provider?: "claude" | "codex";
+  providerSourceHome?: string;
   model?: string;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
   autoLevel?: "medium" | "high";
@@ -195,6 +196,7 @@ export interface AgentSetParams {
   description?: string | null;
   workspace?: string | null;
   provider?: "claude" | "codex" | null;
+  providerSourceHome?: string;
   model?: string | null;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | null;
   autoLevel?: "medium" | "high" | null;
@@ -247,6 +249,7 @@ export interface SetupCheckResult {
 
 export interface SetupExecuteParams {
   provider: 'claude' | 'codex';
+  providerSourceHome?: string;
   bossName: string;
   agent: {
     name: string;

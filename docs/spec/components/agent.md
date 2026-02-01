@@ -95,12 +95,12 @@ Each agent has provider-specific home directories for configuration and state.
 ├── internal_space/      # Agent's private space, automatically added into additional directories
 │   └── Note.md          # Agent notebook (injected into system prompt; truncated)
 ├── codex_home/
-│   ├── config.toml      # Copied from ~/.codex/config.toml
-│   ├── auth.json        # Copied from ~/.codex/auth.json
+│   ├── config.toml      # Imported from provider source home (default: ~/.codex/config.toml)
+│   ├── auth.json        # Imported from provider source home (default: ~/.codex/auth.json)
 │   └── AGENTS.md        # Generated system instructions
 └── claude_home/
-    ├── settings.json    # Copied from ~/.claude/settings.json
-    ├── .claude.json     # Copied from ~/.claude/.claude.json
+    ├── settings.json    # Imported from provider source home (default: ~/.claude/settings.json)
+    ├── .claude.json     # Imported from provider source home (default: ~/.claude/.claude.json)
     └── CLAUDE.md        # Generated system instructions
 ```
 
@@ -110,7 +110,7 @@ Located in `src/agent/home-setup.ts`:
 
 | Function | Purpose |
 |----------|---------|
-| `setupAgentHome(agentName)` | Creates home directories, copies provider configs |
+| `setupAgentHome(agentName, opts?)` | Creates home directories and imports provider configs (provider-specific) |
 | `getAgentHomePath(agentName, provider)` | Returns provider-specific home path |
 | `getAgentInternalSpaceDir(agentName)` | Returns `~/.hiboss/agents/<name>/internal_space/` |
 | `agentHomeExists(agentName)` | Checks if home directories exist |

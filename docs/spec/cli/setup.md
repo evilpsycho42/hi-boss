@@ -13,6 +13,7 @@ Runs the interactive first-time setup wizard (default).
 Behavior:
 - Initializes the SQLite database at `~/.hiboss/hiboss.db` (WAL sidecars like `hiboss.db-wal` / `hiboss.db-shm` may appear)
 - Creates the agent home directories under `~/.hiboss/agents/<agent-name>/`
+- Imports provider config files for the chosen provider into the agent’s provider home
 - Creates the first agent and prints `agent-token:` once (no “show token” command)
 - Prints `boss-token:` once
 - Configures and binds a Telegram adapter for the first agent
@@ -33,6 +34,7 @@ Optional:
 - `memory: { mode, model-path }`
   - `mode`: `default` (download the default embedding model) or `local` (use a local GGUF)
   - `model-path`: required when `mode: local` (absolute path to a `.gguf`)
+- `provider-source-home: <path>` (optional; imports provider config from this directory; defaults to `~/.codex/` or `~/.claude/` based on `provider`)
 
 Example (`setup.json`):
 
@@ -42,6 +44,7 @@ Example (`setup.json`):
   "boss-name": "your-name",
   "boss-token": "your-boss-token",
   "provider": "claude",
+  "provider-source-home": "~/.claude",
   "memory": {
     "mode": "local",
     "model-path": "/absolute/path/to/embedding-model.gguf"

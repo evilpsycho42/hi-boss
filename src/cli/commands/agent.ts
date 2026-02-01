@@ -44,6 +44,7 @@ export interface RegisterAgentOptions {
   description?: string;
   workspace?: string;
   provider?: string;
+  providerSourceHome?: string;
   model?: string;
   reasoningEffort?: string;
   autoLevel?: string;
@@ -89,6 +90,7 @@ export interface SetAgentOptions {
   description?: string;
   workspace?: string;
   provider?: string;
+  providerSourceHome?: string;
   model?: string;
   reasoningEffort?: string;
   autoLevel?: string;
@@ -164,6 +166,9 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
     if (!isValidAgentName(options.name)) {
       throw new Error(AGENT_NAME_ERROR_MESSAGE);
     }
+    if (options.providerSourceHome && !options.provider) {
+      throw new Error("--provider-source-home requires --provider");
+    }
 
     const token = resolveToken(options.token);
     const result = await client.call<RegisterAgentResult>("agent.register", {
@@ -172,6 +177,7 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
       description: options.description,
       workspace: options.workspace,
       provider: options.provider,
+      providerSourceHome: options.providerSourceHome,
       model: options.model,
       reasoningEffort: options.reasoningEffort,
       autoLevel: options.autoLevel,
@@ -207,6 +213,9 @@ export async function setAgent(options: SetAgentOptions): Promise<void> {
 
   try {
     const token = resolveToken(options.token);
+    if (options.providerSourceHome && !options.provider) {
+      throw new Error("--provider-source-home requires --provider");
+    }
 
     if (options.clearMetadata && (options.metadataJson || options.metadataFile)) {
       throw new Error("Use either --clear-metadata or --metadata-json/--metadata-file, not both");
@@ -248,6 +257,7 @@ export async function setAgent(options: SetAgentOptions): Promise<void> {
       description: options.description,
       workspace: options.workspace,
       provider: options.provider,
+      providerSourceHome: options.providerSourceHome,
       model,
       reasoningEffort,
       autoLevel: options.autoLevel,

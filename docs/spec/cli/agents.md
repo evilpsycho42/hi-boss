@@ -15,6 +15,7 @@ Flags:
 - `--description <description>` (optional)
 - `--workspace <path>` (optional)
 - `--provider <claude|codex>` (optional)
+- `--provider-source-home <path>` (optional; when used with `--provider`, imports provider config from this directory)
 - `--model <model>` (optional)
 - `--reasoning-effort <none|low|medium|high|xhigh>` (optional)
 - `--auto-level <medium|high>` (optional)
@@ -27,6 +28,12 @@ Flags:
   - `--session-daily-reset-at HH:MM`
   - `--session-idle-timeout <duration>` (units: `d/h/m/s`)
   - `--session-max-tokens <n>`
+
+Provider config import:
+- When `--provider` is provided, Hi-Boss imports provider config files into the agent’s provider home.
+- If `--provider-source-home` is omitted, Hi-Boss uses the provider default source home:
+  - `codex` → `~/.codex/`
+  - `claude` → `~/.claude/`
 
 Output (parseable):
 - `name:`
@@ -44,6 +51,7 @@ Flags:
 - `--description <description>` (optional)
 - `--workspace <path>` (optional)
 - `--provider <claude|codex>` (optional)
+- `--provider-source-home <path>` (optional; when used with `--provider`, imports provider config from this directory)
 - `--model <model>` (optional; use `default` to clear and use provider default)
 - `--reasoning-effort <default|none|low|medium|high|xhigh>` (optional)
 - `--auto-level <medium|high>` (optional)
@@ -59,6 +67,12 @@ Flags:
 - Binding:
   - `--bind-adapter-type <type>` + `--bind-adapter-token <token>` (optional)
   - `--unbind-adapter-type <type>` (optional)
+
+Provider config import:
+- When `--provider` is provided, Hi-Boss imports provider config files into the agent’s provider home.
+- If `--provider-source-home` is omitted, Hi-Boss uses the provider default source home:
+  - `codex` → `~/.codex/`
+  - `claude` → `~/.claude/`
 
 Output (parseable):
 - `success: true|false`

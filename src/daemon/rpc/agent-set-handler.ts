@@ -9,6 +9,7 @@ import { RPC_ERRORS } from "../ipc/types.js";
 import type { DaemonContext } from "./context.js";
 import { requireToken, rpcError } from "./context.js";
 import type { Agent } from "../../agent/types.js";
+import { setupAgentHome } from "../../agent/home-setup.js";
 import { parseDailyResetAt, parseDurationToMs } from "../../shared/session-policy.js";
 import {
   DEFAULT_AGENT_AUTO_LEVEL,
@@ -82,6 +83,17 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
           rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid provider (expected claude or codex)");
         }
         provider = p.provider;
+      }
+
+      let providerSourceHome: string | undefined;
+      if (p.providerSourceHome !== undefined) {
+        if (typeof p.providerSourceHome !== "string" || !p.providerSourceHome.trim()) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid provider-source-home");
+        }
+        providerSourceHome = p.providerSourceHome.trim();
+      }
+      if (providerSourceHome !== undefined && (provider === undefined || provider === null)) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "--provider-source-home requires --provider");
       }
 
       let reasoningEffort: Agent["reasoningEffort"] | null | undefined;
@@ -186,6 +198,21 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
       }
 
       const before = ctx.db.getAgentByName(agentName)!;
+
+      if (provider === "claude" || provider === "codex") {
+        try {
+          await setupAgentHome(agentName, ctx.config.dataDir, {
+            provider,
+            providerSourceHome,
+          });
+        } catch (err) {
+          const message = (err as Error).message || String(err);
+          if (message.includes("provider-source-home")) {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, message);
+          }
+          throw err;
+        }
+      }
 
       // Bind/unbind are async due to adapter start/stop; do those outside the DB transaction.
       if (wantsUnbind) {

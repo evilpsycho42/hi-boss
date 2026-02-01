@@ -30,6 +30,14 @@ To clear via CLI, use the sentinel value `default`, for example:
 - Most operational commands print key-value lines like `key: value` with kebab-case keys (intended to be parseable).
 - `hiboss setup interactive` prints a wizard with human-friendly prose plus a final key-value summary.
 
+### Provider config import
+
+- When an agent provider is set via CLI, Hi-Boss imports provider config files into the agent’s provider home.
+- Source defaults:
+  - `codex` → `~/.codex/`
+  - `claude` → `~/.claude/`
+- Override via `--provider-source-home <path>` on `hiboss agent register` / `hiboss agent set`.
+
 ### Daemon dependency
 
 - Commands that call IPC (`envelope.*`, most `agent.*`) require the daemon to be running.

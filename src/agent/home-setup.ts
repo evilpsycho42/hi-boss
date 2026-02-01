@@ -13,6 +13,11 @@ import { assertValidAgentName } from "../shared/validation.js";
 import { getDefaultHiBossDir } from "../shared/defaults.js";
 import { ensureAgentInternalSpaceLayout } from "../shared/internal-space.js";
 
+export interface SetupAgentHomeOptions {
+  provider?: "claude" | "codex";
+  providerSourceHome?: string;
+}
+
 /**
  * Get the default hi-boss directory path.
  */
@@ -77,18 +82,53 @@ function copyFileIfExists(src: string, dest: string): boolean {
   return true;
 }
 
+function expandTilde(p: string): string {
+  if (p === "~") return os.homedir();
+  if (p.startsWith("~/") || p.startsWith("~\\")) {
+    return path.join(os.homedir(), p.slice(2));
+  }
+  return p;
+}
+
+function resolveProviderSourceHome(options: SetupAgentHomeOptions): string | undefined {
+  if (!options.provider && !options.providerSourceHome) {
+    return undefined;
+  }
+
+  const provider = options.provider;
+  if (!provider) {
+    return undefined;
+  }
+
+  const fallback = provider === "codex"
+    ? path.join(os.homedir(), ".codex")
+    : path.join(os.homedir(), ".claude");
+
+  const raw = options.providerSourceHome?.trim();
+  const expanded = expandTilde(raw && raw.length > 0 ? raw : fallback);
+  if (!path.isAbsolute(expanded)) {
+    throw new Error(`Invalid provider-source-home (must be an absolute path): ${expanded}`);
+  }
+  return expanded;
+}
+
 /**
  * Set up the agent's home directories with provider configs.
  *
- * Creates both codex_home and claude_home for the agent and copies
- * the base configs from the user's home directory (if they exist).
+ * Creates both codex_home and claude_home for the agent and imports
+ * provider configs into the selected provider home.
+ *
+ * When `options.provider` is omitted, this function falls back to the legacy
+ * behavior of importing configs for both providers from their default homes.
  *
  * @param agentName - The agent's name
  * @param hibossDir - Optional custom hiboss directory (defaults to ~/.hiboss)
+ * @param options - Optional provider import settings
  */
 export async function setupAgentHome(
   agentName: string,
-  hibossDir?: string
+  hibossDir?: string,
+  options: SetupAgentHomeOptions = {}
 ): Promise<void> {
   const baseDir = hibossDir ?? getHiBossDir();
   const codexHome = getCodexHomePath(agentName, hibossDir);
@@ -104,21 +144,32 @@ export async function setupAgentHome(
     throw new Error(`Failed to initialize agent internal space: ${ensuredSpace.error}`);
   }
 
-  // Copy Codex configs (if exist)
-  const userCodexDir = path.join(os.homedir(), ".codex");
-  const userCodexConfig = path.join(userCodexDir, "config.toml");
-  const userCodexAuth = path.join(userCodexDir, "auth.json");
+  const sourceHome = resolveProviderSourceHome(options);
 
-  copyFileIfExists(userCodexConfig, path.join(codexHome, "config.toml"));
-  copyFileIfExists(userCodexAuth, path.join(codexHome, "auth.json"));
+  const provider = options.provider;
+  if (provider === "codex" || provider === undefined) {
+    // Copy Codex configs (if exist)
+    const userCodexDir = sourceHome && provider === "codex"
+      ? sourceHome
+      : path.join(os.homedir(), ".codex");
+    const userCodexConfig = path.join(userCodexDir, "config.toml");
+    const userCodexAuth = path.join(userCodexDir, "auth.json");
 
-  // Copy Claude configs (if exist)
-  const userClaudeDir = path.join(os.homedir(), ".claude");
-  const claudeSettings = path.join(userClaudeDir, "settings.json");
-  const claudeJson = path.join(userClaudeDir, ".claude.json");
+    copyFileIfExists(userCodexConfig, path.join(codexHome, "config.toml"));
+    copyFileIfExists(userCodexAuth, path.join(codexHome, "auth.json"));
+  }
 
-  copyFileIfExists(claudeSettings, path.join(claudeHome, "settings.json"));
-  copyFileIfExists(claudeJson, path.join(claudeHome, ".claude.json"));
+  if (provider === "claude" || provider === undefined) {
+    // Copy Claude configs (if exist)
+    const userClaudeDir = sourceHome && provider === "claude"
+      ? sourceHome
+      : path.join(os.homedir(), ".claude");
+    const claudeSettings = path.join(userClaudeDir, "settings.json");
+    const claudeJson = path.join(userClaudeDir, ".claude.json");
+
+    copyFileIfExists(claudeSettings, path.join(claudeHome, "settings.json"));
+    copyFileIfExists(claudeJson, path.join(claudeHome, ".claude.json"));
+  }
 }
 
 /**

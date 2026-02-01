@@ -34,6 +34,7 @@ export interface DefaultSetupOptions {
  */
 interface SetupConfig {
   provider: 'claude' | 'codex';
+  providerSourceHome?: string;
   bossName: string;
   agent: {
     name: string;
@@ -65,6 +66,7 @@ interface SetupConfigFileV1 {
   "boss-name"?: string;
   "boss-token": string;
   provider?: "claude" | "codex";
+  "provider-source-home"?: string;
   memory?: {
     mode?: "default" | "local";
     "model-path"?: string;
@@ -129,6 +131,16 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
   const providerRaw = parsed.provider;
   const provider =
     providerRaw === "claude" || providerRaw === "codex" ? providerRaw : DEFAULT_SETUP_PROVIDER;
+
+  const providerSourceHomeRaw = (parsed as Record<string, unknown>)["provider-source-home"];
+  let providerSourceHome: string | undefined;
+  if (typeof providerSourceHomeRaw === "string" && providerSourceHomeRaw.trim()) {
+    const trimmed = providerSourceHomeRaw.trim();
+    if (!path.isAbsolute(trimmed) && !trimmed.startsWith("~")) {
+      throw new Error("Invalid setup config (provider-source-home must be an absolute path or start with ~)");
+    }
+    providerSourceHome = trimmed;
+  }
 
   const bossNameRaw = parsed["boss-name"];
   const bossName =
@@ -277,6 +289,7 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
 
   const config: SetupConfig = {
     provider,
+    providerSourceHome,
     bossName,
     agent: {
       name: agentName,
@@ -360,6 +373,7 @@ async function executeSetup(config: SetupConfig): Promise<string> {
     const client = new IpcClient(getSocketPath());
     const result = await client.call<SetupExecuteResult>("setup.execute", {
       provider: config.provider,
+      providerSourceHome: config.providerSourceHome,
       bossName: config.bossName,
       agent: config.agent,
       bossToken: config.bossToken,
@@ -401,7 +415,10 @@ async function executeSetupDirect(config: SetupConfig): Promise<string> {
     }
 
     // Setup agent home directories
-    await setupAgentHome(config.agent.name, daemonConfig.dataDir);
+    await setupAgentHome(config.agent.name, daemonConfig.dataDir, {
+      provider: config.provider,
+      providerSourceHome: config.providerSourceHome,
+    });
 
     const memory = normalizeMemoryConfig(config);
 
@@ -478,6 +495,36 @@ export async function runInteractiveSetup(): Promise<void> {
       { value: 'codex', name: "Codex (OpenAI)" },
     ],
   });
+
+  const PROVIDER_SOURCE_HOME_CUSTOM = "__custom__";
+  const providerSourceHomeChoice = await select<string>({
+    message: "Choose provider source home (where to import settings/auth from):",
+    choices: [
+      {
+        value: provider === "codex" ? "~/.codex" : "~/.claude",
+        name: provider === "codex" ? "~/.codex (recommended)" : "~/.claude (recommended)",
+      },
+      {
+        value: provider === "codex" ? "~/.claude" : "~/.codex",
+        name: provider === "codex" ? "~/.claude" : "~/.codex",
+      },
+      { value: PROVIDER_SOURCE_HOME_CUSTOM, name: "Custom path..." },
+    ],
+  });
+
+  const providerSourceHome = providerSourceHomeChoice === PROVIDER_SOURCE_HOME_CUSTOM
+    ? (await input({
+        message: "Provider source home (absolute path or starting with ~):",
+        validate: (value) => {
+          const trimmed = value.trim();
+          if (!trimmed) return "Provider source home is required";
+          if (!path.isAbsolute(trimmed) && !trimmed.startsWith("~")) {
+            return "Please provide an absolute path or one starting with ~";
+          }
+          return true;
+        },
+      })).trim()
+    : providerSourceHomeChoice;
 
   // Step 2: Boss name
   const bossName = await input({
@@ -778,6 +825,7 @@ export async function runInteractiveSetup(): Promise<void> {
 
   const config: SetupConfig = {
     provider,
+    providerSourceHome,
     bossName,
     agent: {
       name: agentName,
