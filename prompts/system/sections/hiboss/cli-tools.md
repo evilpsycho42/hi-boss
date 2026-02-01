@@ -160,14 +160,6 @@ Check if the daemon is responsive:
 ```bash
 hiboss daemon ping
 ```
-
-#### Background Tasks
-
-Run a non-interactive background task:
-
-```bash
-hiboss background --task "your task description"
-```
 {% endif %}
 
 {% if agent.permissionLevel in ["privileged", "boss"] %}

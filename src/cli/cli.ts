@@ -16,7 +16,6 @@ import {
   registerAgent,
   setAgent,
   listAgents,
-  runBackground,
   runSetup,
   memoryAdd,
   memorySearch,
@@ -526,19 +525,6 @@ setup
   .action((options) => {
     runSetup(true, {
       config: options.config,
-    });
-  });
-
-// Background command
-program
-  .command("background")
-  .description("Run a non-interactive background task as this agent")
-  .requiredOption("--token <token>", "Agent token")
-  .requiredOption("--task <text>", "Task text")
-  .action((options) => {
-    return runBackground({
-      token: options.token,
-      task: options.task,
     });
   });
 

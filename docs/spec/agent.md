@@ -254,23 +254,6 @@ After a successful agent run, Hi-Boss marks all envelopes included in that run a
 
 If a run fails, those envelopes remain `pending` and will be retried on the next trigger (new envelope, scheduler tick, or daemon restart recovery).
 
-## Background Tasks
-
-Hi-Boss supports fire-and-forget background execution for an agent, intended for heavy tasks that would otherwise block normal envelope processing.
-
-### CLI Command
-
-```bash
-hiboss background --token <agent-token> --task "..."
-```
-
-### Behavior
-
-- The daemon resolves `--token` to the corresponding agent and uses that agent's provider/model/auto/workspace configuration.
-- The background run uses a temporary copy of the provider home directory and ensures there is no injected system prompt:
-  - removes `AGENTS.md` and `CLAUDE.md` from that temporary home
-- When the background run completes, Hi-Boss sends a single envelope back to `agent:<agent-name>` whose text is the background agent's final response.
-
 ## Agent Bindings
 
 Bindings connect agents to adapters (e.g., Telegram bots).
@@ -374,7 +357,6 @@ sqlite3 ~/.hiboss/hiboss.db \
 | `hiboss agent register --token <boss-token> --name <n> [--description <d>] [--workspace <w>]` | Create agent |
 | `hiboss agent set --token <token> --name <n> [options]` | Update agent settings and bindings |
 | `hiboss agent list --token <boss-token>` | List all agents with bindings |
-| `hiboss background --token <agent-token> --task <text>` | Run a background task and send the final response to `agent:<self>` |
 
 ## RPC Methods
 
