@@ -395,7 +395,7 @@ agent
     "--reasoning-effort <effort>",
     "Reasoning effort (none, low, medium, high, xhigh)"
   )
-  .option("--auto-level <level>", "Auto-approval level (low, medium, high)")
+  .option("--auto-level <level>", "Auto-level (medium, high)")
   .option(
     "--permission-level <level>",
     "Permission level (restricted, standard, privileged)"
@@ -451,7 +451,7 @@ agent
     "--reasoning-effort <effort>",
     "Reasoning effort (none, low, medium, high, xhigh)"
   )
-  .option("--auto-level <level>", "Auto-approval level (low, medium, high)")
+  .option("--auto-level <level>", "Auto-level (medium, high)")
   .option(
     "--permission-level <level>",
     "Permission level (restricted, standard, privileged; boss token only)"

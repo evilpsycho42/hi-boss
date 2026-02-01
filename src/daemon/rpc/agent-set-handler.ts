@@ -105,8 +105,8 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
 
       let autoLevel: Agent["autoLevel"] | null | undefined;
       if (p.autoLevel !== undefined) {
-        if (p.autoLevel !== null && p.autoLevel !== "low" && p.autoLevel !== "medium" && p.autoLevel !== "high") {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid auto-level (expected low, medium, high)");
+        if (p.autoLevel !== null && p.autoLevel !== "medium" && p.autoLevel !== "high") {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid auto-level (expected medium, high)");
         }
         autoLevel = p.autoLevel;
       }

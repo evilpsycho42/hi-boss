@@ -1,0 +1,90 @@
+# CLI: Agents
+
+Auto-level:
+- `medium` — workspace-sandboxed tool execution
+- `high` — full access to this computer (recommended)
+
+## `hiboss agent register`
+
+Registers a new agent.
+
+Flags:
+- `--name <name>` (required)
+- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
+- `--description <description>` (optional)
+- `--workspace <path>` (optional)
+- `--provider <claude|codex>` (optional)
+- `--model <model>` (optional)
+- `--reasoning-effort <none|low|medium|high|xhigh>` (optional)
+- `--auto-level <medium|high>` (optional)
+- `--permission-level <restricted|standard|privileged>` (optional)
+- `--metadata-json <json>` or `--metadata-file <path>` (optional)
+- Optional binding at creation:
+  - `--bind-adapter-type <type>`
+  - `--bind-adapter-token <token>`
+- Optional session policy inputs:
+  - `--session-daily-reset-at HH:MM`
+  - `--session-idle-timeout <duration>` (units: `d/h/m/s`)
+  - `--session-max-tokens <n>`
+
+Output (parseable):
+- `name:`
+- `description:` (optional)
+- `workspace:` (optional)
+- `token:` (printed once)
+
+## `hiboss agent set`
+
+Updates agent settings and (optionally) binds/unbinds adapters.
+
+Flags:
+- `--name <name>` (required)
+- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
+- `--description <description>` (optional)
+- `--workspace <path>` (optional)
+- `--provider <claude|codex>` (optional)
+- `--model <model>` (optional)
+- `--reasoning-effort <none|low|medium|high|xhigh>` (optional)
+- `--auto-level <medium|high>` (optional)
+- `--permission-level <restricted|standard|privileged>` (optional; boss token only)
+- Session policy:
+  - `--session-daily-reset-at HH:MM` (optional)
+  - `--session-idle-timeout <duration>` (optional; units: `d/h/m/s`)
+  - `--session-max-tokens <n>` (optional)
+  - `--clear-session-policy` (optional)
+- Metadata:
+  - `--metadata-json <json>` or `--metadata-file <path>` (optional)
+  - `--clear-metadata` (optional)
+- Binding:
+  - `--bind-adapter-type <type>` + `--bind-adapter-token <token>` (optional)
+  - `--unbind-adapter-type <type>` (optional)
+
+Output (parseable):
+- `success: true|false`
+- `agent-name:`
+- Updated fields when present (e.g., `provider:`, `model:`, `reasoning-effort:`, `auto-level:`, `permission-level:`)
+- `bindings:` (optional; comma-separated adapter types)
+
+## `hiboss agent list`
+
+Lists all agents.
+
+Empty output:
+
+```
+no-agents: true
+```
+
+Output (parseable, one block per agent):
+- `name:`
+- `description:` (optional)
+- `workspace:` (optional)
+- `provider:` / `model:` / `reasoning-effort:` / `auto-level:` (optional)
+- `permission-level:` (optional)
+- `session-daily-reset-at:` / `session-idle-timeout:` / `session-max-tokens:` (optional)
+- `bindings:` (optional; comma-separated adapter types)
+- `created-at:` (local timezone offset)
+- `last-seen-at:` (optional; local timezone offset)
+
+Default permission:
+- `restricted`

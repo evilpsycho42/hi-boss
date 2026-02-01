@@ -553,7 +553,7 @@ export class AgentExecutor {
   /**
    * Map auto level to SDK access level.
    */
-  private mapAccessLevel(autoLevel: "low" | "medium" | "high"): "low" | "medium" | "high" {
+  private mapAccessLevel(autoLevel: "medium" | "high"): "medium" | "high" {
     // Direct mapping - SDK uses same values
     return autoLevel;
   }

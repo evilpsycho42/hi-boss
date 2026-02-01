@@ -48,8 +48,8 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
         );
       }
 
-      if (p.agent.autoLevel !== "low" && p.agent.autoLevel !== "medium" && p.agent.autoLevel !== "high") {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid auto-level (expected low, medium, high)");
+      if (p.agent.autoLevel !== "medium" && p.agent.autoLevel !== "high") {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid auto-level (expected medium, high)");
       }
 
       if (p.agent.permissionLevel !== undefined) {

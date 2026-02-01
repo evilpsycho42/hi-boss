@@ -79,6 +79,13 @@ Setup writes to the SQLite `config` table and creates the first agent.
     - `boss-name`: stored as `config.boss_name`
     - `boss-token`: stored hashed as `config.boss_token_hash`
     - `provider`: stored as `config.default_provider`
+    - `memory.mode` / `memory.model-path`: resolved + validated during setup, then stored in:
+      - `config.memory_enabled`
+      - `config.memory_model_source`
+      - `config.memory_model_uri`
+      - `config.memory_model_path`
+      - `config.memory_model_dims`
+      - `config.memory_model_last_error`
     - `telegram.adapter-boss-id`: stored as `config.adapter_boss_id_telegram` (stored without `@`)
     - `telegram.adapter-token`: creates an initial `agent_bindings` row for the first agent
 
@@ -92,7 +99,7 @@ Setup writes to the SQLite `config` table and creates the first agent.
   - `--provider <claude|codex>`
   - `--model <model>`
   - `--reasoning-effort <none|low|medium|high|xhigh>`
-  - `--auto-level <low|medium|high>`
+  - `--auto-level <medium|high>`
   - `--permission-level <restricted|standard|privileged>`
   - `--metadata-json <json>` / `--metadata-file <path>`
   - `--bind-adapter-type <type>` / `--bind-adapter-token <token>`
@@ -100,6 +107,10 @@ Setup writes to the SQLite `config` table and creates the first agent.
     - `--session-daily-reset-at <HH:MM>`
     - `--session-idle-timeout <duration>`
     - `--session-max-tokens <n>`
+
+Auto-level meaning:
+- `medium` — workspace-sandboxed tool execution
+- `high` — full access to this computer (recommended)
 
 - `hiboss agent set`
   - Updates agent settings and bindings (see `docs/spec/cli.md` for full flags)
@@ -172,7 +183,7 @@ Per-agent settings:
 | `provider` | TEXT | `'claude'` | `"claude"` or `"codex"` |
 | `model` | TEXT | `NULL` | Optional model name (set by setup for the initial agent) |
 | `reasoning_effort` | TEXT | `'medium'` | `"none"`, `"low"`, `"medium"`, `"high"`, or `"xhigh"` |
-| `auto_level` | TEXT | `'high'` | `"low"`, `"medium"`, or `"high"` |
+| `auto_level` | TEXT | `'high'` | `"medium"` or `"high"` (legacy `"low"` is migrated to `"medium"`) |
 | `permission_level` | TEXT | `'standard'` | `"restricted"`, `"standard"`, or `"privileged"` |
 | `session_policy` | TEXT | `NULL` | JSON blob for SessionPolicyConfig |
 | `created_at` | TEXT | `datetime('now')` | ISO 8601 timestamp |

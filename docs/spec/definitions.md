@@ -164,7 +164,7 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 | `agent.provider` | `provider` | `claude` or `codex` |
 | `agent.model` | `model` | Nullable |
 | `agent.reasoningEffort` | `reasoning_effort` | See `src/agent/types.ts` for allowed values |
-| `agent.autoLevel` | `auto_level` | `low`, `medium`, `high` |
+| `agent.autoLevel` | `auto_level` | `medium`, `high` (legacy `low` is migrated to `medium`) |
 | `agent.permissionLevel` | `permission_level` | `restricted`, `standard`, `privileged` |
 | `agent.sessionPolicy` | `session_policy` | JSON (nullable) |
 | `agent.createdAt` | `created_at` | ISO 8601 UTC |
@@ -343,7 +343,7 @@ export interface Agent {
   provider?: "claude" | "codex";
   model?: string;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
-  autoLevel?: "low" | "medium" | "high";
+  autoLevel?: "medium" | "high";
   permissionLevel?: "restricted" | "standard" | "privileged";
   sessionPolicy?: {
     dailyResetAt?: string;    // "HH:MM" local

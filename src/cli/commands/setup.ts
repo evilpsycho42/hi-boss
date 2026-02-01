@@ -41,7 +41,7 @@ interface SetupConfig {
     workspace: string;
     model?: string;
     reasoningEffort: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
-    autoLevel: 'low' | 'medium' | 'high';
+    autoLevel: 'medium' | 'high';
     permissionLevel?: 'restricted' | 'standard' | 'privileged';
     sessionPolicy?: {
       dailyResetAt?: string;
@@ -75,7 +75,7 @@ interface SetupConfigFileV1 {
     workspace?: string;
     model?: string;
     "reasoning-effort"?: "none" | "low" | "medium" | "high" | "xhigh";
-    "auto-level"?: "low" | "medium" | "high";
+    "auto-level"?: "medium" | "high";
     "permission-level"?: "restricted" | "standard" | "privileged";
     "session-policy"?: {
       "daily-reset-at"?: string;
@@ -163,10 +163,14 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
       : DEFAULT_SETUP_REASONING_EFFORT;
 
   const autoLevelRaw = agentRaw["auto-level"];
-  const autoLevel =
-    autoLevelRaw === "low" || autoLevelRaw === "medium" || autoLevelRaw === "high"
-      ? autoLevelRaw
-      : DEFAULT_SETUP_AUTO_LEVEL;
+  const autoLevel: SetupConfig["agent"]["autoLevel"] = (() => {
+    if (autoLevelRaw === undefined) return DEFAULT_SETUP_AUTO_LEVEL;
+    if (autoLevelRaw === "medium" || autoLevelRaw === "high") return autoLevelRaw;
+    if (autoLevelRaw === "low") {
+      throw new Error("Invalid setup config (agent.auto-level no longer supports 'low'; use medium or high)");
+    }
+    throw new Error("Invalid setup config (agent.auto-level must be 'medium' or 'high')");
+  })();
 
   const permissionLevelRaw = agentRaw["permission-level"];
   const permissionLevel =
@@ -525,17 +529,15 @@ export async function runInteractiveSetup(): Promise<void> {
     default: DEFAULT_SETUP_REASONING_EFFORT,
   });
 
-  console.log("\n📊 Auto-approval level determines how much the agent can do without asking:");
-  console.log("   • Low: Confirm most actions, safer for sensitive work");
-  console.log("   • Medium: Auto-approve common operations");
-  console.log("   • High: Maximum autonomy, minimal interruptions\n");
+  console.log("\n📊 Auto-level controls the agent sandbox:");
+  console.log("   • Medium: Workspace-sandboxed");
+  console.log("   • High: Full access to this computer (recommended)\n");
 
-  const autoLevel = await select<'low' | 'medium' | 'high'>({
-    message: "Auto-approval level:",
+  const autoLevel = await select<'medium' | 'high'>({
+    message: "Auto-level:",
     choices: [
-      { value: 'low', name: "Low - Confirm most actions" },
-      { value: 'medium', name: "Medium - Balanced" },
-      { value: 'high', name: "High - Maximum autonomy (recommended)" },
+      { value: 'high', name: "High - Full access (recommended)" },
+      { value: 'medium', name: "Medium - Workspace-sandboxed" },
     ],
     default: DEFAULT_SETUP_AUTO_LEVEL,
   });

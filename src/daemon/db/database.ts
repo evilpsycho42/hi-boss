@@ -173,6 +173,13 @@ export class HiBossDatabase {
             AND session_policy IS NULL;
         `);
       }
+
+      // Migrate deprecated auto-level "low" -> "medium" (low is no longer supported).
+      this.db.exec(`
+        UPDATE agents
+        SET auto_level = 'medium'
+        WHERE auto_level = 'low';
+      `);
     }
   }
 
@@ -289,7 +296,7 @@ export class HiBossDatabase {
       provider?: "claude" | "codex" | null;
       model?: string | null;
       reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | null;
-      autoLevel?: "low" | "medium" | "high" | null;
+      autoLevel?: "medium" | "high" | null;
     }
   ): Agent {
     const agent = this.getAgentByNameCaseInsensitive(name);
@@ -433,6 +440,14 @@ export class HiBossDatabase {
       }
     }
 
+    let autoLevel: Agent["autoLevel"] | undefined;
+    if (row.auto_level === "medium" || row.auto_level === "high") {
+      autoLevel = row.auto_level;
+    } else if (row.auto_level === "low") {
+      // Back-compat fallback; low is migrated to medium in runMigrations().
+      autoLevel = "medium";
+    }
+
     return {
       name: row.name,
       token: row.token,
@@ -441,7 +456,7 @@ export class HiBossDatabase {
       provider: (row.provider as 'claude' | 'codex') ?? undefined,
       model: row.model ?? undefined,
       reasoningEffort: (row.reasoning_effort as 'none' | 'low' | 'medium' | 'high' | 'xhigh') ?? undefined,
-      autoLevel: (row.auto_level as 'low' | 'medium' | 'high') ?? undefined,
+      autoLevel,
       permissionLevel,
       sessionPolicy,
       createdAt: row.created_at,

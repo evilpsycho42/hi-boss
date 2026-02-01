@@ -28,7 +28,7 @@ Notes:
 | `agent.provider` | string | `claude` or `codex` |
 | `agent.model` | string | Model id/alias (or empty) |
 | `agent.reasoningEffort` | string | `none|low|medium|high|xhigh` (or empty) |
-| `agent.autoLevel` | string | `low|medium|high` (or empty) |
+| `agent.autoLevel` | string | `medium|high` (or empty) |
 | `agent.permissionLevel` | string | `restricted|standard|privileged` (or empty) |
 | `agent.sessionPolicy.dailyResetAt` | string | Daily reset time in `HH:MM` format (or empty) |
 | `agent.sessionPolicy.idleTimeout` | string | Idle timeout duration like `2h`, `30m` (or empty) |

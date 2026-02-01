@@ -130,7 +130,7 @@ export interface AgentRegisterParams {
   provider?: "claude" | "codex";
   model?: string;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
-  autoLevel?: "low" | "medium" | "high";
+  autoLevel?: "medium" | "high";
   permissionLevel?: "restricted" | "standard" | "privileged";
   metadata?: Record<string, unknown>;
   sessionDailyResetAt?: string;
@@ -176,7 +176,7 @@ export interface AgentSelfResult {
     workspace: string;
     model?: string;
     reasoningEffort: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
-    autoLevel: 'low' | 'medium' | 'high';
+    autoLevel: 'medium' | 'high';
   };
 }
 
@@ -197,7 +197,7 @@ export interface AgentSetParams {
   provider?: "claude" | "codex" | null;
   model?: string | null;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | null;
-  autoLevel?: "low" | "medium" | "high" | null;
+  autoLevel?: "medium" | "high" | null;
   permissionLevel?: "restricted" | "standard" | "privileged";
   sessionPolicy?: {
     dailyResetAt?: string;
@@ -219,7 +219,7 @@ export interface AgentSetResult {
     provider: "claude" | "codex";
     model?: string;
     reasoningEffort: "none" | "low" | "medium" | "high" | "xhigh";
-    autoLevel: "low" | "medium" | "high";
+    autoLevel: "medium" | "high";
     permissionLevel: "restricted" | "standard" | "privileged";
     sessionPolicy?: unknown;
     metadata?: unknown;
@@ -254,7 +254,7 @@ export interface SetupExecuteParams {
     workspace?: string;
     model?: string;
     reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
-    autoLevel?: 'low' | 'medium' | 'high';
+    autoLevel?: 'medium' | 'high';
     permissionLevel?: 'restricted' | 'standard' | 'privileged';
     sessionPolicy?: {
       dailyResetAt?: string;
