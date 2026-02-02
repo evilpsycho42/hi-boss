@@ -267,7 +267,7 @@ export function buildSystemPromptContext(params: {
       sessionPolicy: {
         dailyResetAt: params.agent.sessionPolicy?.dailyResetAt ?? "",
         idleTimeout: params.agent.sessionPolicy?.idleTimeout ?? "",
-        maxTokens: params.agent.sessionPolicy?.maxTokens ?? 0,
+        maxContextLength: params.agent.sessionPolicy?.maxContextLength ?? 0,
       },
       createdAt: params.agent.createdAt,
       lastSeenAt: params.agent.lastSeenAt ?? "",

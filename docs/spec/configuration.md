@@ -209,12 +209,12 @@ Session refresh behavior is configured per agent in:
 Fields are optional (unset = disabled):
 - `dailyResetAt`: `"HH:MM"` (24-hour), interpreted in the daemon host’s local timezone
 - `idleTimeout`: duration string (units: `d/h/m/s`; examples: `2h`, `30m`, `1h30m`)
-- `maxTokens`: number; if a successful run’s **context length** exceeds this, the daemon refreshes the session so the *next* run starts fresh (uses `usage.context_length` best-effort, falls back to `usage.input_tokens`)
+- `maxContextLength`: number; if a successful run’s **context length** exceeds this, the daemon refreshes the session so the *next* run starts fresh (uses `usage.context_length` when present; skipped when missing)
 
 Set/clear via `hiboss agent set` (see `docs/spec/cli/agents.md`):
 - `--session-daily-reset-at`
 - `--session-idle-timeout`
-- `--session-max-tokens`
+- `--session-max-context-length`
 - `--clear-session-policy`
 
 Manual refresh:

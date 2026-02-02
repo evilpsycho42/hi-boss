@@ -411,7 +411,7 @@ agent
     "Refresh session after being idle longer than this duration (e.g., 2h, 30m; units: d/h/m/s)"
   )
   .option(
-    "--session-max-tokens <n>",
+    "--session-max-context-length <n>",
     "Refresh session after a run's context length exceeds N tokens",
     parseInt
   )
@@ -433,7 +433,7 @@ agent
       permissionLevel: options.permissionLevel,
       sessionDailyResetAt: options.sessionDailyResetAt,
       sessionIdleTimeout: options.sessionIdleTimeout,
-      sessionMaxTokens: options.sessionMaxTokens,
+      sessionMaxContextLength: options.sessionMaxContextLength,
       metadataJson: options.metadataJson,
       metadataFile: options.metadataFile,
       bindAdapterType: options.bindAdapterType,
@@ -475,7 +475,7 @@ agent
     "Refresh session after being idle longer than this duration (e.g., 2h, 30m; units: d/h/m/s)"
   )
   .option(
-    "--session-max-tokens <n>",
+    "--session-max-context-length <n>",
     "Refresh session after a run's context length exceeds N tokens",
     parseInt
   )
@@ -500,7 +500,7 @@ agent
       permissionLevel: options.permissionLevel,
       sessionDailyResetAt: options.sessionDailyResetAt,
       sessionIdleTimeout: options.sessionIdleTimeout,
-      sessionMaxTokens: options.sessionMaxTokens,
+      sessionMaxContextLength: options.sessionMaxContextLength,
       clearSessionPolicy: options.clearSessionPolicy,
       metadataJson: options.metadataJson,
       metadataFile: options.metadataFile,

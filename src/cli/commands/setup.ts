@@ -47,7 +47,7 @@ interface SetupConfig {
     sessionPolicy?: {
       dailyResetAt?: string;
       idleTimeout?: string;
-      maxTokens?: number;
+      maxContextLength?: number;
     };
     metadata?: Record<string, unknown>;
   };
@@ -89,7 +89,7 @@ interface SetupConfigFileV1 {
     "session-policy"?: {
       "daily-reset-at"?: string;
       "idle-timeout"?: string;
-      "max-tokens"?: number;
+      "max-context-length"?: number;
     };
     metadata?: Record<string, unknown>;
   };
@@ -243,13 +243,16 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
       nextPolicy.idleTimeout = sessionPolicyRaw["idle-timeout"].trim();
     }
     if (sessionPolicyRaw["max-tokens"] !== undefined) {
-      if (typeof sessionPolicyRaw["max-tokens"] !== "number" || !Number.isFinite(sessionPolicyRaw["max-tokens"])) {
-        throw new Error("Invalid setup config (agent.session-policy.max-tokens must be a number)");
+      throw new Error("Invalid setup config (agent.session-policy.max-tokens is no longer supported; use max-context-length)");
+    }
+    if (sessionPolicyRaw["max-context-length"] !== undefined) {
+      if (typeof sessionPolicyRaw["max-context-length"] !== "number" || !Number.isFinite(sessionPolicyRaw["max-context-length"])) {
+        throw new Error("Invalid setup config (agent.session-policy.max-context-length must be a number)");
       }
-      if (sessionPolicyRaw["max-tokens"] <= 0) {
-        throw new Error("Invalid setup config (agent.session-policy.max-tokens must be > 0)");
+      if (sessionPolicyRaw["max-context-length"] <= 0) {
+        throw new Error("Invalid setup config (agent.session-policy.max-context-length must be > 0)");
       }
-      nextPolicy.maxTokens = Math.trunc(sessionPolicyRaw["max-tokens"]);
+      nextPolicy.maxContextLength = Math.trunc(sessionPolicyRaw["max-context-length"]);
     }
 
     if (Object.keys(nextPolicy).length > 0) {
@@ -715,19 +718,19 @@ export async function runInteractiveSetup(): Promise<void> {
     },
   })).trim();
 
-  const sessionMaxTokensRaw = (await input({
-    message: "Session max tokens (optional):",
+  const sessionMaxContextLengthRaw = (await input({
+    message: "Session max context length (optional):",
     default: "",
     validate: (value) => {
       const trimmed = value.trim();
       if (!trimmed) return true;
       const n = Number(trimmed);
-      if (!Number.isFinite(n) || n <= 0) return "Session max tokens must be a positive number";
+      if (!Number.isFinite(n) || n <= 0) return "Session max context length must be a positive number";
       return true;
     },
   })).trim();
 
-  const sessionMaxTokens = sessionMaxTokensRaw ? Math.trunc(Number(sessionMaxTokensRaw)) : undefined;
+  const sessionMaxContextLength = sessionMaxContextLengthRaw ? Math.trunc(Number(sessionMaxContextLengthRaw)) : undefined;
 
   const metadataRaw = (await input({
     message: "Agent metadata JSON (optional):",
@@ -748,11 +751,11 @@ export async function runInteractiveSetup(): Promise<void> {
   const metadata = metadataRaw ? (JSON.parse(metadataRaw) as Record<string, unknown>) : undefined;
 
   const sessionPolicy =
-    sessionDailyResetAt || sessionIdleTimeout || sessionMaxTokens !== undefined
+    sessionDailyResetAt || sessionIdleTimeout || sessionMaxContextLength !== undefined
       ? {
           dailyResetAt: sessionDailyResetAt ? parseDailyResetAt(sessionDailyResetAt).normalized : undefined,
           idleTimeout: sessionIdleTimeout || undefined,
-          maxTokens: sessionMaxTokens,
+          maxContextLength: sessionMaxContextLength,
         }
       : undefined;
 

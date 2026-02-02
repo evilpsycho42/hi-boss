@@ -51,7 +51,7 @@ export interface RegisterAgentOptions {
   permissionLevel?: string;
   sessionDailyResetAt?: string;
   sessionIdleTimeout?: string;
-  sessionMaxTokens?: number;
+  sessionMaxContextLength?: number;
   metadataJson?: string;
   metadataFile?: string;
   bindAdapterType?: string;
@@ -80,7 +80,7 @@ export interface SetAgentSessionPolicyOptions {
   name: string;
   sessionDailyResetAt?: string;
   sessionIdleTimeout?: string;
-  sessionMaxTokens?: number;
+  sessionMaxContextLength?: number;
   clear?: boolean;
 }
 
@@ -97,7 +97,7 @@ export interface SetAgentOptions {
   permissionLevel?: string;
   sessionDailyResetAt?: string;
   sessionIdleTimeout?: string;
-  sessionMaxTokens?: number;
+  sessionMaxContextLength?: number;
   clearSessionPolicy?: boolean;
   metadataJson?: string;
   metadataFile?: string;
@@ -185,7 +185,7 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
       metadata: await readMetadataInput(options),
       sessionDailyResetAt: options.sessionDailyResetAt,
       sessionIdleTimeout: options.sessionIdleTimeout,
-      sessionMaxTokens: options.sessionMaxTokens,
+      sessionMaxContextLength: options.sessionMaxContextLength,
       bindAdapterType: options.bindAdapterType,
       bindAdapterToken: options.bindAdapterToken,
     });
@@ -238,13 +238,13 @@ export async function setAgent(options: SetAgentOptions): Promise<void> {
       options.clearSessionPolicy ||
       options.sessionDailyResetAt !== undefined ||
       options.sessionIdleTimeout !== undefined ||
-      options.sessionMaxTokens !== undefined
+      options.sessionMaxContextLength !== undefined
         ? options.clearSessionPolicy
           ? null
           : {
               dailyResetAt: options.sessionDailyResetAt,
               idleTimeout: options.sessionIdleTimeout,
-              maxTokens: options.sessionMaxTokens,
+              maxContextLength: options.sessionMaxContextLength,
             }
       : undefined;
 
@@ -300,8 +300,8 @@ export async function setAgent(options: SetAgentOptions): Promise<void> {
       if (typeof sp.idleTimeout === "string") {
         console.log(`session-idle-timeout: ${sp.idleTimeout}`);
       }
-      if (typeof sp.maxTokens === "number") {
-        console.log(`session-max-tokens: ${sp.maxTokens}`);
+      if (typeof sp.maxContextLength === "number") {
+        console.log(`session-max-context-length: ${sp.maxContextLength}`);
       }
     }
     if (result.bindings.length > 0) {
@@ -371,8 +371,8 @@ export async function listAgents(options: ListAgentsOptions): Promise<void> {
         if (typeof agent.sessionPolicy.idleTimeout === "string") {
           console.log(`session-idle-timeout: ${agent.sessionPolicy.idleTimeout}`);
         }
-        if (typeof agent.sessionPolicy.maxTokens === "number") {
-          console.log(`session-max-tokens: ${agent.sessionPolicy.maxTokens}`);
+        if (typeof agent.sessionPolicy.maxContextLength === "number") {
+          console.log(`session-max-context-length: ${agent.sessionPolicy.maxContextLength}`);
         }
       }
       if (agent.bindings && agent.bindings.length > 0) {
@@ -408,7 +408,7 @@ export async function setAgentSessionPolicy(
         agentName: options.name,
         sessionDailyResetAt: options.sessionDailyResetAt,
         sessionIdleTimeout: options.sessionIdleTimeout,
-        sessionMaxTokens: options.sessionMaxTokens,
+        sessionMaxContextLength: options.sessionMaxContextLength,
         clear: options.clear,
       }
     );
@@ -425,8 +425,8 @@ export async function setAgentSessionPolicy(
       if (typeof sp.idleTimeout === "string") {
         console.log(`session-idle-timeout: ${sp.idleTimeout}`);
       }
-      if (typeof sp.maxTokens === "number") {
-        console.log(`session-max-tokens: ${sp.maxTokens}`);
+      if (typeof sp.maxContextLength === "number") {
+        console.log(`session-max-context-length: ${sp.maxContextLength}`);
       }
     }
   } catch (err) {

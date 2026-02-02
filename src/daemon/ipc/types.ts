@@ -130,7 +130,7 @@ export interface AgentRegisterParams {
   metadata?: Record<string, unknown>;
   sessionDailyResetAt?: string;
   sessionIdleTimeout?: string;
-  sessionMaxTokens?: number;
+  sessionMaxContextLength?: number;
   bindAdapterType?: string;
   bindAdapterToken?: string;
 }
@@ -180,7 +180,7 @@ export interface AgentSessionPolicySetParams {
   agentName: string;
   sessionDailyResetAt?: string;
   sessionIdleTimeout?: string;
-  sessionMaxTokens?: number;
+  sessionMaxContextLength?: number;
   clear?: boolean;
 }
 
@@ -198,7 +198,7 @@ export interface AgentSetParams {
   sessionPolicy?: {
     dailyResetAt?: string;
     idleTimeout?: string;
-    maxTokens?: number;
+    maxContextLength?: number;
   } | null;
   metadata?: Record<string, unknown> | null;
   bindAdapterType?: string;
@@ -256,7 +256,7 @@ export interface SetupExecuteParams {
     sessionPolicy?: {
       dailyResetAt?: string;
       idleTimeout?: string;
-      maxTokens?: number;
+      maxContextLength?: number;
     };
     metadata?: Record<string, unknown>;
   };

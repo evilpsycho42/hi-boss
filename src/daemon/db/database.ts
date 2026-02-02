@@ -180,6 +180,26 @@ export class HiBossDatabase {
         SET auto_level = 'medium'
         WHERE auto_level = 'low';
       `);
+
+      // Migrate session policy field rename: maxTokens -> maxContextLength.
+      // This keeps existing configs working without runtime fallback logic.
+      this.db.exec(`
+        UPDATE agents
+        SET session_policy = json_remove(
+          json_set(session_policy, '$.maxContextLength', json_extract(session_policy, '$.maxTokens')),
+          '$.maxTokens'
+        )
+        WHERE session_policy IS NOT NULL
+          AND json_valid(session_policy)
+          AND json_extract(session_policy, '$.maxContextLength') IS NULL
+          AND json_extract(session_policy, '$.maxTokens') IS NOT NULL;
+
+        UPDATE agents
+        SET session_policy = json_remove(session_policy, '$.maxTokens')
+        WHERE session_policy IS NOT NULL
+          AND json_valid(session_policy)
+          AND json_extract(session_policy, '$.maxTokens') IS NOT NULL;
+      `);
     }
   }
 
@@ -387,7 +407,7 @@ export class HiBossDatabase {
       clear?: boolean;
       dailyResetAt?: string;
       idleTimeout?: string;
-      maxTokens?: number;
+      maxContextLength?: number;
     }
   ): Agent {
     const agent = this.getAgentByName(name);
@@ -409,8 +429,8 @@ export class HiBossDatabase {
       if (typeof update.idleTimeout === "string") {
         merged.idleTimeout = update.idleTimeout;
       }
-      if (typeof update.maxTokens === "number") {
-        merged.maxTokens = update.maxTokens;
+      if (typeof update.maxContextLength === "number") {
+        merged.maxContextLength = update.maxContextLength;
       }
 
       if (Object.keys(merged).length === 0) {
@@ -437,7 +457,12 @@ export class HiBossDatabase {
     let sessionPolicy: SessionPolicyConfig | undefined;
     if (row.session_policy) {
       try {
-        sessionPolicy = JSON.parse(row.session_policy) as SessionPolicyConfig;
+        const raw = JSON.parse(row.session_policy) as unknown;
+        if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+          const normalized = { ...(raw as Record<string, unknown>) } as any;
+          delete normalized.maxTokens;
+          sessionPolicy = normalized as SessionPolicyConfig;
+        }
       } catch {
         // ignore invalid JSON
       }

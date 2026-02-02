@@ -87,14 +87,20 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
           parseDurationToMs(sp.idleTimeout);
           sp.idleTimeout = sp.idleTimeout.trim();
         }
-        if (sp.maxTokens !== undefined) {
-          if (typeof sp.maxTokens !== "number" || !Number.isFinite(sp.maxTokens)) {
-            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.max-tokens");
+        if ((sp as any).maxTokens !== undefined) {
+          rpcError(
+            RPC_ERRORS.INVALID_PARAMS,
+            "Invalid session-policy.max-tokens (use max-context-length)"
+          );
+        }
+        if (sp.maxContextLength !== undefined) {
+          if (typeof sp.maxContextLength !== "number" || !Number.isFinite(sp.maxContextLength)) {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.max-context-length");
           }
-          if (sp.maxTokens <= 0) {
-            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.max-tokens (must be > 0)");
+          if (sp.maxContextLength <= 0) {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.max-context-length (must be > 0)");
           }
-          sp.maxTokens = Math.trunc(sp.maxTokens);
+          (sp as any).maxContextLength = Math.trunc(sp.maxContextLength);
         }
       }
 

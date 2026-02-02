@@ -27,7 +27,7 @@ Flags:
 - Optional session policy inputs:
   - `--session-daily-reset-at HH:MM`
   - `--session-idle-timeout <duration>` (units: `d/h/m/s`)
-  - `--session-max-tokens <n>`
+  - `--session-max-context-length <n>`
 
 Provider config import:
 - When `--provider` is provided, Hi-Boss imports provider config files into the agent’s provider home.
@@ -59,7 +59,7 @@ Flags:
 - Session policy:
   - `--session-daily-reset-at HH:MM` (optional)
   - `--session-idle-timeout <duration>` (optional; units: `d/h/m/s`)
-  - `--session-max-tokens <n>` (optional)
+  - `--session-max-context-length <n>` (optional)
   - `--clear-session-policy` (optional)
 - Metadata:
   - `--metadata-json <json>` or `--metadata-file <path>` (optional)
@@ -96,7 +96,7 @@ Output (parseable, one block per agent):
 - `workspace:` (optional)
 - `provider:` / `model:` / `reasoning-effort:` / `auto-level:` (optional)
 - `permission-level:` (optional)
-- `session-daily-reset-at:` / `session-idle-timeout:` / `session-max-tokens:` (optional)
+- `session-daily-reset-at:` / `session-idle-timeout:` / `session-max-context-length:` (optional)
 - `bindings:` (optional; comma-separated adapter types)
 - `created-at:` (local timezone offset)
 - `last-seen-at:` (optional; local timezone offset)

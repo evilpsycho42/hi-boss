@@ -12,10 +12,10 @@ export interface SessionPolicyConfig {
   /**
    * Refresh session if the estimated context length for a turn exceeds this value.
    *
-   * Context length is a best-effort estimate derived from provider usage reporting
-   * (prefers `usage.context_length` when available; falls back to `usage.input_tokens`).
+   * Context length is SDK-provided and best-effort (uses `usage.context_length` when available).
+   * If `usage.context_length` is missing, the max-context-length policy is skipped for that run.
    */
-  maxTokens?: number;
+  maxContextLength?: number;
 }
 
 export interface ParsedDailyResetAt {
@@ -27,7 +27,7 @@ export interface ParsedDailyResetAt {
 export interface ParsedSessionPolicy {
   dailyResetAt?: ParsedDailyResetAt;
   idleTimeoutMs?: number;
-  maxTokens?: number;
+  maxContextLength?: number;
 }
 
 export interface UsageLike {
@@ -42,25 +42,13 @@ export function computeTokensUsed(usage: UsageLike | undefined): number | null {
   if (typeof usage.total_tokens === "number" && Number.isFinite(usage.total_tokens)) {
     return usage.total_tokens;
   }
-
-  const input = typeof usage.input_tokens === "number" && Number.isFinite(usage.input_tokens)
-    ? usage.input_tokens
-    : undefined;
-  const output = typeof usage.output_tokens === "number" && Number.isFinite(usage.output_tokens)
-    ? usage.output_tokens
-    : undefined;
-
-  if (input === undefined && output === undefined) return null;
-  return (input ?? 0) + (output ?? 0);
+  return null;
 }
 
 export function computeContextLength(usage: UsageLike | undefined): number | null {
   if (!usage) return null;
   if (typeof usage.context_length === "number" && Number.isFinite(usage.context_length)) {
     return usage.context_length;
-  }
-  if (typeof usage.input_tokens === "number" && Number.isFinite(usage.input_tokens)) {
-    return usage.input_tokens;
   }
   return null;
 }
@@ -156,11 +144,11 @@ export function parseSessionPolicyConfig(
     }
   }
 
-  if (typeof raw.maxTokens === "number" && Number.isFinite(raw.maxTokens)) {
-    if (raw.maxTokens > 0) {
-      parsed.maxTokens = raw.maxTokens;
+  if (typeof raw.maxContextLength === "number" && Number.isFinite(raw.maxContextLength)) {
+    if (raw.maxContextLength > 0) {
+      parsed.maxContextLength = raw.maxContextLength;
     } else if (opts.strict) {
-      throw new Error("Invalid max tokens: must be > 0");
+      throw new Error("Invalid max context length: must be > 0");
     }
   }
 

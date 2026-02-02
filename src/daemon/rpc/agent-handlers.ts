@@ -118,14 +118,14 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
         parseDurationToMs(p.sessionIdleTimeout);
         sessionPolicy.idleTimeout = p.sessionIdleTimeout.trim();
       }
-      if (p.sessionMaxTokens !== undefined) {
-        if (typeof p.sessionMaxTokens !== "number" || !Number.isFinite(p.sessionMaxTokens)) {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-max-tokens");
+      if (p.sessionMaxContextLength !== undefined) {
+        if (typeof p.sessionMaxContextLength !== "number" || !Number.isFinite(p.sessionMaxContextLength)) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-max-context-length");
         }
-        if (p.sessionMaxTokens <= 0) {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-max-tokens (must be > 0)");
+        if (p.sessionMaxContextLength <= 0) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-max-context-length (must be > 0)");
         }
-        sessionPolicy.maxTokens = Math.trunc(p.sessionMaxTokens);
+        sessionPolicy.maxContextLength = Math.trunc(p.sessionMaxContextLength);
       }
 
       const result = ctx.db.registerAgent({
@@ -407,7 +407,7 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const hasAnyUpdate =
         p.sessionDailyResetAt !== undefined ||
         p.sessionIdleTimeout !== undefined ||
-        p.sessionMaxTokens !== undefined;
+        p.sessionMaxContextLength !== undefined;
 
       if (!clear && !hasAnyUpdate) {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "No session policy values provided");
@@ -430,22 +430,22 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
         idleTimeout = p.sessionIdleTimeout.trim();
       }
 
-      let maxTokens: number | undefined;
-      if (p.sessionMaxTokens !== undefined) {
-        if (typeof p.sessionMaxTokens !== "number" || !Number.isFinite(p.sessionMaxTokens)) {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-max-tokens");
+      let maxContextLength: number | undefined;
+      if (p.sessionMaxContextLength !== undefined) {
+        if (typeof p.sessionMaxContextLength !== "number" || !Number.isFinite(p.sessionMaxContextLength)) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-max-context-length");
         }
-        if (p.sessionMaxTokens <= 0) {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-max-tokens (must be > 0)");
+        if (p.sessionMaxContextLength <= 0) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-max-context-length (must be > 0)");
         }
-        maxTokens = Math.trunc(p.sessionMaxTokens);
+        maxContextLength = Math.trunc(p.sessionMaxContextLength);
       }
 
       const updated = ctx.db.updateAgentSessionPolicy(agent.name, {
         clear,
         dailyResetAt,
         idleTimeout,
-        maxTokens,
+        maxContextLength,
       });
 
       return { success: true, agentName: agent.name, sessionPolicy: updated.sessionPolicy };

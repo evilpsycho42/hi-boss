@@ -74,10 +74,8 @@ function readTokenUsage(usageRaw: unknown): TurnTokenUsage {
   const outputTokens = asFiniteNumber(usage.output_tokens);
   const cacheReadTokens = asFiniteNumber(usage.cache_read_tokens);
   const cacheWriteTokens = asFiniteNumber(usage.cache_write_tokens);
-  const contextLength = asFiniteNumber(usage.context_length) ?? inputTokens;
-  const totalTokens =
-    asFiniteNumber(usage.total_tokens) ??
-    (inputTokens !== null || outputTokens !== null ? (inputTokens ?? 0) + (outputTokens ?? 0) : null);
+  const contextLength = asFiniteNumber(usage.context_length);
+  const totalTokens = asFiniteNumber(usage.total_tokens);
   return { contextLength, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, totalTokens };
 }
 
@@ -381,12 +379,12 @@ export class AgentExecutor {
       // Context-length refresh: if a run grew the context too large, reset the session for the next run.
       const policy = this.getSessionPolicy(agent);
       if (
-        typeof policy.maxTokens === "number" &&
+        typeof policy.maxContextLength === "number" &&
         turn.usage.contextLength !== null &&
-        turn.usage.contextLength > policy.maxTokens
+        turn.usage.contextLength > policy.maxContextLength
       ) {
         this.log(
-          `Refreshing session for ${agent.name} context-length=${turn.usage.contextLength} max-tokens=${policy.maxTokens}`,
+          `Refreshing session for ${agent.name} context-length=${turn.usage.contextLength} max-context-length=${policy.maxContextLength}`,
           { color: "red" }
         );
         await this.refreshSession(agent.name);

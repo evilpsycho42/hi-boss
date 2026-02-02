@@ -142,14 +142,14 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
 
       let sessionPolicyUpdate:
         | { clear: true }
-        | { dailyResetAt?: string; idleTimeout?: string; maxTokens?: number }
+        | { dailyResetAt?: string; idleTimeout?: string; maxContextLength?: number }
         | undefined;
       if (p.sessionPolicy !== undefined) {
         if (p.sessionPolicy === null) {
           sessionPolicyUpdate = { clear: true };
         } else if (typeof p.sessionPolicy === "object" && p.sessionPolicy !== null && !Array.isArray(p.sessionPolicy)) {
           const raw = p.sessionPolicy as Record<string, unknown>;
-          const next: { dailyResetAt?: string; idleTimeout?: string; maxTokens?: number } = {};
+          const next: { dailyResetAt?: string; idleTimeout?: string; maxContextLength?: number } = {};
 
           if (raw.dailyResetAt !== undefined) {
             if (typeof raw.dailyResetAt !== "string") {
@@ -166,14 +166,21 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
             next.idleTimeout = raw.idleTimeout.trim();
           }
 
-          if (raw.maxTokens !== undefined) {
-            if (typeof raw.maxTokens !== "number" || !Number.isFinite(raw.maxTokens)) {
-              rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.max-tokens");
+          if ((raw as any).maxTokens !== undefined) {
+            rpcError(
+              RPC_ERRORS.INVALID_PARAMS,
+              "Invalid session-policy.max-tokens (use max-context-length)"
+            );
+          }
+
+          if (raw.maxContextLength !== undefined) {
+            if (typeof raw.maxContextLength !== "number" || !Number.isFinite(raw.maxContextLength)) {
+              rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.max-context-length");
             }
-            if (raw.maxTokens <= 0) {
-              rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.max-tokens (must be > 0)");
+            if (raw.maxContextLength <= 0) {
+              rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.max-context-length (must be > 0)");
             }
-            next.maxTokens = Math.trunc(raw.maxTokens);
+            next.maxContextLength = Math.trunc(raw.maxContextLength);
           }
 
           if (Object.keys(next).length === 0) {

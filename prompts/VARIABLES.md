@@ -32,7 +32,7 @@ Notes:
 | `agent.permissionLevel` | string | `restricted|standard|privileged` (or empty) |
 | `agent.sessionPolicy.dailyResetAt` | string | Daily reset time in `HH:MM` format (or empty) |
 | `agent.sessionPolicy.idleTimeout` | string | Idle timeout duration like `2h`, `30m` (or empty) |
-| `agent.sessionPolicy.maxTokens` | number | Max tokens before session refresh (or `0`) |
+| `agent.sessionPolicy.maxContextLength` | number | Max context length before session refresh (or `0`) |
 | `agent.createdAt` | string | ISO 8601 |
 | `agent.lastSeenAt` | string | ISO 8601 (or empty) |
 | `agent.metadata` | object | Agent metadata JSON blob (or `{}`) |

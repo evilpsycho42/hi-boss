@@ -191,7 +191,7 @@ Clearing nullable overrides:
 - Session policy is printed as:
   - `session-daily-reset-at:`
   - `session-idle-timeout:`
-  - `session-max-tokens:`
+  - `session-max-context-length:`
 
 ---
 
@@ -305,7 +305,7 @@ export interface Agent {
   sessionPolicy?: {
     dailyResetAt?: string;    // "HH:MM" local
     idleTimeout?: string;     // e.g. "2h", "30m", "1h30m" (units: d/h/m/s)
-    maxTokens?: number;
+    maxContextLength?: number;
   };
   createdAt: string;
   lastSeenAt?: string;
