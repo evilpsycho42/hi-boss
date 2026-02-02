@@ -8,11 +8,7 @@
  * - Auditing via agent_runs table
  */
 
-import {
-  createRuntime,
-  type UnifiedAgentRuntime,
-  type UnifiedSession,
-} from "@unified-agent-sdk/runtime";
+import { createRuntime } from "@unified-agent-sdk/runtime";
 import type { Agent } from "./types.js";
 import type { HiBossDatabase } from "../daemon/db/database.js";
 import { getAgentHomePath, getAgentInternalSpaceDir, getHiBossDir } from "./home-setup.js";
@@ -23,7 +19,6 @@ import {
 import { buildTurnInput } from "./turn-input.js";
 import { HIBOSS_TOKEN_ENV } from "../shared/env.js";
 import {
-  computeContextLength,
   parseSessionPolicyConfig,
 } from "../shared/session-policy.js";
 import { nowLocalIso } from "../shared/time.js";
@@ -33,52 +28,20 @@ import {
   DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PROVIDER,
 } from "../shared/defaults.js";
+import {
+  getBossInfo,
+  getRefreshReasonForPolicy,
+  queueAgentTask,
+  readTokenUsage,
+  type AgentSession,
+  type SessionRefreshRequest,
+  type TurnTokenUsage,
+} from "./executor-support.js";
 
 /**
  * Maximum number of pending envelopes to process in a single turn.
  */
 const MAX_ENVELOPES_PER_TURN = 10;
-
-/**
- * Session state for an agent.
- */
-interface AgentSession {
-  runtime: UnifiedAgentRuntime<any, any>;
-  session: UnifiedSession<any, any>;
-  agentToken: string;
-  provider: "claude" | "codex";
-  createdAtMs: number;
-  lastRunCompletedAtMs?: number;
-}
-
-interface SessionRefreshRequest {
-  requestedAtMs: number;
-  reasons: string[];
-}
-
-type TurnTokenUsage = {
-  contextLength: number | null;
-  inputTokens: number | null;
-  outputTokens: number | null;
-  cacheReadTokens: number | null;
-  cacheWriteTokens: number | null;
-  totalTokens: number | null;
-};
-
-function asFiniteNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function readTokenUsage(usageRaw: unknown): TurnTokenUsage {
-  const usage = (usageRaw ?? {}) as Record<string, unknown>;
-  const inputTokens = asFiniteNumber(usage.input_tokens);
-  const outputTokens = asFiniteNumber(usage.output_tokens);
-  const cacheReadTokens = asFiniteNumber(usage.cache_read_tokens);
-  const cacheWriteTokens = asFiniteNumber(usage.cache_write_tokens);
-  const contextLength = asFiniteNumber(usage.context_length);
-  const totalTokens = asFiniteNumber(usage.total_tokens);
-  return { contextLength, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, totalTokens };
-}
 
 /**
  * Agent executor manages agent sessions and runs.
@@ -140,26 +103,6 @@ export class AgentExecutor {
   }
 
   /**
-   * Fetch boss info from the database.
-   */
-  private getBossInfo(bindings: { adapterType: string }[]): { name?: string; adapterIds?: Record<string, string> } | undefined {
-    if (!this.db) return undefined;
-
-    const name = this.db.getBossName() ?? undefined;
-    const adapterIds: Record<string, string> = {};
-
-    // Get boss ID for each bound adapter type
-    for (const binding of bindings) {
-      const bossId = this.db.getAdapterBossId(binding.adapterType);
-      if (bossId) {
-        adapterIds[binding.adapterType] = bossId;
-      }
-    }
-
-    return { name, adapterIds };
-  }
-
-  /**
    * Request a session refresh for an agent.
    *
    * Safe to call at any time (including during a run). The refresh will be applied
@@ -179,84 +122,20 @@ export class AgentExecutor {
     }
 
     // Ensure the pending refresh gets applied even if no additional turns run.
-    this.queueAgentTask(agentName, async () => {
-      await this.applyPendingSessionRefresh(agentName);
+    queueAgentTask({
+      agentLocks: this.agentLocks,
+      agentName,
+      log: (message) => this.log(message),
+      task: async () => {
+        await this.applyPendingSessionRefresh(agentName);
+      },
     }).catch((err) => {
       console.error(`[AgentExecutor] queued refresh failed for ${agentName}:`, err);
     });
   }
 
-  private async queueAgentTask(agentName: string, task: () => Promise<void>): Promise<void> {
-    const existingTail = this.agentLocks.get(agentName);
-    if (existingTail) {
-      this.log(`Queued task behind existing run of ${agentName}`);
-    }
-
-    const previous = (existingTail ?? Promise.resolve()).catch((err) => {
-      const message = err instanceof Error ? err.message : String(err);
-      this.log(`Previous task/run of ${agentName} failed; continuing queue: ${message}`);
-    });
-
-    let current: Promise<void>;
-    current = previous
-      .then(task)
-      .finally(() => {
-        if (this.agentLocks.get(agentName) === current) {
-          this.agentLocks.delete(agentName);
-        }
-      });
-
-    this.agentLocks.set(agentName, current);
-    return current;
-  }
-
   private getSessionPolicy(agent: Agent) {
     return parseSessionPolicyConfig(agent.sessionPolicy, { strict: false });
-  }
-
-  private getMostRecentDailyResetBoundaryMs(
-    now: Date,
-    dailyResetAt: { hour: number; minute: number }
-  ): number {
-    const candidate = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate(),
-      dailyResetAt.hour,
-      dailyResetAt.minute,
-      0,
-      0
-    );
-
-    if (now.getTime() >= candidate.getTime()) {
-      return candidate.getTime();
-    }
-
-    // Use yesterday's reset time.
-    candidate.setDate(candidate.getDate() - 1);
-    return candidate.getTime();
-  }
-
-  private getRefreshReasonForPolicy(
-    session: AgentSession,
-    policy: ReturnType<AgentExecutor["getSessionPolicy"]>,
-    now: Date
-  ): string | null {
-    if (policy.dailyResetAt) {
-      const boundaryMs = this.getMostRecentDailyResetBoundaryMs(now, policy.dailyResetAt);
-      if (session.createdAtMs < boundaryMs) {
-        return `daily-reset-at:${policy.dailyResetAt.normalized}`;
-      }
-    }
-
-    if (typeof policy.idleTimeoutMs === "number") {
-      const lastActiveMs = session.lastRunCompletedAtMs ?? session.createdAtMs;
-      if (now.getTime() - lastActiveMs > policy.idleTimeoutMs) {
-        return `idle-timeout-ms:${policy.idleTimeoutMs}`;
-      }
-    }
-
-    return null;
   }
 
   private getAndClearPendingRefreshReasons(agentName: string): string[] {
@@ -281,7 +160,7 @@ export class AgentExecutor {
       const agentRecord = this.db.getAgentByName(agentName);
       if (agentRecord) {
         const bindings = this.db.getBindingsByAgentName(agentName);
-        const boss = this.getBossInfo(bindings);
+        const boss = getBossInfo(this.db, bindings);
         const instructions = generateSystemInstructions({
           agent: agentRecord,
           agentToken: agentRecord.token,
@@ -304,21 +183,26 @@ export class AgentExecutor {
     const agentName = agent.name;
     console.log(`[${nowLocalIso()}] [AgentExecutor] checkAndRun called for ${formatAgentAddress(agentName)}`);
 
-    await this.queueAgentTask(agentName, async () => {
-      const acknowledged = await this.runAgent(agent, db);
+    await queueAgentTask({
+      agentLocks: this.agentLocks,
+      agentName,
+      log: (message) => this.log(message),
+      task: async () => {
+        const acknowledged = await this.runAgent(agent, db);
 
-      // Self-reschedule if more pending work exists
-      if (acknowledged > 0) {
-        const pending = db.getPendingEnvelopesForAgent(agent.name, 1);
-        if (pending.length > 0) {
-          this.log(`More pending envelopes for ${agent.name}, rescheduling`);
-          setImmediate(() => {
-            this.checkAndRun(agent, db).catch((err) => {
-              this.log(`Rescheduled run failed for ${agent.name}: ${err}`);
+        // Self-reschedule if more pending work exists
+        if (acknowledged > 0) {
+          const pending = db.getPendingEnvelopesForAgent(agent.name, 1);
+          if (pending.length > 0) {
+            this.log(`More pending envelopes for ${agent.name}, rescheduling`);
+            setImmediate(() => {
+              this.checkAndRun(agent, db).catch((err) => {
+                this.log(`Rescheduled run failed for ${agent.name}: ${err}`);
+              });
             });
-          });
+          }
         }
-      }
+      },
     });
   }
 
@@ -416,7 +300,7 @@ export class AgentExecutor {
     // Apply policy-based refreshes before starting a new run.
     if (session) {
       const policy = this.getSessionPolicy(agent);
-      const reason = this.getRefreshReasonForPolicy(session, policy, new Date());
+      const reason = getRefreshReasonForPolicy(session, policy, new Date());
       if (reason) {
         this.log(`Refreshing session for ${agent.name} policy=${reason}`, { color: "red" });
         await this.refreshSession(agent.name);
@@ -438,7 +322,7 @@ export class AgentExecutor {
 
       // Generate and write instruction files for new session
       const bindings = db.getBindingsByAgentName(agent.name);
-      const boss = this.getBossInfo(bindings);
+      const boss = getBossInfo(db, bindings);
       const instructions = generateSystemInstructions({
         agent,
         agentToken: agentRecord.token,
@@ -504,6 +388,7 @@ export class AgentExecutor {
         session: unifiedSession,
         agentToken: agentRecord.token,
         provider,
+        homePath,
         createdAtMs: Date.now(),
       };
       this.sessions.set(agent.name, session);
@@ -548,8 +433,6 @@ export class AgentExecutor {
     }
 
     const usage = readTokenUsage(result.usage);
-    // Ensure `contextLength` reflects the latest provider snapshot when available.
-    usage.contextLength = computeContextLength(result.usage as any) ?? usage.contextLength;
     return { finalText: result.finalText ?? "", usage };
   }
 
@@ -594,9 +477,6 @@ export class AgentExecutor {
   }
 }
 
-/**
- * Create a new agent executor instance.
- */
 export function createAgentExecutor(options?: {
   debug?: boolean;
   db?: HiBossDatabase;

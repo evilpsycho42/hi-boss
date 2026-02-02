@@ -12,6 +12,7 @@ type UsageLike = {
   output_tokens?: number;
   cache_read_tokens?: number;
   cache_write_tokens?: number;
+  context_length?: number;
 };
 
 function parseArgs(argv: string[]) {
@@ -75,7 +76,21 @@ function parseArgs(argv: string[]) {
   const claudeModel = args.get("claude-model") ?? undefined;
   const codexModel = args.get("codex-model") ?? undefined;
 
-  return { provider, sessionMode, runs, fillerWords, prompt, keepWorkspace, claudeModel, codexModel };
+  const claudeHome = args.get("claude-home") ?? undefined;
+  const codexHome = args.get("codex-home") ?? undefined;
+
+  return {
+    provider,
+    sessionMode,
+    runs,
+    fillerWords,
+    prompt,
+    keepWorkspace,
+    claudeModel,
+    codexModel,
+    claudeHome,
+    codexHome,
+  };
 }
 
 function isFiniteNumber(value: unknown): value is number {
@@ -89,17 +104,24 @@ function readUsageNumbers(usage: unknown) {
   const total = isFiniteNumber(u.total_tokens) ? u.total_tokens : null;
   const cacheRead = isFiniteNumber(u.cache_read_tokens) ? u.cache_read_tokens : null;
   const cacheWrite = isFiniteNumber(u.cache_write_tokens) ? u.cache_write_tokens : null;
+  const contextLength = isFiniteNumber(u.context_length) ? u.context_length : null;
 
-  return { input, output, total, cacheRead, cacheWrite };
+  return { input, output, total, cacheRead, cacheWrite, contextLength };
 }
 
 function checkInvariants(usage: unknown): { ok: boolean; errors: string[] } {
   const errors: string[] = [];
-  const { input, output, total, cacheRead, cacheWrite } = readUsageNumbers(usage);
+  const { input, output, total, cacheRead, cacheWrite, contextLength } = readUsageNumbers(usage);
 
   if (input !== null && output !== null && total !== null) {
     if (total !== input + output) {
       errors.push(`total_tokens mismatch: expected ${input + output}, got ${total}`);
+    }
+  }
+
+  if (input !== null && output !== null && contextLength !== null) {
+    if (contextLength !== input + output) {
+      errors.push(`context_length mismatch: expected ${input + output}, got ${contextLength}`);
     }
   }
 
@@ -115,13 +137,14 @@ function checkInvariants(usage: unknown): { ok: boolean; errors: string[] } {
 }
 
 function hasAnyUsageNumbers(usage: unknown): boolean {
-  const { input, output, total, cacheRead, cacheWrite } = readUsageNumbers(usage);
+  const { input, output, total, cacheRead, cacheWrite, contextLength } = readUsageNumbers(usage);
   return (
     input !== null ||
     output !== null ||
     total !== null ||
     cacheRead !== null ||
-    cacheWrite !== null
+    cacheWrite !== null ||
+    contextLength !== null
   );
 }
 
@@ -175,6 +198,7 @@ async function runProvider(options: {
   workspaceDir: string;
   prompt: string;
   model?: string;
+  providerHomeOverride?: string;
 }): Promise<{ allOk: boolean; sawAnyCacheTokens: boolean }> {
   const defaultOpts = {
     workspace: { cwd: options.workspaceDir },
@@ -184,9 +208,10 @@ async function runProvider(options: {
   };
 
   const providerHome =
-    options.provider === "claude"
+    options.providerHomeOverride ??
+    (options.provider === "claude"
       ? path.join(os.homedir(), ".claude")
-      : path.join(os.homedir(), ".codex");
+      : path.join(os.homedir(), ".codex"));
 
   const runtime =
     options.provider === "claude"
@@ -233,7 +258,8 @@ async function runProvider(options: {
           const result = await handle.result;
 
           const usage = (result.usage ?? {}) as Record<string, unknown>;
-          const { input, output, total, cacheRead, cacheWrite } = readUsageNumbers(usage);
+          const { input, output, total, cacheRead, cacheWrite, contextLength } =
+            readUsageNumbers(usage);
           const breakdownAvailable = hasAnyUsageNumbers(usage);
           const { ok, errors } = checkInvariants(usage);
 
@@ -253,11 +279,13 @@ async function runProvider(options: {
           }
           console.log(`input-tokens: ${input ?? "n/a"}`);
           console.log(`output-tokens: ${output ?? "n/a"}`);
+          console.log(`context-length: ${contextLength ?? "n/a"}`);
           console.log(`cache-read-tokens: ${cacheRead ?? "n/a"}`);
           console.log(`cache-write-tokens: ${cacheWrite ?? "n/a"}`);
           console.log(`total-tokens: ${total ?? "n/a"}`);
           if (input !== null && output !== null) {
             console.log(`total-tokens-expected: ${input + output}`);
+            console.log(`context-length-expected: ${input + output}`);
           }
 
           console.log(`breakdown-available: ${breakdownAvailable}`);
@@ -265,6 +293,11 @@ async function runProvider(options: {
           if (breakdownAvailable && !ok) {
             allOk = false;
             for (const err of errors) console.log(`breakdown-error: ${err}`);
+          }
+
+          if (input !== null && output !== null && contextLength === null) {
+            allOk = false;
+            console.log("breakdown-error: missing context_length");
           }
 
           if (runIndex > 1 && prev) {
@@ -283,9 +316,12 @@ async function runProvider(options: {
             if (cacheWrite !== null && prev.cacheWrite !== null) {
               console.log(`delta-cache-write-tokens: ${cacheWrite - prev.cacheWrite}`);
             }
+            if (contextLength !== null && prev.contextLength !== null) {
+              console.log(`delta-context-length: ${contextLength - prev.contextLength}`);
+            }
           }
 
-          prev = { input, output, total, cacheRead, cacheWrite };
+          prev = { input, output, total, cacheRead, cacheWrite, contextLength };
         }
       } finally {
         await session.dispose();
@@ -312,7 +348,8 @@ async function runProvider(options: {
           const result = await handle.result;
 
           const usage = (result.usage ?? {}) as Record<string, unknown>;
-          const { input, output, total, cacheRead, cacheWrite } = readUsageNumbers(usage);
+          const { input, output, total, cacheRead, cacheWrite, contextLength } =
+            readUsageNumbers(usage);
           const breakdownAvailable = hasAnyUsageNumbers(usage);
           const { ok, errors } = checkInvariants(usage);
 
@@ -332,11 +369,13 @@ async function runProvider(options: {
           }
           console.log(`input-tokens: ${input ?? "n/a"}`);
           console.log(`output-tokens: ${output ?? "n/a"}`);
+          console.log(`context-length: ${contextLength ?? "n/a"}`);
           console.log(`cache-read-tokens: ${cacheRead ?? "n/a"}`);
           console.log(`cache-write-tokens: ${cacheWrite ?? "n/a"}`);
           console.log(`total-tokens: ${total ?? "n/a"}`);
           if (input !== null && output !== null) {
             console.log(`total-tokens-expected: ${input + output}`);
+            console.log(`context-length-expected: ${input + output}`);
           }
 
           console.log(`breakdown-available: ${breakdownAvailable}`);
@@ -344,6 +383,11 @@ async function runProvider(options: {
           if (breakdownAvailable && !ok) {
             allOk = false;
             for (const err of errors) console.log(`breakdown-error: ${err}`);
+          }
+
+          if (input !== null && output !== null && contextLength === null) {
+            allOk = false;
+            console.log("breakdown-error: missing context_length");
           }
         } finally {
           await session.dispose();
@@ -370,6 +414,7 @@ async function main() {
 
     for (const provider of options.provider) {
       const model = provider === "claude" ? options.claudeModel : options.codexModel;
+      const providerHomeOverride = provider === "claude" ? options.claudeHome : options.codexHome;
       const result = await runProvider({
         provider,
         sessionMode: options.sessionMode,
@@ -377,6 +422,7 @@ async function main() {
         workspaceDir: dir,
         prompt: options.prompt,
         model,
+        providerHomeOverride,
       });
 
       if (!result.allOk) ok = false;
