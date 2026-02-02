@@ -17,7 +17,7 @@ Flags:
 - `--provider <claude|codex>` (optional)
 - `--provider-source-home <path>` (optional; when used with `--provider`, imports provider config from this directory)
 - `--model <model>` (optional)
-- `--reasoning-effort <none|low|medium|high|xhigh>` (optional)
+- `--reasoning-effort <default|none|low|medium|high|xhigh>` (optional; use `default` to clear and use provider default)
 - `--auto-level <medium|high>` (optional)
 - `--permission-level <restricted|standard|privileged>` (optional)
 - `--metadata-json <json>` or `--metadata-file <path>` (optional)
@@ -79,6 +79,20 @@ Output (parseable):
 - `agent-name:`
 - Updated fields when present (e.g., `provider:`, `model:`, `reasoning-effort:`, `auto-level:`, `permission-level:`)
 - `bindings:` (optional; comma-separated adapter types)
+
+## `hiboss agent delete`
+
+Deletes an agent.
+
+This removes the agent record, its bindings, its cron schedules, and its home directory under `~/.hiboss/agents/<agent-name>/`. It does **not** delete historical envelopes or agent runs (audit log).
+
+Flags:
+- `--name <name>` (required)
+- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`; boss token required)
+
+Output (parseable):
+- `success: true|false`
+- `agent-name:`
 
 ## `hiboss agent list`
 

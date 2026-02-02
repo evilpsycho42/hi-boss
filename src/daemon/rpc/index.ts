@@ -13,3 +13,4 @@ export { createEnvelopeHandlers } from "./envelope-handlers.js";
 export { createSetupHandlers } from "./setup-handlers.js";
 export { createAgentHandlers } from "./agent-handlers.js";
 export { createAgentSetHandler } from "./agent-set-handler.js";
+export { createAgentDeleteHandler } from "./agent-delete-handler.js";

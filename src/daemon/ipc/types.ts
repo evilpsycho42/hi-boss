@@ -124,7 +124,7 @@ export interface AgentRegisterParams {
   provider?: "claude" | "codex";
   providerSourceHome?: string;
   model?: string;
-  reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
+  reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | null;
   autoLevel?: "medium" | "high";
   permissionLevel?: "restricted" | "standard" | "privileged";
   metadata?: Record<string, unknown>;
@@ -133,6 +133,16 @@ export interface AgentRegisterParams {
   sessionMaxContextLength?: number;
   bindAdapterType?: string;
   bindAdapterToken?: string;
+}
+
+export interface AgentDeleteParams {
+  token: string;
+  agentName: string;
+}
+
+export interface AgentDeleteResult {
+  success: boolean;
+  agentName: string;
 }
 
 export interface ReactionSetParams {
