@@ -4,9 +4,8 @@ import type { Agent } from "../../agent/types.js";
 import { formatUtcIsoAsLocalOffset } from "../../shared/time.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../shared/validation.js";
 import { resolveToken } from "../token.js";
-import * as path from "path";
-import * as fs from "fs";
 import { DEFAULT_AGENT_PERMISSION_LEVEL } from "../../shared/defaults.js";
+import { normalizeDefaultSentinel, readMetadataInput } from "./agent-shared.js";
 
 interface RegisterAgentResult {
   agent: Omit<Agent, "token">;
@@ -36,6 +35,11 @@ interface BindAgentResult {
     adapterType: string;
     createdAt: string;
   };
+}
+
+interface AgentDeleteResult {
+  success: boolean;
+  agentName: string;
 }
 
 export interface RegisterAgentOptions {
@@ -69,6 +73,11 @@ export interface UnbindAgentOptions {
   token?: string;
   name: string;
   adapterType: string;
+}
+
+export interface DeleteAgentOptions {
+  token?: string;
+  name: string;
 }
 
 export interface ListAgentsOptions {
@@ -113,48 +122,6 @@ interface SetAgentSessionPolicyResult {
   sessionPolicy?: unknown;
 }
 
-async function readMetadataInput(options: {
-  metadataJson?: string;
-  metadataFile?: string;
-}): Promise<Record<string, unknown> | undefined> {
-  const jsonInline = options.metadataJson?.trim();
-  const filePath = options.metadataFile?.trim();
-
-  if (jsonInline && filePath) {
-    throw new Error("Use only one of --metadata-json or --metadata-file");
-  }
-
-  if (jsonInline) {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(jsonInline);
-    } catch {
-      throw new Error("Invalid metadata JSON");
-    }
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      throw new Error("Invalid metadata JSON (expected object)");
-    }
-    return parsed as Record<string, unknown>;
-  }
-
-  if (filePath) {
-    const abs = path.resolve(process.cwd(), filePath);
-    const json = await fs.promises.readFile(abs, "utf-8");
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(json);
-    } catch {
-      throw new Error("Invalid metadata file JSON");
-    }
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      throw new Error("Invalid metadata file JSON (expected object)");
-    }
-    return parsed as Record<string, unknown>;
-  }
-
-  return undefined;
-}
-
 /**
  * Register a new agent.
  */
@@ -171,6 +138,7 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
     }
 
     const token = resolveToken(options.token);
+    const reasoningEffort = normalizeDefaultSentinel(options.reasoningEffort);
     const result = await client.call<RegisterAgentResult>("agent.register", {
       token,
       name: options.name,
@@ -179,7 +147,7 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
       provider: options.provider,
       providerSourceHome: options.providerSourceHome,
       model: options.model,
-      reasoningEffort: options.reasoningEffort,
+      reasoningEffort,
       autoLevel: options.autoLevel,
       permissionLevel: options.permissionLevel,
       metadata: await readMetadataInput(options),
@@ -313,17 +281,6 @@ export async function setAgent(options: SetAgentOptions): Promise<void> {
   }
 }
 
-function normalizeDefaultSentinel(value: string | undefined): string | null | undefined {
-  if (value === undefined) return undefined;
-  const trimmed = value.trim();
-  if (!trimmed) return null;
-  if (trimmed === "provider_default") {
-    throw new Error("Invalid value 'provider_default' (use 'default' to clear and use provider defaults)");
-  }
-  if (trimmed === "default") return null;
-  return trimmed;
-}
-
 /**
  * List all agents.
  */
@@ -384,6 +341,27 @@ export async function listAgents(options: ListAgentsOptions): Promise<void> {
       }
       console.log();
     }
+  } catch (err) {
+    console.error("error:", (err as Error).message);
+    process.exit(1);
+  }
+}
+
+/**
+ * Delete an agent.
+ */
+export async function deleteAgent(options: DeleteAgentOptions): Promise<void> {
+  const config = getDefaultConfig();
+  const client = new IpcClient(getSocketPath(config));
+
+  try {
+    const result = await client.call<AgentDeleteResult>("agent.delete", {
+      token: resolveToken(options.token),
+      agentName: options.name,
+    });
+
+    console.log(`success: ${result.success ? "true" : "false"}`);
+    console.log(`agent-name: ${result.agentName}`);
   } catch (err) {
     console.error("error:", (err as Error).message);
     process.exit(1);

@@ -181,12 +181,16 @@ Provider config import:
 Clearing nullable overrides:
 - `hiboss agent set --model default` sets `agent.model = NULL` (provider default model)
 - `hiboss agent set --reasoning-effort default` sets `agent.reasoningEffort = NULL` (provider default reasoning effort)
+- `hiboss agent register --reasoning-effort default` sets `agent.reasoningEffort = NULL` (provider default reasoning effort)
 
 ### CLI Output Keys
 
 - `hiboss agent register` prints `token:` once (there is no “show token” command).
 - `hiboss setup` / `hiboss setup default` prints `agent-token:` once.
 - `hiboss setup` / `hiboss setup default` also prints `boss-token:` once.
+- `hiboss agent delete` prints:
+  - `success: true|false`
+  - `agent-name:`
 - `hiboss agent list` prints fields like `provider:`, `reasoning-effort:`, `auto-level:`, `permission-level:`, `created-at:` (timestamps are shown in local timezone offset).
 - Session policy is printed as:
   - `session-daily-reset-at:`

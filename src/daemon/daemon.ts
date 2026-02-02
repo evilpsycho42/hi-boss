@@ -40,6 +40,7 @@ import {
   createSetupHandlers,
   createAgentHandlers,
   createAgentSetHandler,
+  createAgentDeleteHandler,
 } from "./rpc/index.js";
 
 // Re-export for CLI and external use
@@ -469,6 +470,7 @@ export class Daemon {
       ...createMemoryHandlers(ctx),
       ...createAgentHandlers(ctx),
       ...createAgentSetHandler(ctx),
+      ...createAgentDeleteHandler(ctx),
       ...createDaemonHandlers(ctx),
       ...createSetupHandlers(ctx),
     };

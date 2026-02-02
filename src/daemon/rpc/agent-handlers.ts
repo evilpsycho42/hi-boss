@@ -55,9 +55,10 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
         provider = p.provider;
       }
 
-      let reasoningEffort: Agent["reasoningEffort"] | undefined;
+      let reasoningEffort: Agent["reasoningEffort"] | null | undefined;
       if (p.reasoningEffort !== undefined) {
         if (
+          p.reasoningEffort !== null &&
           p.reasoningEffort !== "none" &&
           p.reasoningEffort !== "low" &&
           p.reasoningEffort !== "medium" &&
