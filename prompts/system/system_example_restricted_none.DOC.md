@@ -228,11 +228,6 @@ hiboss envelope list
 hiboss envelope list --box outbox
 ```
 
-#### Previewing Turn
-
-```bash
-hiboss turn preview
-```
 
 #### Listing Agents
 

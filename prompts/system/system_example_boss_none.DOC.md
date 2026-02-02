@@ -228,11 +228,6 @@ hiboss envelope list
 hiboss envelope list --box outbox
 ```
 
-#### Previewing Turn
-
-```bash
-hiboss turn preview
-```
 
 #### Listing Agents
 
@@ -241,14 +236,6 @@ hiboss agent list
 ```
 
 
-
-#### Daemon Health Check
-
-Check if the daemon is responsive:
-
-```bash
-hiboss daemon ping
-```
 
 
 

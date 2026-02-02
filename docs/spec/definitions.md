@@ -55,8 +55,6 @@ Command flags:
 
 `hiboss envelope list` and `hiboss envelope get` render an agent-facing “envelope instruction” (see `src/cli/instructions/format-envelope.ts` and `prompts/envelope/instruction.md`).
 
-`hiboss envelope list --as-turn` renders a turn preview (same shape as agent turn input) using `prompts/turn/turn.md`.
-
 **Header keys**
 - `from:` (always; raw address)
 - `from-name:` (only for channel messages; group name or author name with `[boss]` suffix for direct)
@@ -84,6 +82,8 @@ Command flags:
 
 `hiboss envelope send` prints:
 - `id: <envelope-id>`
+
+Envelope instructions printed by `hiboss envelope get` / `hiboss envelope list` do **not** include the internal envelope id.
 
 ### CLI Output (Cron Schedules)
 

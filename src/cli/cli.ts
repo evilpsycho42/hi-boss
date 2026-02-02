@@ -141,7 +141,6 @@ envelope
   .option("--status <status>", "pending or done")
   .option("-n, --limit <n>", "Maximum number of results", parseInt)
   .option("--n <count>", "Deprecated: use --limit", parseInt)
-  .option("--as-turn", "Format output as a turn preview (pending inbox only)")
   .action((options) => {
     listEnvelopes({
       token: options.token,
@@ -149,7 +148,6 @@ envelope
       box: options.box as "inbox" | "outbox",
       status: options.status as "pending" | "done" | undefined,
       limit: options.limit ?? options.n,
-      asTurn: options.asTurn,
     });
   });
 

@@ -111,12 +111,6 @@ export interface CronDeleteParams {
   id: string;
 }
 
-export interface TurnPreviewParams {
-  token: string;
-  agentName?: string;
-  limit?: number;
-}
-
 // Backwards-compatible aliases (deprecated)
 export type MessageSendParams = EnvelopeSendParams;
 export type MessageListParams = EnvelopeListParams;

@@ -138,30 +138,11 @@ hiboss envelope list
 hiboss envelope list --box outbox
 ```
 
-#### Previewing Turn
-
-```bash
-hiboss turn preview
-```
-
 #### Listing Agents
 
 ```bash
 hiboss agent list
 ```
-
-{% if agent.permissionLevel in ["standard", "privileged", "boss"] %}
-{# === STANDARD LEVEL === #}
-
-#### Daemon Health Check
-
-Check if the daemon is responsive:
-
-```bash
-hiboss daemon ping
-```
-{% endif %}
-
 {% if agent.permissionLevel in ["privileged", "boss"] %}
 {# === PRIVILEGED LEVEL === #}
 

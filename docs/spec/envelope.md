@@ -84,12 +84,6 @@ List pending inbox:
 hiboss envelope list --token <agent-token> --box inbox --status pending --limit 10
 ```
 
-Turn preview (same shape as agent input):
-
-```bash
-hiboss envelope list --as-turn --token <agent-token>
-```
-
 Notes:
 - Boss token must specify an explicit sender (`--from`) when sending.
 - Boss token must specify a target address (`--address agent:<name>`) when listing.

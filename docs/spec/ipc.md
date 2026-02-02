@@ -43,10 +43,6 @@ Canonical envelope methods:
 - `envelope.list`
 - `envelope.get`
 
-Turn:
-
-- `turn.preview`
-
 Cron:
 
 - `cron.create`

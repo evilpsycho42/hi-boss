@@ -3,7 +3,6 @@ import { IpcClient } from "../ipc-client.js";
 import { resolveToken } from "../token.js";
 import type { Envelope } from "../../envelope/types.js";
 import { formatEnvelopeInstruction } from "../instructions/format-envelope.js";
-import { buildTurnInput } from "../../agent/turn-input.js";
 import { extractTelegramFileId, normalizeAttachmentSource, resolveText } from "./envelope-input.js";
 
 interface SendEnvelopeResult {
@@ -11,12 +10,6 @@ interface SendEnvelopeResult {
 }
 
 interface ListEnvelopesResult {
-  envelopes: Envelope[];
-}
-
-interface TurnPreviewResult {
-  agentName: string;
-  datetimeIso: string;
   envelopes: Envelope[];
 }
 
@@ -44,7 +37,6 @@ export interface ListEnvelopesOptions {
   box?: "inbox" | "outbox";
   status?: "pending" | "done";
   limit?: number;
-  asTurn?: boolean;
 }
 
 export interface GetEnvelopeOptions {
@@ -143,38 +135,6 @@ export async function listEnvelopes(options: ListEnvelopesOptions): Promise<void
 
   try {
     const token = resolveToken(options.token);
-
-    if (options.asTurn) {
-      if (options.box !== undefined && options.box !== "inbox") {
-        throw new Error("--as-turn requires --box inbox");
-      }
-      if (options.status !== undefined && options.status !== "pending") {
-        throw new Error("--as-turn requires --status pending");
-      }
-
-      let agentName: string | undefined;
-      if (options.address !== undefined) {
-        const trimmed = options.address.trim();
-        if (!trimmed.startsWith("agent:")) {
-          throw new Error("--as-turn requires --address agent:<name> (boss token only)");
-        }
-        agentName = trimmed.slice("agent:".length);
-      }
-
-      const result = await client.call<TurnPreviewResult>("turn.preview", {
-        token,
-        agentName,
-        limit: options.limit,
-      });
-
-      console.log(
-        buildTurnInput({
-          context: { datetime: result.datetimeIso, agentName: result.agentName },
-          envelopes: result.envelopes,
-        })
-      );
-      return;
-    }
 
     const result = await client.call<ListEnvelopesResult>("envelope.list", {
       token,

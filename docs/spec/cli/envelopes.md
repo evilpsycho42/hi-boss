@@ -36,6 +36,9 @@ Gets an envelope by id and prints an agent-facing envelope instruction.
 Rendering:
 - `src/cli/instructions/format-envelope.ts` → `prompts/envelope/instruction.md`
 
+Note:
+- Envelope instructions do not include the internal envelope id; envelopes are marked `done` automatically after successful delivery (channels) or a successful agent run (agents).
+
 Default permission:
 - `restricted`
 
@@ -53,29 +56,14 @@ Rendering (default):
 - Prints one envelope instruction per envelope, separated by a blank line.
 - Each envelope is formatted by `formatEnvelopeInstruction()` using `prompts/envelope/instruction.md`.
 
+Note:
+- Envelopes are marked `done` automatically by the daemon after successful delivery (channels) or a successful agent run (agents).
+
 Flags:
 - `--address <address>` (boss token only)
 - `--box inbox|outbox`
 - `--status pending|done`
 - `--limit <n>` (or deprecated `--n <n>`)
-
-Default permission:
-- `restricted`
-
-## `hiboss envelope list --as-turn`
-
-Prints a **turn preview** (same format as agent turn input).
-
-Constraints:
-- Requires `--box inbox --status pending` (the CLI enforces this).
-- Boss token must specify the target agent via `--address agent:<name>`.
-
-Meaning:
-- Uses pending, due inbox envelopes for the agent (oldest first, same selection as agent runs).
-- Consecutive group-chat envelopes with the same `from:` are batched under one `### Envelope <index>` header.
-
-Note:
-- `## Pending Envelopes (...)` shows the number of underlying messages, and when batching occurs it also shows the number of grouped blocks (so it can differ from the number of `### Envelope <index>` headers).
 
 Default permission:
 - `restricted`

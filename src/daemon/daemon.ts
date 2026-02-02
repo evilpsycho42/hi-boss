@@ -33,7 +33,6 @@ import { rpcError } from "./rpc/context.js";
 import {
   createDaemonHandlers,
   createReactionHandlers,
-  createTurnHandlers,
   createCronHandlers,
   createMemoryHandlers,
   createEnvelopeHandlers,
@@ -462,7 +461,6 @@ export class Daemon {
 
     const methods: RpcMethodRegistry = {
       ...createEnvelopeHandlers(ctx),
-      ...createTurnHandlers(ctx),
       ...createReactionHandlers(ctx),
       ...createCronHandlers(ctx),
       ...createMemoryHandlers(ctx),

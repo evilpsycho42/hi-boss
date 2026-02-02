@@ -5,12 +5,6 @@ from: {{ envelope.from }}
 {% if envelope.fromName %}
 from-name: {{ envelope.fromName }}
 {% endif %}
-{% if envelope.channelMessageId %}
-channel-message-id: {{ envelope.channelMessageId }}
-{% endif %}
-{% if envelope.isGroup == false %}
-created-at: {{ envelope.createdAt.localIso }}
-{% endif %}
 {% if envelope.isGroup == false %}
 
 {% endif %}
@@ -19,8 +13,14 @@ created-at: {{ envelope.createdAt.localIso }}
 
 
 {% endif %}
-{% if (not showHeader) and envelope.channelMessageId %}
+{% if envelope.channelMessageId %}
 channel-message-id: {{ envelope.channelMessageId }}
+{% endif %}
+{% if envelope.isGroup == false %}
+created-at: {{ envelope.createdAt.localIso }}
+{% endif %}
+{% if envelope.deliverAt.utcIso %}
+deliver-at: {{ envelope.deliverAt.localIso }}
 {% endif %}
 {% if envelope.inReplyTo %}
 in-reply-to-message-id: {{ envelope.inReplyTo.messageId }}
@@ -38,6 +38,7 @@ attachments:
 {{ envelope.content.attachmentsText }}
 {% endif %}
 {% else %}
+
 text:
 {{ envelope.content.text }}
 {% if envelope.content.attachmentsText != "(none)" %}

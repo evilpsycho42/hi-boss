@@ -255,7 +255,6 @@ If an operation is missing from the policy, it defaults to `boss` (safe-by-defau
 | `envelope.send` | `restricted` |
 | `envelope.list` | `restricted` |
 | `envelope.get` | `restricted` |
-| `turn.preview` | `restricted` |
 | `message.send` | `restricted` |
 | `message.list` | `restricted` |
 | `message.get` | `restricted` |

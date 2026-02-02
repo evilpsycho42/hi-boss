@@ -89,7 +89,6 @@ export const DEFAULT_PERMISSION_POLICY: PermissionPolicyV1 = {
     "envelope.send": "restricted",
     "envelope.list": "restricted",
     "envelope.get": "restricted",
-    "turn.preview": "restricted",
 
     // Backwards-compatible aliases
     "message.send": "restricted",

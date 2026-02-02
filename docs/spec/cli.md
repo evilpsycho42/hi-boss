@@ -29,6 +29,7 @@ To clear via CLI, use the sentinel value `default`, for example:
 
 - Most operational commands print key-value lines like `key: value` with kebab-case keys (intended to be parseable).
 - `hiboss setup interactive` prints a wizard with human-friendly prose plus a final key-value summary.
+- Envelope instruction output keys and placement are specified in `docs/spec/definitions.md`.
 
 ### Provider config import
 
@@ -57,7 +58,6 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | `hiboss daemon status` | Show daemon status | Yes (boss token) | boss |
 | `hiboss envelope send` | Send an envelope | Yes (agent/boss token) | restricted |
 | `hiboss envelope list` | List envelopes | Yes (agent/boss token) | restricted |
-| `hiboss envelope list --as-turn` | Render pending inbox as a turn preview | Yes (agent/boss token) | restricted |
 | `hiboss envelope get` | Get an envelope by id | Yes (agent/boss token) | restricted |
 | `hiboss cron create` | Create a cron schedule | Yes (agent token) | restricted |
 | `hiboss cron list` | List cron schedules | Yes (agent token) | restricted |
