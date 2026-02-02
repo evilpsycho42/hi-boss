@@ -8,7 +8,6 @@ import {
   getEnvelope,
   createCron,
   listCrons,
-  getCron,
   enableCron,
   disableCron,
   deleteCron,
@@ -184,10 +183,6 @@ cron
   .option("--text-file <path>", "Read envelope text from file")
   .option("--attachment <path>", "Attachment path (can be used multiple times)", collect, [])
   .option("--parse-mode <mode>", "Telegram parse mode: plain, markdownv2, html")
-  .option(
-    "--reply-to <channel-message-id>",
-    "Reply to a channel message by channel-message-id (Telegram: use the base36 id shown as channel-message-id)"
-  )
   .action((options) => {
     createCron({
       cron: options.cron,
@@ -198,7 +193,6 @@ cron
       textFile: options.textFile,
       attachment: options.attachment,
       parseMode: options.parseMode,
-      replyTo: options.replyTo,
     });
   });
 
@@ -208,15 +202,6 @@ cron
   .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .action((options) => {
     listCrons({ token: options.token });
-  });
-
-cron
-  .command("get")
-  .description("Get a cron schedule by ID")
-  .requiredOption("--id <id>", "Cron schedule ID")
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
-  .action((options) => {
-    getCron({ id: options.id, token: options.token });
   });
 
 cron

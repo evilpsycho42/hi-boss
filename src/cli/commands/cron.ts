@@ -13,10 +13,6 @@ interface CronListResult {
   schedules: CronSchedule[];
 }
 
-interface CronGetResult {
-  schedule: CronSchedule;
-}
-
 interface CronToggleResult {
   success: boolean;
 }
@@ -30,16 +26,10 @@ export interface CronCreateOptions {
   textFile?: string;
   attachment?: string[];
   parseMode?: string;
-  replyTo?: string;
 }
 
 export interface CronListOptions {
   token?: string;
-}
-
-export interface CronGetOptions {
-  token?: string;
-  id: string;
 }
 
 export interface CronIdOptions {
@@ -77,12 +67,8 @@ function formatCronScheduleDetail(schedule: CronSchedule): string {
   const md = schedule.metadata;
   if (md && typeof md === "object") {
     const parseMode = (md as Record<string, unknown>).parseMode;
-    const replyToMessageId = (md as Record<string, unknown>).replyToMessageId;
     if (typeof parseMode === "string" && parseMode.trim()) {
       lines.push(`parse-mode: ${parseMode.trim()}`);
-    }
-    if (typeof replyToMessageId === "string" && replyToMessageId.trim()) {
-      lines.push(`reply-to-channel-message-id: ${replyToMessageId.trim()}`);
     }
   }
 
@@ -126,7 +112,6 @@ export async function createCron(options: CronCreateOptions): Promise<void> {
         };
       }),
       parseMode,
-      replyToMessageId: options.replyTo,
     });
 
     console.log(`cron-id: ${result.id}`);
@@ -150,23 +135,9 @@ export async function listCrons(options: CronListOptions): Promise<void> {
     }
 
     for (const schedule of result.schedules) {
-      console.log(formatCronScheduleSummary(schedule));
+      console.log(formatCronScheduleDetail(schedule));
       console.log();
     }
-  } catch (err) {
-    console.error("error:", (err as Error).message);
-    process.exit(1);
-  }
-}
-
-export async function getCron(options: CronGetOptions): Promise<void> {
-  const config = getDefaultConfig();
-  const client = new IpcClient(getSocketPath(config));
-
-  try {
-    const token = resolveToken(options.token);
-    const result = await client.call<CronGetResult>("cron.get", { token, id: options.id });
-    console.log(formatCronScheduleDetail(result.schedule));
   } catch (err) {
     console.error("error:", (err as Error).message);
     process.exit(1);

@@ -25,7 +25,11 @@ export class CronScheduler {
   }
 
   private buildCronEnvelopeMetadata(schedule: CronSchedule): Record<string, unknown> {
-    const template = schedule.metadata && typeof schedule.metadata === "object" ? schedule.metadata : {};
+    const template =
+      schedule.metadata && typeof schedule.metadata === "object" ? { ...schedule.metadata } : {};
+    if (typeof (template as Record<string, unknown>).replyToMessageId === "string") {
+      delete (template as Record<string, unknown>).replyToMessageId;
+    }
     return {
       ...template,
       cronScheduleId: schedule.id,
@@ -183,6 +187,24 @@ export class CronScheduler {
         this.db.runInTransaction(() => {
           const current = this.db.getCronScheduleById(schedule.id);
           if (!current) return;
+
+          // Backwards-compat: older versions allowed cron schedules to store a reply-to-channel-message-id.
+          // Ensure any existing pending cron envelope doesn't reply, even once.
+          if (current.pendingEnvelopeId) {
+            const pendingEnvelope = this.db.getEnvelopeById(current.pendingEnvelopeId);
+            const md = pendingEnvelope?.metadata;
+            if (md && typeof md === "object") {
+              const obj = md as Record<string, unknown>;
+              if (typeof obj.replyToMessageId === "string") {
+                const cleaned = { ...obj };
+                delete cleaned.replyToMessageId;
+                this.db.updateEnvelopeMetadata(
+                  current.pendingEnvelopeId,
+                  Object.keys(cleaned).length > 0 ? cleaned : undefined
+                );
+              }
+            }
+          }
 
           // Disabled schedules must not have pending envelopes.
           if (!current.enabled) {

@@ -121,8 +121,7 @@ hiboss cron create --cron "0 9 * * *" --timezone "UTC" --to agent:{{ agent.name 
 Manage schedules:
 
 ```bash
-hiboss cron list
-hiboss cron get --id <cron-id>
+hiboss cron list  # prints full schedule details (includes cron-id)
 hiboss cron disable --id <cron-id>  # cancels the pending instance
 hiboss cron enable --id <cron-id>   # schedules the next instance
 hiboss cron delete --id <cron-id>   # cancels the pending instance

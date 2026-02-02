@@ -6,7 +6,6 @@ import type {
   RpcMethodRegistry,
   CronCreateParams,
   CronListParams,
-  CronGetParams,
   CronEnableParams,
   CronDisableParams,
   CronDeleteParams,
@@ -64,17 +63,9 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
       metadata.parseMode = mode;
     }
 
-    if (p.replyToMessageId !== undefined) {
-      if (typeof p.replyToMessageId !== "string" || !p.replyToMessageId.trim()) {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid reply-to-channel-message-id");
-      }
-      if (destination.type !== "channel") {
-        rpcError(
-          RPC_ERRORS.INVALID_PARAMS,
-          "reply-to-channel-message-id is only supported for channel destinations"
-        );
-      }
-      metadata.replyToMessageId = p.replyToMessageId.trim();
+    const replyToRaw = (params as Record<string, unknown>).replyToMessageId;
+    if (replyToRaw !== undefined) {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, "reply-to-channel-message-id is no longer supported");
     }
 
     // Check binding for channel destinations.
@@ -143,41 +134,6 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
     }
 
     return { schedules: cron.listSchedules(principal.agent.name) };
-  };
-
-  const createCronGet = (operation: string) => async (params: Record<string, unknown>) => {
-    const p = params as unknown as CronGetParams;
-    const token = requireToken(p.token);
-    const principal = ctx.resolvePrincipal(token);
-    ctx.assertOperationAllowed(operation, principal);
-
-    if (principal.kind !== "agent") {
-      rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
-    }
-
-    if (typeof p.id !== "string" || !p.id.trim()) {
-      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid id");
-    }
-
-    ctx.db.updateAgentLastSeen(principal.agent.name);
-    const cron = ctx.cronScheduler;
-    if (!cron) {
-      rpcError(RPC_ERRORS.INTERNAL_ERROR, "Cron scheduler not initialized");
-    }
-
-    try {
-      const schedule = cron.getSchedule(principal.agent.name, p.id.trim());
-      return { schedule };
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      if (message === "Cron schedule not found") {
-        rpcError(RPC_ERRORS.NOT_FOUND, message);
-      }
-      if (message === "Access denied") {
-        rpcError(RPC_ERRORS.UNAUTHORIZED, message);
-      }
-      rpcError(RPC_ERRORS.INTERNAL_ERROR, message);
-    }
   };
 
   const createCronEnable = (operation: string) => async (params: Record<string, unknown>) => {
@@ -294,7 +250,6 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
   return {
     "cron.create": createCronCreate("cron.create"),
     "cron.list": createCronList("cron.list"),
-    "cron.get": createCronGet("cron.get"),
     "cron.enable": createCronEnable("cron.enable"),
     "cron.disable": createCronDisable("cron.disable"),
     "cron.delete": createCronDelete("cron.delete"),

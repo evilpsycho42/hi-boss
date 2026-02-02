@@ -101,7 +101,6 @@ export const DEFAULT_PERMISSION_POLICY: PermissionPolicyV1 = {
     // Cron schedules
     "cron.create": "restricted",
     "cron.list": "restricted",
-    "cron.get": "restricted",
     "cron.enable": "restricted",
     "cron.disable": "restricted",
     "cron.delete": "restricted",
