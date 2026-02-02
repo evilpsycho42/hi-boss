@@ -18,11 +18,8 @@ interface GetEnvelopeResult {
 }
 
 export interface SendEnvelopeOptions {
-  from?: string;
   to: string;
   token?: string;
-  fromBoss?: boolean;
-  fromName?: string;
   text?: string;
   textFile?: string;
   attachment?: string[];
@@ -60,10 +57,7 @@ export async function sendEnvelope(options: SendEnvelopeOptions): Promise<void> 
     }
     const result = await client.call<SendEnvelopeResult>("envelope.send", {
       token,
-      from: options.from,
       to: options.to,
-      fromBoss: options.fromBoss,
-      fromName: options.fromName,
       text,
       attachments: options.attachment?.map((source) => {
         const telegramFileId = extractTelegramFileId(source);

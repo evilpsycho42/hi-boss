@@ -39,7 +39,7 @@ Start here: `docs/index.md`, `docs/spec/goals.md`, `docs/spec/architecture.md`, 
 Canonical mapping (see `docs/spec/definitions.md`):
 ```
 envelope.deliverAt  -> --deliver-at   (flag)
-envelope.fromBoss   -> --from-boss    (flag; boss token only)
+envelope.fromBoss   -> from_boss      (SQLite; affects `[boss]` suffix in prompts)
 envelope.createdAt  -> created-at:    (output key; direct/agent messages only)
 ```
 

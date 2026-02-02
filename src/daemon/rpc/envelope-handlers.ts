@@ -25,6 +25,13 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
     const principal = ctx.resolvePrincipal(token);
     ctx.assertOperationAllowed(operation, principal);
 
+    if (principal.kind === "boss") {
+      rpcError(
+        RPC_ERRORS.UNAUTHORIZED,
+        "Boss tokens cannot send envelopes (use an agent token or send via a channel adapter)"
+      );
+    }
+
     if (typeof p.to !== "string" || !p.to.trim()) {
       rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to");
     }
@@ -40,34 +47,22 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
     let fromBoss = false;
     const metadata: Record<string, unknown> = {};
 
-    if (principal.kind === "boss") {
-      if (typeof p.from !== "string" || !p.from.trim()) {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "Boss token requires from");
-      }
-      from = p.from.trim();
-      fromBoss = p.fromBoss === true;
+    if (p.from !== undefined || p.fromBoss !== undefined || p.fromName !== undefined) {
+      rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+    }
 
-      if (typeof p.fromName === "string" && p.fromName.trim()) {
-        metadata.fromName = p.fromName.trim();
-      }
-    } else {
-      if (p.from !== undefined || p.fromBoss !== undefined || p.fromName !== undefined) {
-        rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
-      }
+    const agent = principal.agent;
+    ctx.db.updateAgentLastSeen(agent.name);
+    from = formatAgentAddress(agent.name);
 
-      const agent = principal.agent;
-      ctx.db.updateAgentLastSeen(agent.name);
-      from = formatAgentAddress(agent.name);
-
-      // Check binding for channel destinations (agent sender only)
-      if (destination.type === "channel") {
-        const binding = ctx.db.getAgentBindingByType(agent.name, destination.adapter);
-        if (!binding) {
-          rpcError(
-            RPC_ERRORS.UNAUTHORIZED,
-            `Agent '${agent.name}' is not bound to adapter '${destination.adapter}'`
-          );
-        }
+    // Check binding for channel destinations (agent sender only)
+    if (destination.type === "channel") {
+      const binding = ctx.db.getAgentBindingByType(agent.name, destination.adapter);
+      if (!binding) {
+        rpcError(
+          RPC_ERRORS.UNAUTHORIZED,
+          `Agent '${agent.name}' is not bound to adapter '${destination.adapter}'`
+        );
       }
     }
 
@@ -81,17 +76,6 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
       }
       if (sender.type !== "agent") {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Channel destinations require from=agent:<name>");
-      }
-
-      // Boss token can impersonate senders, but channel delivery still requires a real binding.
-      if (principal.kind === "boss") {
-        const binding = ctx.db.getAgentBindingByType(sender.agentName, destination.adapter);
-        if (!binding) {
-          rpcError(
-            RPC_ERRORS.INVALID_PARAMS,
-            `Sender agent '${sender.agentName}' is not bound to adapter '${destination.adapter}'`
-          );
-        }
       }
     }
 

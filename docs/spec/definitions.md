@@ -11,7 +11,7 @@ Naming conventions:
 Canonical mapping (selected):
 - `envelope.deliverAt` → SQLite `deliver_at` → `--deliver-at` → `deliver-at:`
 - `envelope.createdAt` → SQLite `created_at` → `created-at:` (direct/agent messages only)
-- `envelope.fromBoss` → SQLite `from_boss` → `--from-boss` → `[boss]` suffix in rendered sender lines
+- `envelope.fromBoss` → SQLite `from_boss` → `[boss]` suffix in rendered sender lines
 
 ---
 

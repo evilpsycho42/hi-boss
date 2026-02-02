@@ -74,9 +74,6 @@ envelope
     "--to <address>",
     "Destination address (agent:<name> or channel:<adapter>:<chat-id>)"
   )
-  .option("--from <address>", "Sender address (boss token only)")
-  .option("--from-boss", "Mark sender as boss (boss token only)")
-  .option("--from-name <name>", "Semantic sender name for display (boss token only)")
   .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .option("--text <text>", "Envelope text (use - to read from stdin)")
   .option("--text-file <path>", "Read envelope text from file")
@@ -92,9 +89,6 @@ envelope
   )
   .action((options) => {
     sendEnvelope({
-      from: options.from,
-      fromBoss: options.fromBoss,
-      fromName: options.fromName,
       to: options.to,
       token: options.token,
       text: options.text,
