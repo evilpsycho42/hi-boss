@@ -35,9 +35,13 @@ program
   .name("hiboss")
   .description("Hi-Boss: Agent-to-agent and agent-to-human communication daemon")
   .version("1.0.0");
+program.helpCommand(false);
 
 // Daemon commands
-const daemon = program.command("daemon").description("Daemon management");
+const daemon = program
+  .command("daemon")
+  .description("Daemon management")
+  .helpCommand(false);
 
 daemon
   .command("start")
@@ -65,7 +69,10 @@ daemon
   });
 
 // Envelope commands
-const envelope = program.command("envelope").description("Envelope operations");
+const envelope = program
+  .command("envelope")
+  .description("Envelope operations")
+  .helpCommand(false);
 
 envelope
   .command("send")
@@ -101,7 +108,10 @@ envelope
   });
 
 // Reaction commands
-const reaction = program.command("reaction").description("Message reactions");
+const reaction = program
+  .command("reaction")
+  .description("Message reactions")
+  .helpCommand(false);
 
 reaction
   .command("set")
@@ -161,7 +171,10 @@ envelope
   });
 
 // Cron commands
-const cron = program.command("cron").description("Cron schedules (materialize scheduled envelopes)");
+const cron = program
+  .command("cron")
+  .description("Cron schedules (materialize scheduled envelopes)")
+  .helpCommand(false);
 
 cron
   .command("create")
@@ -245,19 +258,23 @@ cron
   });
 
 // Memory commands
-const memory = program.command("memory").description("Semantic memory operations");
+const memory = program
+  .command("memory")
+  .description("Semantic memory operations")
+  .helpCommand(false);
 
 memory
   .command("add")
-  .description("Add a memory")
+  .description("Add a memory (optional --category; default: fact)")
   .requiredOption("--text <text>", "Memory text")
-  .option("--category <category>", "Memory category")
-  .option("--agent-name <name>", "Target agent name (boss token only)")
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .option("--category <category>", "Optional category (default: fact)")
+  .option(
+    "--token <token>",
+    "Token (default: $HIBOSS_TOKEN; agents usually omit; override via --token)"
+  )
   .action((options) => {
     memoryAdd({
       token: options.token,
-      agentName: options.agentName,
       text: options.text,
       category: options.category,
     });
@@ -265,16 +282,17 @@ memory
 
 memory
   .command("search")
-  .description("Search memories by semantic similarity")
+  .description("Search memories by semantic similarity (optional --category)")
   .requiredOption("--query <query>", "Search query")
-  .option("--category <category>", "Filter by category")
+  .option("--category <category>", "Optional category filter")
   .option("-n, --limit <n>", "Maximum number of results", parseInt)
-  .option("--agent-name <name>", "Target agent name (boss token only)")
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .option(
+    "--token <token>",
+    "Token (default: $HIBOSS_TOKEN; agents usually omit; override via --token)"
+  )
   .action((options) => {
     memorySearch({
       token: options.token,
-      agentName: options.agentName,
       query: options.query,
       category: options.category,
       limit: options.limit,
@@ -283,15 +301,16 @@ memory
 
 memory
   .command("list")
-  .description("List stored memories")
-  .option("--category <category>", "Filter by category")
+  .description("List stored memories (newest-first)")
+  .option("--category <category>", "Optional category filter")
   .option("-n, --limit <n>", "Maximum number of results", parseInt)
-  .option("--agent-name <name>", "Target agent name (boss token only)")
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .option(
+    "--token <token>",
+    "Token (default: $HIBOSS_TOKEN; agents usually omit; override via --token)"
+  )
   .action((options) => {
     memoryList({
       token: options.token,
-      agentName: options.agentName,
       category: options.category,
       limit: options.limit,
     });
@@ -299,13 +318,14 @@ memory
 
 memory
   .command("categories")
-  .description("List known memory categories")
-  .option("--agent-name <name>", "Target agent name (boss token only)")
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .description("List known memory categories (from stored memories)")
+  .option(
+    "--token <token>",
+    "Token (default: $HIBOSS_TOKEN; agents usually omit; override via --token)"
+  )
   .action((options) => {
     memoryCategories({
       token: options.token,
-      agentName: options.agentName,
     });
   });
 
@@ -313,12 +333,13 @@ memory
   .command("get")
   .description("Get a memory by ID")
   .requiredOption("--id <id>", "Memory ID")
-  .option("--agent-name <name>", "Target agent name (boss token only)")
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .option(
+    "--token <token>",
+    "Token (default: $HIBOSS_TOKEN; agents usually omit; override via --token)"
+  )
   .action((options) => {
     memoryGet({
       token: options.token,
-      agentName: options.agentName,
       id: options.id,
     });
   });
@@ -327,12 +348,13 @@ memory
   .command("delete")
   .description("Delete a memory by ID")
   .requiredOption("--id <id>", "Memory ID")
-  .option("--agent-name <name>", "Target agent name (boss token only)")
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .option(
+    "--token <token>",
+    "Token (default: $HIBOSS_TOKEN; agents usually omit; override via --token)"
+  )
   .action((options) => {
     memoryDelete({
       token: options.token,
-      agentName: options.agentName,
       id: options.id,
     });
   });
@@ -341,12 +363,13 @@ memory
   .command("delete-category")
   .description("Delete all memories in a category")
   .requiredOption("--category <category>", "Memory category")
-  .option("--agent-name <name>", "Target agent name (boss token only)")
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .option(
+    "--token <token>",
+    "Token (default: $HIBOSS_TOKEN; agents usually omit; override via --token)"
+  )
   .action((options) => {
     memoryDeleteCategory({
       token: options.token,
-      agentName: options.agentName,
       category: options.category,
     });
   });
@@ -354,12 +377,13 @@ memory
 memory
   .command("clear")
   .description("Clear all memories for an agent (drops the table)")
-  .option("--agent-name <name>", "Target agent name (boss token only)")
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .option(
+    "--token <token>",
+    "Token (default: $HIBOSS_TOKEN; agents usually omit; override via --token)"
+  )
   .action((options) => {
     memoryClear({
       token: options.token,
-      agentName: options.agentName,
     });
   });
 
@@ -368,7 +392,10 @@ memory
   .description("Configure the semantic memory embedding model")
   .option("--default", "Download and use the default model")
   .option("--model-path <path>", "Use a local GGUF model file")
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .option(
+    "--token <token>",
+    "Token (default: $HIBOSS_TOKEN; agents usually omit; override via --token)"
+  )
   .action((options) => {
     memorySetup({
       token: options.token,
@@ -378,7 +405,7 @@ memory
   });
 
 // Agent commands
-const agent = program.command("agent").description("Agent management");
+const agent = program.command("agent").description("Agent management").helpCommand(false);
 
 agent
   .command("register")
@@ -520,7 +547,10 @@ agent
   });
 
 // Setup command
-const setup = program.command("setup").description("Initial system configuration");
+const setup = program
+  .command("setup")
+  .description("Initial system configuration")
+  .helpCommand(false);
 
 setup
   .command("interactive", { isDefault: true })

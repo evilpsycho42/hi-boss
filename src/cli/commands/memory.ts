@@ -55,14 +55,12 @@ interface MemorySetupResult {
 
 export interface MemoryAddOptions {
   token?: string;
-  agentName?: string;
   text: string;
   category?: string;
 }
 
 export interface MemorySearchOptions {
   token?: string;
-  agentName?: string;
   query: string;
   category?: string;
   limit?: number;
@@ -70,37 +68,31 @@ export interface MemorySearchOptions {
 
 export interface MemoryListOptions {
   token?: string;
-  agentName?: string;
   category?: string;
   limit?: number;
 }
 
 export interface MemoryCategoriesOptions {
   token?: string;
-  agentName?: string;
 }
 
 export interface MemoryDeleteCategoryOptions {
   token?: string;
-  agentName?: string;
   category: string;
 }
 
 export interface MemoryGetOptions {
   token?: string;
-  agentName?: string;
   id: string;
 }
 
 export interface MemoryDeleteOptions {
   token?: string;
-  agentName?: string;
   id: string;
 }
 
 export interface MemoryClearOptions {
   token?: string;
-  agentName?: string;
 }
 
 export interface MemorySetupOptions {
@@ -134,7 +126,6 @@ export async function memoryAdd(options: MemoryAddOptions): Promise<void> {
     const token = resolveToken(options.token);
     const result = await client.call<MemoryAddResult>("memory.add", {
       token,
-      agentName: options.agentName,
       text: options.text,
       category: options.category,
     });
@@ -153,7 +144,6 @@ export async function memorySearch(options: MemorySearchOptions): Promise<void> 
     const token = resolveToken(options.token);
     const result = await client.call<MemorySearchResult>("memory.search", {
       token,
-      agentName: options.agentName,
       query: options.query,
       category: options.category,
       limit: options.limit,
@@ -178,7 +168,6 @@ export async function memoryList(options: MemoryListOptions): Promise<void> {
     const token = resolveToken(options.token);
     const result = await client.call<MemoryListResult>("memory.list", {
       token,
-      agentName: options.agentName,
       category: options.category,
       limit: options.limit,
     });
@@ -202,7 +191,6 @@ export async function memoryCategories(options: MemoryCategoriesOptions): Promis
     const token = resolveToken(options.token);
     const result = await client.call<MemoryCategoriesResult>("memory.categories", {
       token,
-      agentName: options.agentName,
     });
 
     console.log(`count: ${result.categories.length}`);
@@ -224,7 +212,6 @@ export async function memoryDeleteCategory(options: MemoryDeleteCategoryOptions)
     const token = resolveToken(options.token);
     const result = await client.call<MemoryDeleteCategoryResult>("memory.delete-category", {
       token,
-      agentName: options.agentName,
       category: options.category,
     });
 
@@ -244,7 +231,6 @@ export async function memoryGet(options: MemoryGetOptions): Promise<void> {
     const token = resolveToken(options.token);
     const result = await client.call<MemoryGetResult>("memory.get", {
       token,
-      agentName: options.agentName,
       id: options.id,
     });
 
@@ -270,7 +256,6 @@ export async function memoryDelete(options: MemoryDeleteOptions): Promise<void> 
     const token = resolveToken(options.token);
     await client.call("memory.delete", {
       token,
-      agentName: options.agentName,
       id: options.id,
     });
     console.log("ok: true");
@@ -288,7 +273,6 @@ export async function memoryClear(options: MemoryClearOptions): Promise<void> {
     const token = resolveToken(options.token);
     await client.call("memory.clear", {
       token,
-      agentName: options.agentName,
     });
     console.log("ok: true");
   } catch (err) {
