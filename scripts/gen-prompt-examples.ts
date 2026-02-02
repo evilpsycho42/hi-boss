@@ -11,9 +11,22 @@ import { renderPrompt } from "../src/shared/prompt-renderer.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const SYSTEM_OUTPUT_DIR = path.resolve(__dirname, "../prompts/system");
-const TURN_OUTPUT_DIR = path.resolve(__dirname, "../prompts/turn");
-const ENVELOPE_OUTPUT_DIR = path.resolve(__dirname, "../prompts/envelope");
+const OUTPUT_DIR = path.resolve(__dirname, "../prompts/examples");
+
+function ensureOutputDir(dir: string): void {
+  fs.mkdirSync(dir, { recursive: true });
+}
+
+function clearOldExampleDocs(dir: string): void {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isFile()) continue;
+    if (!entry.name.endsWith(".DOC.md")) continue;
+    fs.rmSync(path.join(dir, entry.name));
+  }
+}
+
+ensureOutputDir(OUTPUT_DIR);
+clearOldExampleDocs(OUTPUT_DIR);
 
 // =============================================================================
 // System Prompt Examples
@@ -63,7 +76,7 @@ for (const permissionLevel of permissionLevels) {
     });
 
     const filename = `system_example_${permissionLevel}_${adapterConfig.name}.DOC.md`;
-    const outputPath = path.join(SYSTEM_OUTPUT_DIR, filename);
+    const outputPath = path.join(OUTPUT_DIR, filename);
 
     fs.writeFileSync(outputPath, rendered.trim() + "\n", "utf-8");
     console.log(`  ${filename}`);
@@ -156,7 +169,7 @@ const turnRendered = renderPrompt({
   context: turnContext,
 });
 
-const turnOutputPath = path.join(TURN_OUTPUT_DIR, "turn_example.DOC.md");
+const turnOutputPath = path.join(OUTPUT_DIR, "turn_example.DOC.md");
 fs.writeFileSync(turnOutputPath, turnRendered.trim() + "\n", "utf-8");
 console.log(`  turn_example.DOC.md`);
 
@@ -197,7 +210,7 @@ const directEnvelopeRendered = renderPrompt({
   context: directEnvelopeContext,
 });
 
-const directEnvelopePath = path.join(ENVELOPE_OUTPUT_DIR, "envelope_example_direct.DOC.md");
+const directEnvelopePath = path.join(OUTPUT_DIR, "envelope_example_direct.DOC.md");
 fs.writeFileSync(directEnvelopePath, directEnvelopeRendered.trim() + "\n", "utf-8");
 console.log(`  envelope_example_direct.DOC.md`);
 
@@ -230,7 +243,7 @@ const groupEnvelopeRendered = renderPrompt({
   context: groupEnvelopeContext,
 });
 
-const groupEnvelopePath = path.join(ENVELOPE_OUTPUT_DIR, "envelope_example_group.DOC.md");
+const groupEnvelopePath = path.join(OUTPUT_DIR, "envelope_example_group.DOC.md");
 fs.writeFileSync(groupEnvelopePath, groupEnvelopeRendered.trim() + "\n", "utf-8");
 console.log(`  envelope_example_group.DOC.md`);
 
@@ -261,7 +274,7 @@ const agentEnvelopeRendered = renderPrompt({
   context: agentEnvelopeContext,
 });
 
-const agentEnvelopePath = path.join(ENVELOPE_OUTPUT_DIR, "envelope_example_agent.DOC.md");
+const agentEnvelopePath = path.join(OUTPUT_DIR, "envelope_example_agent.DOC.md");
 fs.writeFileSync(agentEnvelopePath, agentEnvelopeRendered.trim() + "\n", "utf-8");
 console.log(`  envelope_example_agent.DOC.md`);
 

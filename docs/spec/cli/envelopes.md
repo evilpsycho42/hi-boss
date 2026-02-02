@@ -15,7 +15,7 @@ Flags:
 - `--to <address>` (required)
 - `--text <text>` or `--text -` (stdin) or `--text-file <path>`
 - `--attachment <path>` (repeatable)
-- `--reply-to <message-id>` (optional; channel destinations only)
+- `--reply-to <channel-message-id>` (optional; channel destinations only; for Telegram, use the compact base36 id shown as `channel-message-id:` / `in-reply-to-channel-message-id:` in prompts; raw decimal can be passed as `dec:<id>`)
 - `--parse-mode <mode>` (optional; channel destinations only; `plain|markdownv2|html`)
 - `--deliver-at <time>` (ISO 8601 or relative: `+2h`, `+30m`, `+1Y2M`, `-15m`; units: `Y/M/D/h/m/s`)
 - Boss-only: `--from <address>`, `--from-boss`, `--from-name <name>`

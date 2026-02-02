@@ -83,7 +83,7 @@ export interface ChannelMessage {
    * this contains minimal info about the target message.
    */
   inReplyTo?: {
-    messageId: string;
+    channelMessageId: string;
     author?: {
       id: string;
       username?: string;

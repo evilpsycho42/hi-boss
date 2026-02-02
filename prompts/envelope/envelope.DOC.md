@@ -17,6 +17,7 @@ Hi-Boss supplies fields as template variables (see `prompts/VARIABLES.md`).
 |-------|-------|-------------|
 | `from` | Always | Raw address for routing (use with `--to` when replying) |
 | `from-name` | Only for channel messages | Group name or author name (for direct messages) |
+| `channel-message-id` | Only for channel messages | Platform message id (Telegram uses compact base36, no prefix; use with `hiboss envelope send --reply-to ...` and `hiboss reaction set --channel-message-id ...`) |
 | `created-at` | Only for direct/agent messages | Timestamp (group messages show per-message timestamps) |
 | `deliver-at` | Only for scheduled messages | Requested delivery time |
 

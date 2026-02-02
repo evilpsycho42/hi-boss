@@ -37,7 +37,7 @@ export function createReactionHandlers(ctx: DaemonContext): RpcMethodRegistry {
     }
 
     if (typeof p.messageId !== "string" || !p.messageId.trim()) {
-      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid message-id");
+      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid channel-message-id");
     }
     if (typeof p.emoji !== "string" || !p.emoji.trim()) {
       rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid emoji");

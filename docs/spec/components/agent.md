@@ -178,8 +178,7 @@ Located in `src/agent/turn-input.ts`:
 ```
 ## Turn Context
 
-datetime: 2026-01-28T18:30:00.000Z
-agent: nex
+now: 2026-01-28T20:30:00+08:00
 
 ---
 ## Pending Envelopes (2)

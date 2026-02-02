@@ -58,12 +58,12 @@ Command flags:
 **Header keys**
 - `from:` (always; raw address)
 - `from-name:` (only for channel messages; group name or author name with `[boss]` suffix for direct)
-- `channel-message-id:` (only for channel messages; platform message id, useful for `--reply-to` / reactions)
+- `channel-message-id:` (only for channel messages; platform message id. For Telegram, rendered in compact base36 (no prefix); accepted by `--reply-to` and `hiboss reaction set --channel-message-id` using the displayed value. Raw decimal can be passed as `dec:<id>`.)
 - `created-at:` (only for direct/agent messages; group messages show per-message timestamps)
 - `deliver-at:` (optional; shown when present, in local timezone offset)
 
 **Reply/quote keys** (only when the incoming channel message is a reply)
-- `in-reply-to-message-id:`
+- `in-reply-to-channel-message-id:` (Telegram uses the same compact base36 (no prefix) form)
 - `in-reply-to-from-name:` (optional)
 - `in-reply-to-text:` (multiline)
 
@@ -102,7 +102,7 @@ Envelope instructions printed by `hiboss envelope get` / `hiboss envelope list` 
 
 **Template keys** (only when present)
 - `parse-mode:`
-- `reply-to-message-id:`
+- `reply-to-channel-message-id:`
 
 **Template sections**
 - `text:` followed by the template text (or `(none)`)

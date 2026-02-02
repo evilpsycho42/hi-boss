@@ -143,3 +143,7 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Generated prompt examples
+prompts/examples/*
+!prompts/examples/.gitkeep

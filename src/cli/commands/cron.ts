@@ -82,7 +82,7 @@ function formatCronScheduleDetail(schedule: CronSchedule): string {
       lines.push(`parse-mode: ${parseMode.trim()}`);
     }
     if (typeof replyToMessageId === "string" && replyToMessageId.trim()) {
-      lines.push(`reply-to-message-id: ${replyToMessageId.trim()}`);
+      lines.push(`reply-to-channel-message-id: ${replyToMessageId.trim()}`);
     }
   }
 
@@ -217,4 +217,3 @@ export async function deleteCron(options: CronIdOptions): Promise<void> {
     process.exit(1);
   }
 }
-

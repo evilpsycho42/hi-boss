@@ -49,13 +49,18 @@ Notes:
 
 | Variable | Type | Meaning |
 |---------|------|---------|
-| `turn.datetimeIso` | string | Current turn datetime (ISO 8601) |
+| `turn.datetimeIso` | string | Current turn time formatted in local timezone offset (ISO 8601) |
 | `turn.agentName` | string | Agent name |
 | `envelopes` | array | Pending envelopes for this run |
 | `envelopes[].index` | number | 1-based index |
 | `envelopes[].id` | string | Envelope id |
 | `envelopes[].from` | string | Sender address |
 | `envelopes[].fromName` | string | Human-readable name: `group "<name>"` for group messages, or author name with optional `[boss]` suffix for direct messages (or empty) |
+| `envelopes[].channelMessageId` | string | Platform message id for channel messages (or empty). For Telegram, rendered in compact base36 (no prefix) |
+| `envelopes[].inReplyTo` | object | Present only when the channel message is a reply (or empty) |
+| `envelopes[].inReplyTo.channelMessageId` | string | Channel message id being replied to. For Telegram, rendered in compact base36 (no prefix) |
+| `envelopes[].inReplyTo.fromName` | string | Replied-to author display name (or empty) |
+| `envelopes[].inReplyTo.text` | string | Replied-to text excerpt (or `(none)`) |
 | `envelopes[].fromBoss` | boolean | Boss flag |
 | `envelopes[].isGroup` | boolean | Whether message is from a group chat |
 | `envelopes[].groupName` | string | Group name (or empty for direct/agent messages) |
@@ -81,6 +86,11 @@ Notes:
 | `envelope.from` | string | Sender address |
 | `envelope.to` | string | Destination address |
 | `envelope.fromName` | string | Human-readable name: `group "<name>"` for group messages, or author name with optional `[boss]` suffix for direct messages (or empty) |
+| `envelope.channelMessageId` | string | Platform message id for channel messages (or empty). For Telegram, rendered in compact base36 (no prefix) |
+| `envelope.inReplyTo` | object | Present only when the channel message is a reply (or empty) |
+| `envelope.inReplyTo.channelMessageId` | string | Channel message id being replied to. For Telegram, rendered in compact base36 (no prefix) |
+| `envelope.inReplyTo.fromName` | string | Replied-to author display name (or empty) |
+| `envelope.inReplyTo.text` | string | Replied-to text excerpt (or `(none)`) |
 | `envelope.fromBoss` | boolean | Boss flag |
 | `envelope.isGroup` | boolean | Whether message is from a group chat |
 | `envelope.groupName` | string | Group name (or empty for direct/agent messages) |

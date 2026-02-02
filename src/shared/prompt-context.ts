@@ -8,6 +8,7 @@ import { formatUtcIsoAsLocalOffset } from "./time.js";
 import { HIBOSS_TOKEN_ENV } from "./env.js";
 import { getAgentDir, getHiBossDir } from "../agent/home-setup.js";
 import { DEFAULT_AGENT_PROVIDER } from "./defaults.js";
+import { formatTelegramMessageIdCompact } from "./telegram-message-id.js";
 
 const MAX_CUSTOM_FILE_CHARS = 10_000;
 
@@ -91,7 +92,9 @@ interface ChannelMetadata {
   author: { id: string; username?: string; displayName: string };
   chat: { id: string; name?: string };
   inReplyTo?: {
-    messageId: string;
+    // Prefer channelMessageId, but accept legacy messageId from older stored metadata.
+    channelMessageId?: string;
+    messageId?: string;
     author?: { id: string; username?: string; displayName: string };
     text?: string;
   };
@@ -180,7 +183,7 @@ function buildSemanticFrom(envelope: Envelope): SemanticFromResult | undefined {
 }
 
 interface InReplyToPrompt {
-  messageId: string;
+  channelMessageId: string;
   fromName: string;
   text: string;
 }
@@ -191,8 +194,14 @@ function buildInReplyTo(metadata: unknown): InReplyToPrompt | undefined {
   if (!inReplyTo || typeof inReplyTo !== "object") return undefined;
 
   const rt = inReplyTo as Record<string, unknown>;
-  const messageId = typeof rt.messageId === "string" ? rt.messageId.trim() : "";
-  if (!messageId) return undefined;
+  const rawChannelMessageId =
+    typeof rt.channelMessageId === "string" ? rt.channelMessageId.trim() : "";
+  const rawLegacyMessageId = typeof rt.messageId === "string" ? rt.messageId.trim() : "";
+  const raw = rawChannelMessageId || rawLegacyMessageId;
+
+  const channelMessageId =
+    metadata.platform === "telegram" ? formatTelegramMessageIdCompact(raw) : raw;
+  if (!channelMessageId) return undefined;
 
   const authorRaw = rt.author;
   let fromName = "";
@@ -206,7 +215,7 @@ function buildInReplyTo(metadata: unknown): InReplyToPrompt | undefined {
   const text = typeof rt.text === "string" && rt.text.trim() ? rt.text : "(none)";
 
   return {
-    messageId,
+    channelMessageId,
     fromName,
     text,
   };
@@ -296,7 +305,11 @@ export function buildTurnPromptContext(params: {
 }): Record<string, unknown> {
   const envelopes = (params.envelopes ?? []).map((env, idx) => {
     const semantic = buildSemanticFrom(env);
-    const channelMessageId = getChannelMessageId(env.metadata);
+    const rawChannelMessageId = getChannelMessageId(env.metadata);
+    const channelMessageId =
+      isChannelMetadata(env.metadata) && env.metadata.platform === "telegram"
+        ? formatTelegramMessageIdCompact(rawChannelMessageId)
+        : rawChannelMessageId;
     const inReplyTo = buildInReplyTo(env.metadata);
     const attachments = (env.content.attachments ?? []).map((att) => {
       const type = detectAttachmentType(att);
@@ -351,7 +364,7 @@ export function buildTurnPromptContext(params: {
 
   return {
     turn: {
-      datetimeIso: params.datetimeIso,
+      datetimeIso: formatUtcIsoAsLocalOffset(params.datetimeIso),
       agentName: params.agentName,
       envelopeCount: envelopes.length,
       envelopeBlockCount,
@@ -365,7 +378,11 @@ export function buildCliEnvelopePromptContext(params: {
 }): Record<string, unknown> {
   const env = params.envelope;
   const semantic = buildSemanticFrom(env);
-  const channelMessageId = getChannelMessageId(env.metadata);
+  const rawChannelMessageId = getChannelMessageId(env.metadata);
+  const channelMessageId =
+    isChannelMetadata(env.metadata) && env.metadata.platform === "telegram"
+      ? formatTelegramMessageIdCompact(rawChannelMessageId)
+      : rawChannelMessageId;
   const inReplyTo = buildInReplyTo(env.metadata);
   const attachments = (env.content.attachments ?? []).map((att) => {
     const type = detectAttachmentType(att);

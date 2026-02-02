@@ -98,7 +98,7 @@ export async function sendEnvelope(options: SendEnvelopeOptions): Promise<void> 
         console.error(`parse-mode: ${d.parseMode}`);
       }
       if (typeof d.replyToMessageId === "string" && d.replyToMessageId.trim()) {
-        console.error(`reply-to-message-id: ${d.replyToMessageId.trim()}`);
+        console.error(`reply-to-channel-message-id: ${d.replyToMessageId.trim()}`);
       }
 
       const adapterError = d.adapterError;
