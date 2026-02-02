@@ -6,13 +6,12 @@ If memory is disabled or misconfigured, `memory.*` calls fail with an error that
 
 ## `hiboss memory add`
 
-Adds a memory entry.
+Adds a memory entry (category optional; defaults to `fact`).
 
 Flags:
 - `--text <text>` (required)
 - `--category <category>` (optional; defaults to `fact`)
-- `--agent-name <name>` (boss token only)
-- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
+- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`; override by passing `--token`)
 
 Output (parseable):
 - `id: <memory-id>`
@@ -22,14 +21,13 @@ Default permission:
 
 ## `hiboss memory search`
 
-Searches memories by semantic similarity.
+Searches memories by semantic similarity (optional category filter).
 
 Flags:
 - `--query <query>` (required)
 - `--category <category>` (optional)
 - `-n, --limit <n>` (optional; default 5)
-- `--agent-name <name>` (boss token only)
-- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
+- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`; override by passing `--token`)
 
 Output (parseable):
 - `count: <n>`
@@ -45,13 +43,12 @@ Default permission:
 
 ## `hiboss memory list`
 
-Lists stored memories (newest-first).
+Lists stored memories (newest-first by `created-at`).
 
 Flags:
 - `--category <category>` (optional)
 - `-n, --limit <n>` (optional; default 100)
-- `--agent-name <name>` (boss token only)
-- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
+- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`; override by passing `--token`)
 
 Output (parseable):
 - `count: <n>`
@@ -62,11 +59,10 @@ Default permission:
 
 ## `hiboss memory categories`
 
-Lists known memory categories.
+Lists known memory categories (derived from stored memories).
 
 Flags:
-- `--agent-name <name>` (boss token only)
-- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
+- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`; override by passing `--token`)
 
 Output (parseable):
 - `count: <n>`
@@ -81,7 +77,6 @@ Gets a memory by id.
 
 Flags:
 - `--id <id>` (required)
-- `--agent-name <name>` (boss token only)
 - `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
 
 Output (parseable):
@@ -97,7 +92,6 @@ Deletes a memory by id.
 
 Flags:
 - `--id <id>` (required)
-- `--agent-name <name>` (boss token only)
 - `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
 
 Output (parseable):
@@ -112,7 +106,6 @@ Deletes all memories in the specified category.
 
 Flags:
 - `--category <category>` (required)
-- `--agent-name <name>` (boss token only)
 - `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
 
 Output (parseable):
@@ -127,7 +120,6 @@ Default permission:
 Drops all memories for the target agent.
 
 Flags:
-- `--agent-name <name>` (boss token only)
 - `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
 
 Output (parseable):
@@ -153,4 +145,3 @@ Output (parseable):
 
 Default permission:
 - `privileged`
-
