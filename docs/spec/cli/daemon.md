@@ -6,6 +6,10 @@ This document specifies `hiboss daemon ...`.
 
 Starts the local daemon process in the background.
 
+Log behavior:
+- If `~/.hiboss/daemon.log` exists and is non-empty, it is moved to `~/.hiboss/log_history/` with a timestamped suffix.
+- A new empty `~/.hiboss/daemon.log` is created for the new daemon process.
+
 Flags:
 - `--debug` enables verbose logs for inbound/outbound messages
 

@@ -30,6 +30,63 @@ export interface DaemonStatusOptions {
   token?: string;
 }
 
+function formatTimestampForFilename(d: Date): string {
+  const pad = (n: number, width = 2) => String(n).padStart(width, "0");
+  const yyyy = String(d.getFullYear());
+  const mm = pad(d.getMonth() + 1);
+  const dd = pad(d.getDate());
+  const hh = pad(d.getHours());
+  const mi = pad(d.getMinutes());
+  const ss = pad(d.getSeconds());
+  const mmm = pad(d.getMilliseconds(), 3);
+  return `${yyyy}${mm}${dd}-${hh}${mi}${ss}-${mmm}`;
+}
+
+function rotateDaemonLogOnStart(dataDir: string): void {
+  const logPath = path.join(dataDir, "daemon.log");
+  let stat: fs.Stats;
+  try {
+    stat = fs.statSync(logPath);
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException;
+    if (e.code === "ENOENT") return;
+    throw err;
+  }
+
+  if (!stat.isFile() || stat.size === 0) return;
+
+  const historyDir = path.join(dataDir, "log_history");
+  fs.mkdirSync(historyDir, { recursive: true });
+
+  const stamp = formatTimestampForFilename(new Date());
+  const baseName = `daemon.${stamp}.log`;
+  let archivedPath = path.join(historyDir, baseName);
+
+  for (let attempt = 0; attempt < 100 && fs.existsSync(archivedPath); attempt++) {
+    archivedPath = path.join(historyDir, `daemon.${stamp}.${attempt + 1}.log`);
+  }
+
+  if (fs.existsSync(archivedPath)) {
+    // Best-effort: avoid overwriting existing history files.
+    return;
+  }
+
+  try {
+    fs.renameSync(logPath, archivedPath);
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException;
+    if (e.code === "ENOENT") return;
+
+    // Best-effort: if rename fails (e.g. Windows file locks), fall back to copy+truncate.
+    try {
+      fs.copyFileSync(logPath, archivedPath);
+      fs.truncateSync(logPath, 0);
+    } catch {
+      // If rotation fails, keep appending to the existing log.
+    }
+  }
+}
+
 /**
  * Start the daemon.
  */
@@ -93,6 +150,8 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<voi
     console.error("Failed to acquire daemon lock");
     process.exit(1);
   }
+
+  rotateDaemonLogOnStart(config.dataDir);
 
   // Find the daemon entry script
   // When running with tsx, use .ts files; when running compiled, use .js files

@@ -28,6 +28,7 @@ import {
 } from "../shared/session-policy.js";
 import { nowLocalIso } from "../shared/time.js";
 import { orange, red } from "../shared/ansi.js";
+import { formatAgentAddress } from "../adapters/types.js";
 import {
   DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PROVIDER,
@@ -275,7 +276,7 @@ export class AgentExecutor {
     );
     await this.refreshSession(agentName);
 
-    // Log the system prompt that will be used for the new session
+    // Re-write instruction files for the new session (debug logs only metadata).
     if (this.debug && this.db) {
       const agentRecord = this.db.getAgentByName(agentName);
       if (agentRecord) {
@@ -301,7 +302,7 @@ export class AgentExecutor {
    */
   async checkAndRun(agent: Agent, db: HiBossDatabase): Promise<void> {
     const agentName = agent.name;
-    console.log(`[${nowLocalIso()}] [AgentExecutor] checkAndRun called for ${agentName}`);
+    console.log(`[${nowLocalIso()}] [AgentExecutor] checkAndRun called for ${formatAgentAddress(agentName)}`);
 
     await this.queueAgentTask(agentName, async () => {
       const acknowledged = await this.runAgent(agent, db);

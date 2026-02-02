@@ -303,6 +303,7 @@ function isInterestingRuntimePath(p: string): boolean {
   if (p.startsWith("~/.hiboss")) return true;
   if (p.startsWith("~/.codex")) return true;
   if (p.startsWith("~/.claude")) return true;
+  if (lower.includes("log_history") || lower.endsWith("/log_history")) return true;
   if (lower.includes("/prompts") || lower.endsWith("/prompts") || lower === "prompts") return true;
   if (lower.includes("test-save")) return true;
   if (lower.includes("codex_home") || lower.includes("claude_home")) return true;
@@ -333,6 +334,7 @@ function describePath(p: string, usedDefaultDataDir: boolean): string {
     if (p.endsWith("/daemon.sock")) return `IPC socket file${dataDirNote}`;
     if (p.endsWith("/daemon.pid")) return `daemon PID file${dataDirNote}`;
     if (p.endsWith("/daemon.log")) return `daemon log file${dataDirNote}`;
+    if (p.endsWith("/log_history")) return `daemon log history directory${dataDirNote}`;
     if (p.endsWith("/media")) return "Telegram media download directory";
     if (p.includes("/agents/") && p.includes("/codex_home")) return "agent Codex home directory";
     if (p.includes("/agents/") && p.includes("/claude_home")) return "agent Claude home directory";

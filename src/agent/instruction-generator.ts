@@ -10,6 +10,7 @@ import type { Agent } from "./types.js";
 import type { AgentBinding } from "../daemon/db/database.js";
 import { renderPrompt } from "../shared/prompt-renderer.js";
 import { buildSystemPromptContext } from "../shared/prompt-context.js";
+import { formatAgentAddress } from "../adapters/types.js";
 import { getCodexHomePath, getClaudeHomePath } from "./home-setup.js";
 import { nowLocalIso } from "../shared/time.js";
 import { ensureAgentInternalSpaceLayout, readAgentInternalNoteSnapshot } from "../shared/internal-space.js";
@@ -105,12 +106,12 @@ export async function writeInstructionFiles(
 ): Promise<void> {
   const { hibossDir, debug } = options ?? {};
 
-  // Log the content being written (only in debug mode)
+  // Log only metadata (never dump full system prompt into logs).
   if (debug) {
-    console.log(`[${nowLocalIso()}] [InstructionGenerator] Writing AGENTS.md / CLAUDE.md for ${agentName}:`);
-    console.log("─".repeat(60));
-    console.log(instructions);
-    console.log("─".repeat(60));
+    const bytes = Buffer.byteLength(instructions, "utf-8");
+    console.log(
+      `[${nowLocalIso()}] [InstructionGenerator] Writing AGENTS.md / CLAUDE.md for ${formatAgentAddress(agentName)} bytes=${bytes}`
+    );
   }
 
   // Write to codex_home/AGENTS.md

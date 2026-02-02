@@ -15,6 +15,7 @@ import { MemoryService } from "./memory/index.js";
 import type { RpcMethodRegistry } from "./ipc/types.js";
 import { RPC_ERRORS } from "./ipc/types.js";
 import type { ChatAdapter } from "../adapters/types.js";
+import { formatAgentAddress } from "../adapters/types.js";
 import { TelegramAdapter } from "../adapters/telegram.adapter.js";
 import { nowLocalIso } from "../shared/time.js";
 import { red } from "../shared/ansi.js";
@@ -298,7 +299,7 @@ export class Daemon {
 
       if (command.command === "new" && enrichedCommand.agentName) {
         console.log(
-          red(`[${nowLocalIso()}] [Daemon] Session refresh requested for agent: ${enrichedCommand.agentName}`)
+          red(`[${nowLocalIso()}] [Daemon] Session refresh requested for ${formatAgentAddress(enrichedCommand.agentName)}`)
         );
         this.executor.requestSessionRefresh(enrichedCommand.agentName, "telegram:/new");
       }
@@ -321,9 +322,9 @@ export class Daemon {
    * Register a single agent handler for auto-execution.
    */
   private registerSingleAgentHandler(agentName: string): void {
-    console.log(`[${nowLocalIso()}] [Daemon] Registering handler for agent: ${agentName}`);
+    console.log(`[${nowLocalIso()}] [Daemon] Registering handler for ${formatAgentAddress(agentName)}`);
     this.router.registerAgentHandler(agentName, async () => {
-      console.log(`[${nowLocalIso()}] [Daemon] Handler triggered for agent: ${agentName}`);
+      console.log(`[${nowLocalIso()}] [Daemon] Handler triggered for ${formatAgentAddress(agentName)}`);
 
       const currentAgent = this.db.getAgentByName(agentName);
       if (!currentAgent) {
@@ -347,7 +348,9 @@ export class Daemon {
     for (const agent of agents) {
       const pending = this.db.getPendingEnvelopesForAgent(agent.name, 1);
       if (pending.length > 0) {
-        console.log(`[${nowLocalIso()}] [Daemon] Found ${pending.length}+ pending envelope(s) for ${agent.name}, triggering run`);
+        console.log(
+          `[${nowLocalIso()}] [Daemon] Found ${pending.length}+ pending envelope(s) for ${formatAgentAddress(agent.name)}, triggering run`
+        );
         this.executor.checkAndRun(agent, this.db).catch((err) => {
           console.error(`[Daemon] Agent ${agent.name} startup run failed:`, err);
         });

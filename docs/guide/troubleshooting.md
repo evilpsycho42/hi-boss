@@ -22,6 +22,7 @@ hiboss agent list --token <boss-token>
 | Item | Path |
 |------|------|
 | Daemon log | `~/.hiboss/daemon.log` |
+| Archived daemon logs | `~/.hiboss/log_history/` |
 
 Full reset (wipes local state):
 

@@ -28,7 +28,8 @@ Contents (common):
 - `~/.hiboss/hiboss.db` — SQLite database (agents, bindings, envelopes, runs, config)
 - `~/.hiboss/daemon.sock` — local IPC socket used by the `hiboss` CLI
 - `~/.hiboss/daemon.pid` — daemon PID file (single-instance lock)
-- `~/.hiboss/daemon.log` — daemon stdout/stderr log (when started via `hiboss daemon start`)
+- `~/.hiboss/daemon.log` — daemon stdout/stderr log (when started via `hiboss daemon start`; rotated on each start)
+- `~/.hiboss/log_history/` — archived `daemon.log` files from prior starts (timestamped)
 - `~/.hiboss/BOSS.md` — global boss profile injected into system instructions (optional)
 - `~/.hiboss/media/` — Telegram downloads (attachments are saved here for agents to read)
 - `~/.hiboss/agents/<agent-name>/SOUL.md` — per-agent persona injected into system instructions (optional)

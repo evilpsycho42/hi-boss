@@ -174,7 +174,7 @@ export class MessageRouter {
         replyToMessageId,
       });
       this.db.updateEnvelopeStatus(envelope.id, "done");
-      console.log(`[${nowLocalIso()}] [Router] Delivered message to ${adapterType}:${chatId}`);
+      console.log(`[${nowLocalIso()}] [Router] Delivered message from ${envelope.from} to ${adapterType}:${chatId}`);
 
       // Debug logging for delivered envelope
       if (this.debug) {
