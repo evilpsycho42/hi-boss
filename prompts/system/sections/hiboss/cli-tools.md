@@ -43,7 +43,7 @@ EOF
 
 When an incoming envelope includes `channel-message-id: <id>`, you can reply (quote) that message in Telegram:
 
-Note: Telegram message ids may be rendered in a compact base36 form like `zik0zj` (no prefix). You can pass the displayed id directly to `--reply-to` / `--channel-message-id`. To use a raw decimal Telegram `message_id`, prefix it as `dec:<id>`.
+Note: Telegram message ids may be rendered in a compact base36 form like `zik0zj` (no prefix). You can pass the displayed id directly to `--reply-to` / `--channel-message-id`.
 
 ```bash
 hiboss envelope send --to <address> --reply-to <channel-message-id> --text "replying to that message"

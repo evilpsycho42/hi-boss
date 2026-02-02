@@ -88,7 +88,7 @@ envelope
   .option("--parse-mode <mode>", "Telegram parse mode: plain, markdownv2, html")
   .option(
     "--reply-to <channel-message-id>",
-    "Reply to a channel message by channel-message-id (Telegram: use the base36 id shown as channel-message-id; for raw decimal use dec:<id>)"
+    "Reply to a channel message by channel-message-id (Telegram: use the base36 id shown as channel-message-id)"
   )
   .option(
     "--deliver-at <time>",
@@ -117,24 +117,17 @@ reaction
   .command("set")
   .description("Set a reaction on a channel message")
   .requiredOption("--to <address>", "Target channel address (channel:<adapter>:<chat-id>)")
-  .option("--channel-message-id <id>", "Target channel message id on the platform (Telegram: use the base36 id shown as channel-message-id; for raw decimal use dec:<id>)")
-  .option("--message-id <id>", "Deprecated: use --channel-message-id")
+  .requiredOption(
+    "--channel-message-id <id>",
+    "Target channel message id on the platform (Telegram: use the base36 id shown as channel-message-id)"
+  )
   .requiredOption("--emoji <emoji>", "Reaction emoji (e.g., 👍)")
   .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .action((options) => {
-    if (options.channelMessageId && options.messageId) {
-      console.error("error: Cannot use both --channel-message-id and --message-id");
-      process.exit(1);
-    }
-    const messageId = options.channelMessageId ?? options.messageId;
-    if (!messageId) {
-      console.error("error: --channel-message-id is required");
-      process.exit(1);
-    }
     setReaction({
       token: options.token,
       to: options.to,
-      messageId,
+      messageId: options.channelMessageId,
       emoji: options.emoji,
     });
   });
@@ -195,7 +188,7 @@ cron
   .option("--parse-mode <mode>", "Telegram parse mode: plain, markdownv2, html")
   .option(
     "--reply-to <channel-message-id>",
-    "Reply to a channel message by channel-message-id (Telegram: use the base36 id shown as channel-message-id; for raw decimal use dec:<id>)"
+    "Reply to a channel message by channel-message-id (Telegram: use the base36 id shown as channel-message-id)"
   )
   .action((options) => {
     createCron({

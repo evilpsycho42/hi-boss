@@ -9,7 +9,6 @@ Sets a reaction (emoji) on a channel message.
 Flags:
 - `--to <address>` (required; channel address e.g., `channel:telegram:<chat-id>`)
 - `--channel-message-id <id>` (required; channel message id on the platform. For Telegram, use the compact base36 id shown as `channel-message-id:` in prompts; raw decimal can be passed as `dec:<id>`)
-- `--message-id <id>` (deprecated alias for `--channel-message-id`)
 - `--emoji <emoji>` (required; unicode emoji)
 - `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
 
