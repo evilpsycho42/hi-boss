@@ -41,7 +41,6 @@ Canonical envelope methods:
 
 - `envelope.send`
 - `envelope.list`
-- `envelope.get`
 
 Cron:
 
@@ -67,7 +66,6 @@ Backwards-compatible aliases:
 
 - `message.send`
 - `message.list`
-- `message.get`
 
 Agents:
 

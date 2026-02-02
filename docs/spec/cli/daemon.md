@@ -35,7 +35,7 @@ Shows daemon status as parseable keys:
 - `data-dir: <path>`
 
 Meaning of `data-dir`:
-- The daemon’s state directory (where it stores `hiboss.db`, `daemon.sock`, `daemon.pid`, `daemon.log`, `media/`, and per-agent homes).
+- The daemon’s state directory (where it stores `hiboss.db`, `memory.lance/`, `models/`, `daemon.sock`, `daemon.lock`, `daemon.pid` (informational), `daemon.log`, `media/`, and per-agent homes).
 - In the current implementation this is always the default `~/.hiboss/` (there is no `--data-dir` flag).
 
 Default permission:

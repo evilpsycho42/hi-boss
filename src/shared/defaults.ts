@@ -88,12 +88,10 @@ export const DEFAULT_PERMISSION_POLICY: PermissionPolicyV1 = {
     // Envelope operations (agents)
     "envelope.send": "restricted",
     "envelope.list": "restricted",
-    "envelope.get": "restricted",
 
     // Backwards-compatible aliases
     "message.send": "restricted",
     "message.list": "restricted",
-    "message.get": "restricted",
 
     // Reactions
     "reaction.set": "restricted",

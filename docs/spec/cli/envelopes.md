@@ -32,19 +32,6 @@ id: <envelope-id>
 Default permission:
 - `restricted`
 
-## `hiboss envelope get`
-
-Gets an envelope by id and prints an agent-facing envelope instruction.
-
-Rendering:
-- `src/cli/instructions/format-envelope.ts` → `prompts/envelope/instruction.md`
-
-Note:
-- Envelope instructions do not include the internal envelope id; envelopes are marked `done` automatically after successful delivery (channels) or a successful agent run (agents).
-
-Default permission:
-- `restricted`
-
 ## `hiboss envelope list`
 
 Lists envelopes (defaults: `--box inbox`).
@@ -66,7 +53,7 @@ Flags:
 - `--address <address>` (boss token only)
 - `--box inbox|outbox`
 - `--status pending|done`
-- `--limit <n>` (or deprecated `--n <n>`)
+- `-n, --limit <n>`
 
 Default permission:
 - `restricted`

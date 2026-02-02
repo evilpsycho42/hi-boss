@@ -1,4 +1,4 @@
-## Pending Envelopes ({{ turn.envelopeCount }}{% if turn.envelopeBlockCount != turn.envelopeCount %}, grouped: {{ turn.envelopeBlockCount }}{% endif %})
+## Pending Envelopes ({{ turn.envelopeCount }})
 
 {% if turn.envelopeCount == 0 %}
 No pending envelopes.

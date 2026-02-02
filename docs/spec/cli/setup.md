@@ -71,4 +71,6 @@ Notes:
 - For parity with `hiboss agent set`, the string `"default"` is also accepted for both fields (treated as `null`).
 
 Output:
-- Prints `agent-token:` and `boss-token:` once.
+- Setup prints tokens once, plus a small block of stable key/value lines (keys are kebab-case and may be indented in the human UI).
+- `hiboss setup` / interactive prints: `agent-name:`, `agent-token:`, `boss-token:`, `memory-enabled:`, and (when applicable) `memory-model-path:`, `memory-model-dims:`, `memory-last-error:`.
+- `hiboss setup default` prints: `boss-name:`, `agent-name:`, `agent-token:`, `boss-token:`, `provider:`, `model:`, `memory-enabled:`.

@@ -26,8 +26,11 @@ By default Hi-Boss stores all state under:
 Contents (common):
 
 - `~/.hiboss/hiboss.db` — SQLite database (agents, bindings, envelopes, runs, config)
+- `~/.hiboss/memory.lance/` — LanceDB storage for semantic memory (created when memory is enabled)
+- `~/.hiboss/models/` — downloaded embedding models (used by semantic memory when configured in default mode)
 - `~/.hiboss/daemon.sock` — local IPC socket used by the `hiboss` CLI
-- `~/.hiboss/daemon.pid` — daemon PID file (single-instance lock)
+- `~/.hiboss/daemon.lock` — daemon single-instance lock file
+- `~/.hiboss/daemon.pid` — daemon PID file (informational; not used for locking)
 - `~/.hiboss/daemon.log` — daemon stdout/stderr log (when started via `hiboss daemon start`; rotated on each start)
 - `~/.hiboss/log_history/` — archived `daemon.log` files from prior starts (timestamped)
 - `~/.hiboss/BOSS.md` — global boss profile injected into system instructions (optional)
@@ -51,7 +54,6 @@ Used by:
 
 - `hiboss envelope send`
 - `hiboss envelope list`
-- `hiboss envelope get`
   - and other commands that accept `--token`
 
 Example:
@@ -255,10 +257,8 @@ If an operation is missing from the policy, it defaults to `boss` (safe-by-defau
 |-----------|---------------|
 | `envelope.send` | `restricted` |
 | `envelope.list` | `restricted` |
-| `envelope.get` | `restricted` |
 | `message.send` | `restricted` |
 | `message.list` | `restricted` |
-| `message.get` | `restricted` |
 | `daemon.status` | `boss` |
 | `daemon.ping` | `standard` |
 | `daemon.start` | `boss` |

@@ -73,6 +73,15 @@ CREATE TABLE IF NOT EXISTS agent_bindings (
   FOREIGN KEY (agent_name) REFERENCES agents(name) ON DELETE CASCADE
 );
 
+-- Each agent can have at most one binding per adapter type.
+-- Older versions relied on application-level enforcement; dedupe before enforcing.
+DELETE FROM agent_bindings
+WHERE rowid NOT IN (
+  SELECT MAX(rowid)
+  FROM agent_bindings
+  GROUP BY agent_name, adapter_type
+);
+
 CREATE TABLE IF NOT EXISTS agent_runs (
   id TEXT PRIMARY KEY,
   agent_name TEXT NOT NULL,
@@ -91,6 +100,7 @@ CREATE INDEX IF NOT EXISTS idx_cron_schedules_agent ON cron_schedules(agent_name
 CREATE INDEX IF NOT EXISTS idx_cron_schedules_pending_envelope ON cron_schedules(pending_envelope_id);
 CREATE INDEX IF NOT EXISTS idx_agents_token ON agents(token);
 CREATE INDEX IF NOT EXISTS idx_agent_bindings_agent ON agent_bindings(agent_name);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_bindings_agent_adapter_unique ON agent_bindings(agent_name, adapter_type);
 CREATE INDEX IF NOT EXISTS idx_agent_bindings_adapter ON agent_bindings(adapter_type, adapter_token);
 CREATE INDEX IF NOT EXISTS idx_agent_runs_agent ON agent_runs(agent_name, started_at);
 `;

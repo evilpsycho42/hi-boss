@@ -5,7 +5,6 @@ import {
   daemonStatus,
   sendEnvelope,
   listEnvelopes,
-  getEnvelope,
   createCron,
   listCrons,
   enableCron,
@@ -137,26 +136,13 @@ envelope
   .option("--box <box>", "inbox or outbox", DEFAULT_ENVELOPE_LIST_BOX)
   .option("--status <status>", "pending or done")
   .option("-n, --limit <n>", "Maximum number of results", parseInt)
-  .option("--n <count>", "Deprecated: use --limit", parseInt)
   .action((options) => {
     listEnvelopes({
       token: options.token,
       address: options.address,
       box: options.box as "inbox" | "outbox",
       status: options.status as "pending" | "done" | undefined,
-      limit: options.limit ?? options.n,
-    });
-  });
-
-envelope
-  .command("get")
-  .description("Get an envelope by ID")
-  .requiredOption("--id <id>", "Envelope ID")
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
-  .action((options) => {
-    getEnvelope({
-      id: options.id,
-      token: options.token,
+      limit: options.limit,
     });
   });
 

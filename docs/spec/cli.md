@@ -58,7 +58,6 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | `hiboss daemon status` | Show daemon status | Yes (boss token) | boss |
 | `hiboss envelope send` | Send an envelope | Yes (agent token) | restricted |
 | `hiboss envelope list` | List envelopes | Yes (agent/boss token) | restricted |
-| `hiboss envelope get` | Get an envelope by id | Yes (agent/boss token) | restricted |
 | `hiboss cron create` | Create a cron schedule | Yes (agent token) | restricted |
 | `hiboss cron list` | List cron schedules | Yes (agent token) | restricted |
 | `hiboss cron enable` | Enable a cron schedule | Yes (agent token) | restricted |

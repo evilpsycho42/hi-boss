@@ -36,6 +36,7 @@ Attachment format: `- [type] filename (source)` where type is `image`, `audio`, 
 ```
 from: channel:telegram:6447779930
 from-name: group "hiboss-test"
+channel-message-id: zik0zj
 
 Kevin (@kky1024) [boss] at 2026-01-28T20:08:45+08:00:
 Here's the weekly report and the updated diagram.
@@ -53,6 +54,7 @@ attachments:
 ```
 from: channel:telegram:6447779930
 from-name: Kevin (@kky1024) [boss]
+channel-message-id: zik0zi
 created-at: 2026-01-28T20:08:45+08:00
 text:
 Here's the weekly report.

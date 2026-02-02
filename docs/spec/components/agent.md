@@ -187,6 +187,7 @@ now: 2026-01-28T20:30:00+08:00
 
 from: channel:telegram:12345
 from-name: group "hiboss-test"
+channel-message-id: zik0zj
 
 Alice (@alice) at 2026-01-28T10:25:00+08:00:
 Hello, can you help me?

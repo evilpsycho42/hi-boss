@@ -8,7 +8,7 @@ Hi-Boss uses **Nunjucks** (Jinja-like) templates under `prompts/` to generate th
 
 1. **System instructions** (agent bootstrap / "system prompt")
 2. **Turn input** (what the agent SDK receives each run)
-3. **CLI envelope instructions** (what `hiboss envelope get/list` prints for agents to read)
+3. **CLI envelope instructions** (what `hiboss envelope list` prints for agents to read)
 
 All agent-facing **keys** in rendered text must remain **kebab-case, lowercase** (e.g. `from-name:`).
 
@@ -55,7 +55,6 @@ Turn input changes apply immediately on the next agent run.
 - Rendered by: `src/cli/instructions/format-envelope.ts`
 
 This is the agent-facing text emitted by:
-- `hiboss envelope get`
 - `hiboss envelope list`
 
 ---
@@ -73,7 +72,7 @@ flowchart TD
   G --> H[Write AGENTS.md / CLAUDE.md]
   H --> D
 
-  I[CLI: hiboss envelope get/list] --> J[Build envelope context]
+  I[CLI: hiboss envelope list] --> J[Build envelope context]
   J --> K[Render prompts/envelope/instruction.md]
   K --> L[Printed to stdout]
 ```

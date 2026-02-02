@@ -115,7 +115,6 @@ function printMemoryItem(item: {
     console.log(`similarity: ${item.similarity}`);
   }
   console.log(`text-json: ${JSON.stringify(item.text)}`);
-  console.log("---");
 }
 
 export async function memoryAdd(options: MemoryAddOptions): Promise<void> {
@@ -150,7 +149,6 @@ export async function memorySearch(options: MemorySearchOptions): Promise<void> 
     });
 
     console.log(`count: ${result.memories.length}`);
-    console.log("---");
     for (const m of result.memories) {
       printMemoryItem(m);
     }
@@ -173,7 +171,6 @@ export async function memoryList(options: MemoryListOptions): Promise<void> {
     });
 
     console.log(`count: ${result.memories.length}`);
-    console.log("---");
     for (const m of result.memories) {
       printMemoryItem(m);
     }
@@ -194,7 +191,6 @@ export async function memoryCategories(options: MemoryCategoriesOptions): Promis
     });
 
     console.log(`count: ${result.categories.length}`);
-    console.log("---");
     for (const category of result.categories) {
       console.log(`category: ${category}`);
     }
@@ -240,7 +236,6 @@ export async function memoryGet(options: MemoryGetOptions): Promise<void> {
     }
 
     console.log("found: true");
-    console.log("---");
     printMemoryItem(result.memory);
   } catch (err) {
     console.error("error:", (err as Error).message);

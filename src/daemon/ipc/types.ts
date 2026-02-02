@@ -71,11 +71,6 @@ export interface EnvelopeListParams {
   limit?: number;
 }
 
-export interface EnvelopeGetParams {
-  token: string;
-  id: string;
-}
-
 export interface CronCreateParams {
   token: string;
   cron: string;
@@ -108,7 +103,6 @@ export interface CronDeleteParams {
 // Backwards-compatible aliases (deprecated)
 export type MessageSendParams = EnvelopeSendParams;
 export type MessageListParams = EnvelopeListParams;
-export type MessageGetParams = EnvelopeGetParams;
 
 export interface AgentRegisterParams {
   token: string;

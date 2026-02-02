@@ -6,7 +6,6 @@ import type {
   RpcMethodRegistry,
   EnvelopeSendParams,
   EnvelopeListParams,
-  EnvelopeGetParams,
 } from "../ipc/types.js";
 import { RPC_ERRORS } from "../ipc/types.js";
 import type { DaemonContext } from "./context.js";
@@ -189,45 +188,13 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
     return { envelopes };
   };
 
-  const createEnvelopeGet = (operation: string) => async (params: Record<string, unknown>) => {
-    const p = params as unknown as EnvelopeGetParams;
-    const token = requireToken(p.token);
-    const principal = ctx.resolvePrincipal(token);
-    ctx.assertOperationAllowed(operation, principal);
-
-    if (principal.kind === "agent") {
-      ctx.db.updateAgentLastSeen(principal.agent.name);
-    }
-
-    if (typeof p.id !== "string" || !p.id.trim()) {
-      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid id");
-    }
-
-    const envelope = ctx.db.getEnvelopeById(p.id);
-    if (!envelope) {
-      rpcError(RPC_ERRORS.NOT_FOUND, "Envelope not found");
-    }
-
-    if (principal.kind === "agent") {
-      // Verify the agent has access to this envelope
-      const agentAddress = formatAgentAddress(principal.agent.name);
-      if (envelope.to !== agentAddress && envelope.from !== agentAddress) {
-        rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
-      }
-    }
-
-    return { envelope };
-  };
-
   return {
     // Envelope methods (canonical)
     "envelope.send": createEnvelopeSend("envelope.send"),
     "envelope.list": createEnvelopeList("envelope.list"),
-    "envelope.get": createEnvelopeGet("envelope.get"),
 
     // Message methods (backwards-compatible aliases)
     "message.send": createEnvelopeSend("message.send"),
     "message.list": createEnvelopeList("message.list"),
-    "message.get": createEnvelopeGet("message.get"),
   };
 }

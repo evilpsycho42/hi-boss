@@ -53,7 +53,7 @@ Command flags:
 
 ### CLI Output (Envelope Instructions)
 
-`hiboss envelope list` and `hiboss envelope get` render an agent-facing “envelope instruction” (see `src/cli/instructions/format-envelope.ts` and `prompts/envelope/instruction.md`).
+`hiboss envelope list` renders an agent-facing “envelope instruction” (see `src/cli/instructions/format-envelope.ts` and `prompts/envelope/instruction.md`).
 
 **Header keys**
 - `from:` (always; raw address)
@@ -83,7 +83,7 @@ Command flags:
 `hiboss envelope send` prints:
 - `id: <envelope-id>`
 
-Envelope instructions printed by `hiboss envelope get` / `hiboss envelope list` do **not** include the internal envelope id.
+Envelope instructions printed by `hiboss envelope list` do **not** include the internal envelope id.
 
 ### CLI Output (Cron Schedules)
 
@@ -117,11 +117,12 @@ Envelope instructions printed by `hiboss envelope get` / `hiboss envelope list` 
 - `success: true|false`
 - `cron-id: <cron-id>`
 
-### Example: `hiboss envelope get` (group message)
+### Example: Envelope instruction (group message)
 
 ```
 from: channel:telegram:6447779930
 from-name: group "hiboss-test"
+channel-message-id: zik0zj
 
 Kevin (@kky1024) [boss] at 2026-01-28T20:08:45+08:00:
 Hello!
@@ -129,11 +130,12 @@ attachments:
 - [image] photo.jpg (/Users/kky/.hiboss/media/photo.jpg)
 ```
 
-### Example: `hiboss envelope get` (direct message)
+### Example: Envelope instruction (direct message)
 
 ```
 from: channel:telegram:6447779930
 from-name: Kevin (@kky1024) [boss]
+channel-message-id: zik0zi
 created-at: 2026-01-28T20:08:45+08:00
 text:
 Hello!

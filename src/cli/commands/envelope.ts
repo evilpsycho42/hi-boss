@@ -13,10 +13,6 @@ interface ListEnvelopesResult {
   envelopes: Envelope[];
 }
 
-interface GetEnvelopeResult {
-  envelope: Envelope;
-}
-
 export interface SendEnvelopeOptions {
   to: string;
   token?: string;
@@ -34,11 +30,6 @@ export interface ListEnvelopesOptions {
   box?: "inbox" | "outbox";
   status?: "pending" | "done";
   limit?: number;
-}
-
-export interface GetEnvelopeOptions {
-  id: string;
-  token?: string;
 }
 
 /**
@@ -147,27 +138,6 @@ export async function listEnvelopes(options: ListEnvelopesOptions): Promise<void
       console.log(formatEnvelopeInstruction(env));
       console.log();
     }
-  } catch (err) {
-    console.error("error:", (err as Error).message);
-    process.exit(1);
-  }
-}
-
-/**
- * Get an envelope by ID.
- */
-export async function getEnvelope(options: GetEnvelopeOptions): Promise<void> {
-  const config = getDefaultConfig();
-  const client = new IpcClient(getSocketPath(config));
-
-  try {
-    const token = resolveToken(options.token);
-    const result = await client.call<GetEnvelopeResult>("envelope.get", {
-      token,
-      id: options.id,
-    });
-
-    console.log(formatEnvelopeInstruction(result.envelope));
   } catch (err) {
     console.error("error:", (err as Error).message);
     process.exit(1);
