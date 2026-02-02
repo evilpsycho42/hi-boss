@@ -84,16 +84,10 @@ export interface CronCreateParams {
   text?: string;
   attachments?: Array<{ source: string; filename?: string; telegramFileId?: string }>;
   parseMode?: "plain" | "markdownv2" | "html";
-  replyToMessageId?: string;
 }
 
 export interface CronListParams {
   token: string;
-}
-
-export interface CronGetParams {
-  token: string;
-  id: string;
 }
 
 export interface CronEnableParams {

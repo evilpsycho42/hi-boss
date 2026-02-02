@@ -47,7 +47,6 @@ Cron:
 
 - `cron.create`
 - `cron.list`
-- `cron.get`
 - `cron.enable`
 - `cron.disable`
 - `cron.delete`

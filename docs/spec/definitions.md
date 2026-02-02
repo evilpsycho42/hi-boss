@@ -87,7 +87,7 @@ Envelope instructions printed by `hiboss envelope get` / `hiboss envelope list` 
 
 ### CLI Output (Cron Schedules)
 
-`hiboss cron list` and `hiboss cron get` print parseable key-value output.
+`hiboss cron list` prints parseable key-value output.
 
 **Common keys**
 - `cron-id:`
@@ -102,7 +102,6 @@ Envelope instructions printed by `hiboss envelope get` / `hiboss envelope list` 
 
 **Template keys** (only when present)
 - `parse-mode:`
-- `reply-to-channel-message-id:`
 
 **Template sections**
 - `text:` followed by the template text (or `(none)`)

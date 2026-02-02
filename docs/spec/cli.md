@@ -61,7 +61,6 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | `hiboss envelope get` | Get an envelope by id | Yes (agent/boss token) | restricted |
 | `hiboss cron create` | Create a cron schedule | Yes (agent token) | restricted |
 | `hiboss cron list` | List cron schedules | Yes (agent token) | restricted |
-| `hiboss cron get` | Get a cron schedule by id | Yes (agent token) | restricted |
 | `hiboss cron enable` | Enable a cron schedule | Yes (agent token) | restricted |
 | `hiboss cron disable` | Disable a cron schedule | Yes (agent token) | restricted |
 | `hiboss cron delete` | Delete a cron schedule | Yes (agent token) | restricted |

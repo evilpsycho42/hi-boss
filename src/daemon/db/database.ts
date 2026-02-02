@@ -724,7 +724,20 @@ export class HiBossDatabase {
   }
 
   private rowToCronSchedule(row: CronScheduleRow): CronSchedule {
-    const metadata = row.metadata ? JSON.parse(row.metadata) : undefined;
+    let metadata: Record<string, unknown> | undefined;
+    if (row.metadata) {
+      try {
+        const parsed: unknown = JSON.parse(row.metadata);
+        if (parsed && typeof parsed === "object") {
+          metadata = parsed as Record<string, unknown>;
+        }
+      } catch {
+        // Ignore invalid JSON; treat as missing metadata.
+      }
+    }
+    if (metadata && typeof metadata.replyToMessageId === "string") {
+      delete metadata.replyToMessageId;
+    }
     const attachments = row.content_attachments ? JSON.parse(row.content_attachments) : undefined;
 
     const pendingEnvelopeId = row.pending_envelope_id ?? undefined;
