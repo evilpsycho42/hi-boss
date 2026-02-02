@@ -412,7 +412,7 @@ agent
   )
   .option(
     "--session-max-tokens <n>",
-    "Refresh session after a run uses more than N tokens",
+    "Refresh session after a run's context length exceeds N tokens",
     parseInt
   )
   .option("--metadata-json <json>", "Agent metadata JSON object")
@@ -476,7 +476,7 @@ agent
   )
   .option(
     "--session-max-tokens <n>",
-    "Refresh session after a run uses more than N tokens",
+    "Refresh session after a run's context length exceeds N tokens",
     parseInt
   )
   .option("--clear-session-policy", "Clear session policy")

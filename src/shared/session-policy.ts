@@ -10,7 +10,10 @@ export interface SessionPolicyConfig {
    */
   idleTimeout?: string;
   /**
-   * Refresh session if tokens used in a run exceeds this value.
+   * Refresh session if the estimated context length for a turn exceeds this value.
+   *
+   * Context length is a best-effort estimate derived from provider usage reporting
+   * (prefers `usage.context_length` when available; falls back to `usage.input_tokens`).
    */
   maxTokens?: number;
 }
@@ -28,6 +31,7 @@ export interface ParsedSessionPolicy {
 }
 
 export interface UsageLike {
+  context_length?: number;
   total_tokens?: number;
   input_tokens?: number;
   output_tokens?: number;
@@ -48,6 +52,17 @@ export function computeTokensUsed(usage: UsageLike | undefined): number | null {
 
   if (input === undefined && output === undefined) return null;
   return (input ?? 0) + (output ?? 0);
+}
+
+export function computeContextLength(usage: UsageLike | undefined): number | null {
+  if (!usage) return null;
+  if (typeof usage.context_length === "number" && Number.isFinite(usage.context_length)) {
+    return usage.context_length;
+  }
+  if (typeof usage.input_tokens === "number" && Number.isFinite(usage.input_tokens)) {
+    return usage.input_tokens;
+  }
+  return null;
 }
 
 export function parseDailyResetAt(input: string): ParsedDailyResetAt {
@@ -151,4 +166,3 @@ export function parseSessionPolicyConfig(
 
   return parsed;
 }
-

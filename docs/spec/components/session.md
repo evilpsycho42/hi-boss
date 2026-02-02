@@ -30,7 +30,7 @@ Sessions are refreshed (disposed and recreated) when:
 |---------|-------------|
 | `dailyResetAt` | Configured time of day (e.g., `"09:00"`) |
 | `idleTimeout` | No activity for configured duration (e.g., `"2h"`) |
-| `maxTokens` | Token usage exceeds threshold (evaluated after a successful run; uses `total_usage` when available) |
+| `maxTokens` | Context length exceeds threshold (evaluated after a successful run; uses `usage.context_length` best-effort, falls back to `usage.input_tokens`) |
 | Manual `/new` | User sends `/new` command via Telegram |
 | Daemon restart | All sessions are lost and recreated as needed |
 
@@ -92,7 +92,7 @@ Before starting a run, `getRefreshReasonForPolicy()` in `src/agent/executor.ts` 
 
 If any condition is met, the session is marked for refresh.
 
-After a successful run completes, the daemon may also refresh the session based on `maxTokens` (so the *next* run starts fresh).
+After a successful run completes, the daemon may also refresh the session based on `maxTokens` (context length threshold), so the *next* run starts fresh.
 
 ## Concurrency
 

@@ -22,9 +22,12 @@ import {
 } from "./instruction-generator.js";
 import { buildTurnInput } from "./turn-input.js";
 import { HIBOSS_TOKEN_ENV } from "../shared/env.js";
-import { computeTokensUsed, parseSessionPolicyConfig } from "../shared/session-policy.js";
+import {
+  computeContextLength,
+  parseSessionPolicyConfig,
+} from "../shared/session-policy.js";
 import { nowLocalIso } from "../shared/time.js";
-import { red } from "../shared/ansi.js";
+import { orange, red } from "../shared/ansi.js";
 import {
   DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PROVIDER,
@@ -53,6 +56,7 @@ interface SessionRefreshRequest {
 }
 
 type TurnTokenUsage = {
+  contextLength: number | null;
   inputTokens: number | null;
   outputTokens: number | null;
   cacheReadTokens: number | null;
@@ -70,18 +74,11 @@ function readTokenUsage(usageRaw: unknown): TurnTokenUsage {
   const outputTokens = asFiniteNumber(usage.output_tokens);
   const cacheReadTokens = asFiniteNumber(usage.cache_read_tokens);
   const cacheWriteTokens = asFiniteNumber(usage.cache_write_tokens);
+  const contextLength = asFiniteNumber(usage.context_length) ?? inputTokens;
   const totalTokens =
     asFiniteNumber(usage.total_tokens) ??
-    (inputTokens !== null && outputTokens !== null ? inputTokens + outputTokens : null);
-  return { inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, totalTokens };
-}
-
-function readTotalUsageMaybe(result: unknown): unknown | undefined {
-  const rec = result as Record<string, unknown> | null;
-  if (!rec || typeof rec !== "object") return undefined;
-  const totalUsage = rec["total_usage"];
-  if (!totalUsage || typeof totalUsage !== "object") return undefined;
-  return totalUsage;
+    (inputTokens !== null || outputTokens !== null ? (inputTokens ?? 0) + (outputTokens ?? 0) : null);
+  return { contextLength, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens, totalTokens };
 }
 
 /**
@@ -122,6 +119,25 @@ export class AgentExecutor {
         console.log(line);
       }
     }
+  }
+
+  private logRunUsage(
+    agentName: string,
+    provider: AgentSession["provider"],
+    runId: string,
+    usage: TurnTokenUsage
+  ): void {
+    const line =
+      `[${nowLocalIso()}] [AgentExecutor] Run usage agent=${agentName}` +
+      ` provider=${provider}` +
+      ` run-id=${runId}` +
+      ` context-length=${usage.contextLength ?? "n/a"}` +
+      ` input-tokens=${usage.inputTokens ?? "n/a"}` +
+      ` output-tokens=${usage.outputTokens ?? "n/a"}` +
+      ` cache-read-tokens=${usage.cacheReadTokens ?? "n/a"}` +
+      ` cache-write-tokens=${usage.cacheWriteTokens ?? "n/a"}` +
+      ` total-tokens=${usage.totalTokens ?? "n/a"}`;
+    console.log(orange(line));
   }
 
   /**
@@ -360,15 +376,17 @@ export class AgentExecutor {
       // Complete the run record
       db.completeAgentRun(run.id, response);
 
-      // Token-based refresh: if a run consumed too many tokens, reset the session for the next run.
+      this.logRunUsage(agent.name, session.provider, run.id, turn.usage);
+
+      // Context-length refresh: if a run grew the context too large, reset the session for the next run.
       const policy = this.getSessionPolicy(agent);
       if (
         typeof policy.maxTokens === "number" &&
-        turn.tokensUsed !== null &&
-        turn.tokensUsed > policy.maxTokens
+        turn.usage.contextLength !== null &&
+        turn.usage.contextLength > policy.maxTokens
       ) {
         this.log(
-          `Refreshing session for ${agent.name} tokens-used=${turn.tokensUsed} max-tokens=${policy.maxTokens}`,
+          `Refreshing session for ${agent.name} context-length=${turn.usage.contextLength} max-tokens=${policy.maxTokens}`,
           { color: "red" }
         );
         await this.refreshSession(agent.name);
@@ -503,7 +521,7 @@ export class AgentExecutor {
   private async executeTurn(
     session: AgentSession,
     turnInput: string
-  ): Promise<{ finalText: string; tokensUsed: number | null }> {
+  ): Promise<{ finalText: string; usage: TurnTokenUsage }> {
     this.log(`Executing turn with ${session.provider} provider`);
 
     // Debug: display turn input
@@ -530,22 +548,10 @@ export class AgentExecutor {
       throw new Error(`Agent run ${result.status}`);
     }
 
-    if (this.debug) {
-      const u = readTokenUsage(result.usage);
-      const totalUsage = readTotalUsageMaybe(result);
-      const tu = totalUsage ? readTokenUsage(totalUsage) : u;
-      const totalUsageSuffix =
-        totalUsage && tu.totalTokens !== null && tu.totalTokens !== u.totalTokens
-          ? ` total-usage=${tu.totalTokens}`
-          : "";
-
-      this.log(
-        `Token usage input=${u.inputTokens ?? "n/a"} output=${u.outputTokens ?? "n/a"} cache-read=${u.cacheReadTokens ?? "n/a"} cache-write=${u.cacheWriteTokens ?? "n/a"} total=${u.totalTokens ?? "n/a"}${totalUsageSuffix}`
-      );
-    }
-
-    const tokensUsed = computeTokensUsed((readTotalUsageMaybe(result) as any) ?? result.usage);
-    return { finalText: result.finalText ?? "", tokensUsed };
+    const usage = readTokenUsage(result.usage);
+    // Ensure `contextLength` reflects the latest provider snapshot when available.
+    usage.contextLength = computeContextLength(result.usage as any) ?? usage.contextLength;
+    return { finalText: result.finalText ?? "", usage };
   }
 
   /**
