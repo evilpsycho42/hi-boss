@@ -12,7 +12,7 @@ import { buildTurnPromptContext } from "../shared/prompt-context.js";
  * Context for the current turn.
  */
 export interface TurnContext {
-  datetime: string;  // ISO 8601
+  datetime: string;  // ISO 8601 (UTC recommended; rendered as local time)
   agentName: string;
 }
 
@@ -31,8 +31,7 @@ export interface TurnInput {
  * ```
  * ## Turn Context
  *
- * datetime: 2026-01-27T12:00:00Z
- * agent: nex
+ * now: 2026-01-27T20:00:00+08:00
  *
  * ---
  * ## Pending Envelopes (3)

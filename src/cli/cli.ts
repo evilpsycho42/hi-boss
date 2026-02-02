@@ -82,7 +82,10 @@ envelope
   .option("--text-file <path>", "Read envelope text from file")
   .option("--attachment <path>", "Attachment path (can be used multiple times)", collect, [])
   .option("--parse-mode <mode>", "Telegram parse mode: plain, markdownv2, html")
-  .option("--reply-to <message-id>", "Reply to a channel message by platform message id")
+  .option(
+    "--reply-to <channel-message-id>",
+    "Reply to a channel message by channel-message-id (Telegram: use the base36 id shown as channel-message-id; for raw decimal use dec:<id>)"
+  )
   .option(
     "--deliver-at <time>",
     "Schedule delivery time (ISO 8601 or relative: +2h, +30m, +1Y2M, -15m; units: Y/M/D/h/m/s)"
@@ -110,7 +113,7 @@ reaction
   .command("set")
   .description("Set a reaction on a channel message")
   .requiredOption("--to <address>", "Target channel address (channel:<adapter>:<chat-id>)")
-  .option("--channel-message-id <id>", "Target channel message id on the platform")
+  .option("--channel-message-id <id>", "Target channel message id on the platform (Telegram: use the base36 id shown as channel-message-id; for raw decimal use dec:<id>)")
   .option("--message-id <id>", "Deprecated: use --channel-message-id")
   .requiredOption("--emoji <emoji>", "Reaction emoji (e.g., 👍)")
   .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
@@ -183,7 +186,10 @@ cron
   .option("--text-file <path>", "Read envelope text from file")
   .option("--attachment <path>", "Attachment path (can be used multiple times)", collect, [])
   .option("--parse-mode <mode>", "Telegram parse mode: plain, markdownv2, html")
-  .option("--reply-to <message-id>", "Reply to a channel message by platform message id")
+  .option(
+    "--reply-to <channel-message-id>",
+    "Reply to a channel message by channel-message-id (Telegram: use the base36 id shown as channel-message-id; for raw decimal use dec:<id>)"
+  )
   .action((options) => {
     createCron({
       cron: options.cron,

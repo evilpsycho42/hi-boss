@@ -15,6 +15,7 @@ import {
 import { generateToken, hashToken, verifyToken } from "../../agent/auth.js";
 import { generateUUID } from "../../shared/uuid.js";
 import { assertValidAgentName } from "../../shared/validation.js";
+import { migrateTelegramReplyToMessageIdsToBase36 } from "./migrations/telegram-reply-to.js";
 
 /**
  * Database row types for SQLite mapping.
@@ -141,6 +142,9 @@ export class HiBossDatabase {
       if (!hasDeliverAt) {
         this.db.exec("ALTER TABLE envelopes ADD COLUMN deliver_at TEXT");
       }
+
+      // Migrate Telegram reply-to-channel-message-id values stored as decimal strings into the compact base36 form.
+      migrateTelegramReplyToMessageIdsToBase36(this.db);
     }
 
     // Migrate agents.permission_level and agents.session_policy columns

@@ -66,12 +66,12 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
 
     if (p.replyToMessageId !== undefined) {
       if (typeof p.replyToMessageId !== "string" || !p.replyToMessageId.trim()) {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid reply-to-message-id");
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid reply-to-channel-message-id");
       }
       if (destination.type !== "channel") {
         rpcError(
           RPC_ERRORS.INVALID_PARAMS,
-          "reply-to-message-id is only supported for channel destinations"
+          "reply-to-channel-message-id is only supported for channel destinations"
         );
       }
       metadata.replyToMessageId = p.replyToMessageId.trim();

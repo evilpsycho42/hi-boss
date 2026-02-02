@@ -63,7 +63,7 @@ function makeMockEnvelopes(): Envelope[] {
       createdAt: new Date().toISOString(),
       metadata: {
         platform: "telegram",
-        channelMessageId: "m-1",
+        channelMessageId: "2147483647",
         author: { id: "u-1", username: "alice", displayName: "Alice" },
         chat: { id: "123", name: "hiboss-test" },
       },
@@ -119,6 +119,8 @@ function validateTurnPrompt(): void {
     });
     const out = renderPrompt({ surface: "turn", template: "turn/turn.md", context: ctx }).trimEnd();
     assert.ok(out.includes("## Turn Context"), "turn prompt should include context");
+    assert.ok(/^now: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/m.test(out), "turn prompt should include local now");
+    assert.ok(!/^agent:/m.test(out), "turn prompt should not include agent key");
     assert.ok(out.includes("## Pending Envelopes (0)"), "turn prompt should show 0 envelopes");
   }
 
@@ -134,6 +136,7 @@ function validateTurnPrompt(): void {
     assert.ok(out.includes("from-name:"), "turn prompt should include from-name for channel messages");
     assert.ok(out.includes("group \"hiboss-test\""), "turn prompt should show group name for group messages");
     assert.ok(out.includes("Alice (@alice)"), "turn prompt should show author for group messages");
+    assert.ok(out.includes("channel-message-id: zik0zj"), "turn prompt should show compact telegram channel-message-id");
   }
 
   // Batched group messages (same chat) should repeat header once
@@ -148,7 +151,7 @@ function validateTurnPrompt(): void {
       createdAt: new Date().toISOString(),
       metadata: {
         platform: "telegram",
-        channelMessageId: "m-1",
+        channelMessageId: "2147483647",
         author: { id: "u-1", username: "alice", displayName: "Alice" },
         chat: { id: "123", name: "hiboss-test" },
       },
@@ -163,7 +166,7 @@ function validateTurnPrompt(): void {
       createdAt: new Date().toISOString(),
       metadata: {
         platform: "telegram",
-        channelMessageId: "m-2",
+        channelMessageId: "2147483646",
         author: { id: "u-2", username: "kky1024", displayName: "Kevin" },
         chat: { id: "123", name: "hiboss-test" },
       },

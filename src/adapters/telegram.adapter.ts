@@ -6,6 +6,7 @@ import type { Message as TelegramMessage } from "telegraf/types";
 import type { ChatAdapter, ChannelMessage, MessageContent, ChannelMessageHandler, Attachment, ChannelCommandHandler, ChannelCommand, OutgoingParseMode, SendMessageOptions } from "./types.js";
 import { detectAttachmentType } from "./types.js";
 import { getDefaultMediaDir } from "../shared/defaults.js";
+import { parseTelegramMessageId } from "../shared/telegram-message-id.js";
 
 type TextContext = Context & { message: TelegramMessage.TextMessage };
 type PhotoContext = Context & { message: TelegramMessage.PhotoMessage };
@@ -52,18 +53,6 @@ function toTelegramParseMode(mode: OutgoingParseMode | undefined): "MarkdownV2" 
 function truncateText(text: string, maxChars: number): string {
   if (text.length <= maxChars) return text;
   return text.slice(0, maxChars) + "\n\n[...truncated...]\n";
-}
-
-function parseTelegramMessageId(value: string, fieldName: string): number {
-  const trimmed = value.trim();
-  if (!/^\d+$/.test(trimmed)) {
-    throw new Error(`Invalid ${fieldName}: ${value}`);
-  }
-  const parsed = Number(trimmed);
-  if (!Number.isSafeInteger(parsed)) {
-    throw new Error(`Invalid ${fieldName}: ${value}`);
-  }
-  return parsed;
 }
 
 /**
@@ -192,7 +181,7 @@ export class TelegramAdapter implements ChatAdapter {
         : undefined;
 
     return {
-      messageId: String(replyMsg.message_id),
+      channelMessageId: String(replyMsg.message_id),
       author: author && author.displayName ? author : undefined,
       text: text ? truncateText(text, 1200) : undefined,
     };
@@ -312,7 +301,12 @@ export class TelegramAdapter implements ChatAdapter {
 
     const replyParameters =
       options.replyToMessageId && options.replyToMessageId.trim()
-        ? { message_id: parseTelegramMessageId(options.replyToMessageId, "reply-to-message-id") }
+        ? {
+            message_id: parseTelegramMessageId(
+              options.replyToMessageId,
+              "reply-to-channel-message-id"
+            ),
+          }
         : undefined;
 
     // Prefer native albums when possible (Telegram sendMediaGroup)
@@ -414,7 +408,12 @@ export class TelegramAdapter implements ChatAdapter {
     const telegramParseMode = toTelegramParseMode(options.parseMode);
     const replyParameters =
       options.replyToMessageId && options.replyToMessageId.trim()
-        ? { message_id: parseTelegramMessageId(options.replyToMessageId, "reply-to-message-id") }
+        ? {
+            message_id: parseTelegramMessageId(
+              options.replyToMessageId,
+              "reply-to-channel-message-id"
+            ),
+          }
         : undefined;
 
     const extra: Record<string, unknown> = {
@@ -523,7 +522,7 @@ export class TelegramAdapter implements ChatAdapter {
       throw new Error("Reaction emoji is required");
     }
 
-    const mid = parseTelegramMessageId(messageId, "message-id");
+    const mid = parseTelegramMessageId(messageId, "channel-message-id");
 
     await this.bot.telegram.callApi("setMessageReaction", {
       chat_id: chatId,

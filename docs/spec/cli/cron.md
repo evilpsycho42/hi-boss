@@ -18,7 +18,7 @@ Flags:
 - `--timezone <iana>` (optional; defaults to local; accepts `local`)
 - `--text <text>` or `--text -` (stdin) or `--text-file <path>`
 - `--attachment <path>` (repeatable)
-- `--reply-to <message-id>` (optional; channel destinations only)
+- `--reply-to <channel-message-id>` (optional; channel destinations only; for Telegram, use the compact base36 id shown as `channel-message-id:` / `in-reply-to-channel-message-id:` in prompts; raw decimal can be passed as `dec:<id>`)
 - `--parse-mode <mode>` (optional; channel destinations only; `plain|markdownv2|html`)
 
 Output (parseable):

@@ -8,7 +8,7 @@ Hi-Boss supplies fields as template variables (see `prompts/VARIABLES.md`).
 
 ## Sections
 
-1. **Turn Context** — current datetime and agent name
+1. **Turn Context** — current time (local timezone)
 2. **Pending Envelopes** — one section per envelope, with batching for group chats
 
 Separators:
@@ -21,8 +21,7 @@ Always printed:
 ```
 ## Turn Context
 
-datetime: <ISO-8601>
-agent: <agent-name>
+now: <local ISO-8601>
 ```
 
 ## Pending Envelopes
@@ -47,6 +46,7 @@ When there are pending envelopes, each envelope is printed as:
 
 from: <address>
 from-name: <semantic name>        # only when present
+channel-message-id: <id>          # only for channel messages (Telegram: compact base36, no prefix)
 created-at: <local ISO-8601>      # only for direct/agent messages
 ```
 
@@ -73,8 +73,7 @@ Notes:
 ```
 ## Turn Context
 
-datetime: 2026-01-28T18:30:00.000Z
-agent: nex
+now: 2026-01-28T20:30:00+08:00
 
 ---
 ## Pending Envelopes (0)
@@ -87,8 +86,7 @@ No pending envelopes.
 ```
 ## Turn Context
 
-datetime: 2026-01-28T18:30:00.000Z
-agent: nex
+now: 2026-01-28T20:30:00+08:00
 
 ---
 ## Pending Envelopes (1)
@@ -109,8 +107,7 @@ attachments:
 ```
 ## Turn Context
 
-datetime: 2026-01-28T18:30:00.000Z
-agent: nex
+now: 2026-01-28T20:30:00+08:00
 
 ---
 ## Pending Envelopes (1)
@@ -130,8 +127,7 @@ Hello!
 ```
 ## Turn Context
 
-datetime: 2026-01-28T18:30:00.000Z
-agent: nex
+now: 2026-01-28T20:30:00+08:00
 
 ---
 ## Pending Envelopes (3)

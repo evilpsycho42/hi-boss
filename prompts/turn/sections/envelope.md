@@ -23,7 +23,7 @@ created-at: {{ envelope.createdAt.localIso }}
 deliver-at: {{ envelope.deliverAt.localIso }}
 {% endif %}
 {% if envelope.inReplyTo %}
-in-reply-to-message-id: {{ envelope.inReplyTo.messageId }}
+in-reply-to-channel-message-id: {{ envelope.inReplyTo.channelMessageId }}
 {% if envelope.inReplyTo.fromName %}
 in-reply-to-from-name: {{ envelope.inReplyTo.fromName }}
 {% endif %}
