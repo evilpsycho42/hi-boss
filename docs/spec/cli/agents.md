@@ -19,7 +19,7 @@ Flags:
 - `--model <model>` (optional)
 - `--reasoning-effort <default|none|low|medium|high|xhigh>` (optional; use `default` to clear and use provider default)
 - `--auto-level <medium|high>` (optional)
-- `--permission-level <restricted|standard|privileged>` (optional)
+- `--permission-level <restricted|standard|privileged|boss>` (optional; `boss` requires boss-privileged token)
 - `--metadata-json <json>` or `--metadata-file <path>` (optional)
 - Optional binding at creation:
   - `--bind-adapter-type <type>`
@@ -55,7 +55,7 @@ Flags:
 - `--model <model>` (optional; use `default` to clear and use provider default)
 - `--reasoning-effort <default|none|low|medium|high|xhigh>` (optional)
 - `--auto-level <medium|high>` (optional)
-- `--permission-level <restricted|standard|privileged>` (optional; boss token only)
+- `--permission-level <restricted|standard|privileged|boss>` (optional; boss-privileged token only)
 - Session policy:
   - `--session-daily-reset-at HH:MM` (optional)
   - `--session-idle-timeout <duration>` (optional; units: `d/h/m/s`)
@@ -88,7 +88,7 @@ This removes the agent record, its bindings, its cron schedules, and its home di
 
 Flags:
 - `--name <name>` (required)
-- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`; boss token required)
+- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`; boss-privileged token required)
 
 Output (parseable):
 - `success: true|false`

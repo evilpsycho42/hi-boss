@@ -156,27 +156,20 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
     const principal = ctx.resolvePrincipal(token);
     ctx.assertOperationAllowed(operation, principal);
 
-    let address: string;
-    if (principal.kind === "boss") {
-      if (typeof p.address !== "string" || !p.address.trim()) {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "Boss token requires address");
-      }
-      address = p.address.trim();
-      try {
-        parseAddress(address);
-      } catch (err) {
-        rpcError(
-          RPC_ERRORS.INVALID_PARAMS,
-          err instanceof Error ? err.message : "Invalid address"
-        );
-      }
-    } else {
-      if (p.address !== undefined) {
-        rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
-      }
-      ctx.db.updateAgentLastSeen(principal.agent.name);
-      address = formatAgentAddress(principal.agent.name);
+    const legacyAddress = (params as Record<string, unknown>).address;
+    if (legacyAddress !== undefined) {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, "address is no longer supported");
     }
+
+    if (principal.kind !== "agent") {
+      rpcError(
+        RPC_ERRORS.UNAUTHORIZED,
+        "Boss tokens cannot list envelopes (use an agent token)"
+      );
+    }
+
+    ctx.db.updateAgentLastSeen(principal.agent.name);
+    const address = formatAgentAddress(principal.agent.name);
 
     const envelopes = ctx.db.listEnvelopes({
       address,

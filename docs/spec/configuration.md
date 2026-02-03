@@ -131,13 +131,13 @@ Per-agent settings:
 | `model` | TEXT | `NULL` | Optional model name. `NULL` means “use the provider default model”. |
 | `reasoning_effort` | TEXT | `'medium'` | `"none"`, `"low"`, `"medium"`, `"high"`, or `"xhigh"`. `NULL` means “use the provider default reasoning effort”. |
 | `auto_level` | TEXT | `'high'` | `"medium"` or `"high"`. Note: unified-agent-sdk also supports `"low"`, but Hi-Boss disallows it because it can prevent the agent from running `hiboss` commands; any stored `"low"` values are migrated to `"medium"`. |
-| `permission_level` | TEXT | `'standard'` | `"restricted"`, `"standard"`, or `"privileged"` |
+| `permission_level` | TEXT | `'standard'` | `"restricted"`, `"standard"`, `"privileged"`, or `"boss"` |
 | `session_policy` | TEXT | `NULL` | JSON blob for SessionPolicyConfig |
 | `created_at` | TEXT | `datetime('now')` | ISO 8601 timestamp |
 | `last_seen_at` | TEXT | `NULL` | Updated when the agent authenticates RPC calls via token |
 | `metadata` | TEXT | `NULL` | JSON blob for extended settings |
 
-Set permission level via: `hiboss agent set --name <agent-name> --permission-level <level> --token <boss-token>` (daemon required)
+Set permission level via: `hiboss agent set --name <agent-name> --permission-level <level> --token <boss-privileged-token>` (daemon required)
 
 ### `agent_bindings` table
 

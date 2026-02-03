@@ -165,7 +165,7 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 | `agent.model` | `model` | Nullable; `NULL` means “use provider default model” |
 | `agent.reasoningEffort` | `reasoning_effort` | See `src/agent/types.ts` for allowed values; `NULL` means “use provider default reasoning effort” |
 | `agent.autoLevel` | `auto_level` | `medium`, `high` (unified-agent-sdk supports `low`, but Hi-Boss disallows it; any stored `low` values are migrated to `medium`) |
-| `agent.permissionLevel` | `permission_level` | `restricted`, `standard`, `privileged` |
+| `agent.permissionLevel` | `permission_level` | `restricted`, `standard`, `privileged`, `boss` |
 | `agent.sessionPolicy` | `session_policy` | JSON (nullable) |
 | `agent.createdAt` | `created_at` | ISO 8601 UTC |
 | `agent.lastSeenAt` | `last_seen_at` | Nullable |
@@ -306,7 +306,7 @@ export interface Agent {
   model?: string;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
   autoLevel?: "medium" | "high";
-  permissionLevel?: "restricted" | "standard" | "privileged";
+  permissionLevel?: "restricted" | "standard" | "privileged" | "boss";
   sessionPolicy?: {
     dailyResetAt?: string;    // "HH:MM" local
     idleTimeout?: string;     // e.g. "2h", "30m", "1h30m" (units: d/h/m/s)

@@ -91,30 +91,3 @@ export function requireToken(value: unknown): string {
   }
   return value.trim();
 }
-
-/**
- * Helper to resolve agent name for memory operations.
- */
-export function resolveAgentNameForMemory(
-  ctx: DaemonContext,
-  principal: Principal,
-  requestedAgentName?: string
-): string {
-  if (principal.kind === "boss") {
-    if (typeof requestedAgentName !== "string" || !requestedAgentName.trim()) {
-      rpcError(RPC_ERRORS.INVALID_PARAMS, "Boss token requires agentName");
-    }
-    const agent = ctx.db.getAgentByNameCaseInsensitive(requestedAgentName.trim());
-    if (!agent) {
-      rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
-    }
-    return agent.name;
-  }
-
-  if (requestedAgentName !== undefined && requestedAgentName !== principal.agent.name) {
-    rpcError(RPC_ERRORS.UNAUTHORIZED, "Cannot access other agent's memory");
-  }
-
-  ctx.db.updateAgentLastSeen(principal.agent.name);
-  return principal.agent.name;
-}

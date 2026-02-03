@@ -2,7 +2,7 @@
  * RPC handler module exports.
  */
 
-export { rpcError, requireToken, resolveAgentNameForMemory } from "./context.js";
+export { rpcError, requireToken } from "./context.js";
 export type { Principal, DaemonContext, RpcHandlerFactory } from "./context.js";
 
 export { createDaemonHandlers } from "./daemon-handlers.js";

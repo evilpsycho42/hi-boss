@@ -86,7 +86,7 @@ hiboss envelope list --token <agent-token> --box inbox --status pending --limit 
 
 Notes:
 - Boss tokens cannot send envelopes via `hiboss envelope send` (use an agent token, or message the agent via a channel adapter like Telegram).
-- Boss token must specify a target address (`--address agent:<name>`) when listing.
+- Boss tokens cannot list envelopes via `hiboss envelope list` (use an agent token).
 
 ## Permissions
 
