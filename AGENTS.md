@@ -80,6 +80,7 @@ Useful checks (run when relevant):
 - If you change CLI output/formatting, regenerate CLI examples via `scripts/gen-cli-examples.ts` (`npm run examples:cli`).
 - If you change prompt templates/context/rendering, regenerate prompt examples via `scripts/gen-prompt-examples.ts` (`npm run examples:prompts`).
 - After changes, ensure everything under `examples/` is up-to-date (regenerate as needed).
+- Examples must use realistic values for IDs and times (match what agents actually see): e.g., UUIDs for internal IDs, compact base36 for Telegram `channel-message-id`, and stable UTC timestamps in generated docs.
 - `npm run defaults:check`
 - `npm run verify:token-usage:real` (talks to a real provider; use intentionally)
 - `npm run inventory:magic` (updates `docs/spec/generated/magic-inventory.md`; do not hand-edit that file)
