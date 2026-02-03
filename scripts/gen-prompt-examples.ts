@@ -11,7 +11,7 @@ import { renderPrompt } from "../src/shared/prompt-renderer.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const OUTPUT_DIR = path.resolve(__dirname, "../prompts/examples");
+const OUTPUT_DIR = path.resolve(__dirname, "../examples/prompts");
 
 function ensureOutputDir(dir: string): void {
   fs.mkdirSync(dir, { recursive: true });
@@ -95,6 +95,7 @@ const mockEnvelopes = [
     from: "channel:telegram:-100123456789",
     to: "agent:nex",
     fromBoss: true,
+    status: "pending",
     createdAt: "2025-01-29T08:30:00.000Z",
     content: {
       text: "Hey nex, can you check the build status?",
@@ -112,6 +113,7 @@ const mockEnvelopes = [
     from: "channel:telegram:-100123456789",
     to: "agent:nex",
     fromBoss: false,
+    status: "pending",
     createdAt: "2025-01-29T08:31:00.000Z",
     content: {
       text: "I think CI is broken again",
@@ -129,6 +131,7 @@ const mockEnvelopes = [
     from: "channel:telegram:789012",
     to: "agent:nex",
     fromBoss: true,
+    status: "pending",
     createdAt: "2025-01-29T08:35:00.000Z",
     content: {
       text: "Also, remind me to review the PR at 3pm",
@@ -146,6 +149,7 @@ const mockEnvelopes = [
     from: "agent:assistant",
     to: "agent:nex",
     fromBoss: false,
+    status: "pending",
     createdAt: "2025-01-29T08:40:00.000Z",
     content: {
       text: "FYI: The database backup completed successfully.",
@@ -185,6 +189,7 @@ const directEnvelope = {
   from: "channel:telegram:789012",
   to: "agent:nex",
   fromBoss: true,
+  status: "pending",
   createdAt: "2025-01-29T09:00:00.000Z",
   content: {
     text: "Can you summarize the meeting notes from yesterday?",
@@ -205,7 +210,7 @@ const directEnvelopeContext = buildCliEnvelopePromptContext({
 });
 
 const directEnvelopeRendered = renderPrompt({
-  surface: "envelope",
+  surface: "cli-envelope",
   template: "envelope/instruction.md",
   context: directEnvelopeContext,
 });
@@ -220,6 +225,7 @@ const groupEnvelope = {
   from: "channel:telegram:-100123456789",
   to: "agent:nex",
   fromBoss: false,
+  status: "pending",
   createdAt: "2025-01-29T09:15:00.000Z",
   content: {
     text: "@nex what's the ETA on the feature?",
@@ -238,7 +244,7 @@ const groupEnvelopeContext = buildCliEnvelopePromptContext({
 });
 
 const groupEnvelopeRendered = renderPrompt({
-  surface: "envelope",
+  surface: "cli-envelope",
   template: "envelope/instruction.md",
   context: groupEnvelopeContext,
 });
@@ -253,6 +259,7 @@ const agentEnvelope = {
   from: "agent:scheduler",
   to: "agent:nex",
   fromBoss: false,
+  status: "pending",
   createdAt: "2025-01-29T09:30:00.000Z",
   deliverAt: "2025-01-29T15:00:00.000Z",
   content: {
@@ -269,7 +276,7 @@ const agentEnvelopeContext = buildCliEnvelopePromptContext({
 });
 
 const agentEnvelopeRendered = renderPrompt({
-  surface: "envelope",
+  surface: "cli-envelope",
   template: "envelope/instruction.md",
   context: agentEnvelopeContext,
 });
