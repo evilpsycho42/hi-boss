@@ -25,6 +25,7 @@ import {
   DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PROVIDER,
 } from "../../shared/defaults.js";
+import { isPermissionLevel } from "../../shared/permissions.js";
 
 /**
  * Create agent RPC handlers (excluding agent.set which is in its own file).
@@ -81,17 +82,16 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
         autoLevel = p.autoLevel;
       }
 
-      let permissionLevel: "restricted" | "standard" | "privileged" | undefined;
+      let permissionLevel: Agent["permissionLevel"] | undefined;
       if (p.permissionLevel !== undefined) {
-        if (
-          p.permissionLevel !== "restricted" &&
-          p.permissionLevel !== "standard" &&
-          p.permissionLevel !== "privileged"
-        ) {
+        if (!isPermissionLevel(p.permissionLevel)) {
           rpcError(
             RPC_ERRORS.INVALID_PARAMS,
-            "Invalid permission-level (expected restricted, standard, privileged)"
+            "Invalid permission-level (expected restricted, standard, privileged, boss)"
           );
+        }
+        if (p.permissionLevel === "boss" && principal.level !== "boss") {
+          rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
         }
         permissionLevel = p.permissionLevel;
       }

@@ -34,7 +34,7 @@ export function registerAgentCommands(program: Command): void {
     .option("--auto-level <level>", "Auto-level (medium, high)")
     .option(
       "--permission-level <level>",
-      "Permission level (restricted, standard, privileged)"
+      "Permission level (restricted, standard, privileged, boss)"
     )
     .option(
       "--session-daily-reset-at <time>",
@@ -98,7 +98,7 @@ export function registerAgentCommands(program: Command): void {
     .option("--auto-level <level>", "Auto-level (medium, high)")
     .option(
       "--permission-level <level>",
-      "Permission level (restricted, standard, privileged; boss token only)"
+      "Permission level (restricted, standard, privileged, boss; boss-privileged only)"
     )
     .option(
       "--session-daily-reset-at <time>",
@@ -162,4 +162,3 @@ export function registerAgentCommands(program: Command): void {
       deleteAgent({ token: options.token, name: options.name });
     });
 }
-

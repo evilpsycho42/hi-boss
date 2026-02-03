@@ -24,8 +24,24 @@ import type {
   MemorySetupResult,
 } from "../ipc/types.js";
 import { RPC_ERRORS } from "../ipc/types.js";
-import type { DaemonContext } from "./context.js";
-import { requireToken, rpcError, resolveAgentNameForMemory } from "./context.js";
+import type { DaemonContext, Principal } from "./context.js";
+import { requireToken, rpcError } from "./context.js";
+
+function requireAgentForMemory(
+  ctx: DaemonContext,
+  principal: Principal,
+  params: Record<string, unknown>
+): string {
+  const legacyAgentName = params.agentName;
+  if (legacyAgentName !== undefined) {
+    rpcError(RPC_ERRORS.INVALID_PARAMS, "agentName is no longer supported");
+  }
+  if (principal.kind !== "agent") {
+    rpcError(RPC_ERRORS.UNAUTHORIZED, "Boss tokens cannot access agent memory (use an agent token)");
+  }
+  ctx.db.updateAgentLastSeen(principal.agent.name);
+  return principal.agent.name;
+}
 
 /**
  * Create memory RPC handlers.
@@ -45,7 +61,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid category");
       }
 
-      const agentName = resolveAgentNameForMemory(ctx, principal, p.agentName);
+      const agentName = requireAgentForMemory(ctx, principal, params);
       const memory = await ctx.ensureMemoryService();
       const id = await memory.add(agentName, p.text, { category: p.category });
       const result: MemoryAddResult = { id };
@@ -76,7 +92,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
         limit = Math.trunc(p.limit);
       }
 
-      const agentName = resolveAgentNameForMemory(ctx, principal, p.agentName);
+      const agentName = requireAgentForMemory(ctx, principal, params);
       const memory = await ctx.ensureMemoryService();
       const memories = await memory.search(agentName, p.query, { category: p.category, limit });
       const result: MemorySearchResult = { memories };
@@ -104,7 +120,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
         limit = Math.trunc(p.limit);
       }
 
-      const agentName = resolveAgentNameForMemory(ctx, principal, p.agentName);
+      const agentName = requireAgentForMemory(ctx, principal, params);
       const memory = await ctx.ensureMemoryService();
       const memories = await memory.list(agentName, { category: p.category, limit });
       const result: MemoryListResult = { memories };
@@ -117,7 +133,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const principal = ctx.resolvePrincipal(token);
       ctx.assertOperationAllowed("memory.categories", principal);
 
-      const agentName = resolveAgentNameForMemory(ctx, principal, p.agentName);
+      const agentName = requireAgentForMemory(ctx, principal, params);
       const memory = await ctx.ensureMemoryService();
       const categories = await memory.categories(agentName);
       const result: MemoryCategoriesResult = { categories };
@@ -134,7 +150,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid category");
       }
 
-      const agentName = resolveAgentNameForMemory(ctx, principal, p.agentName);
+      const agentName = requireAgentForMemory(ctx, principal, params);
       const memory = await ctx.ensureMemoryService();
       const deleted = await memory.deleteCategory(agentName, p.category);
       const result: MemoryDeleteCategoryResult = { ok: true, deleted };
@@ -151,7 +167,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid id");
       }
 
-      const agentName = resolveAgentNameForMemory(ctx, principal, p.agentName);
+      const agentName = requireAgentForMemory(ctx, principal, params);
       const memory = await ctx.ensureMemoryService();
       const result: MemoryGetResult = { memory: await memory.get(agentName, p.id) };
       return result;
@@ -167,7 +183,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid id");
       }
 
-      const agentName = resolveAgentNameForMemory(ctx, principal, p.agentName);
+      const agentName = requireAgentForMemory(ctx, principal, params);
       const memory = await ctx.ensureMemoryService();
       await memory.delete(agentName, p.id);
       const result: MemoryDeleteResult = { ok: true };
@@ -180,7 +196,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const principal = ctx.resolvePrincipal(token);
       ctx.assertOperationAllowed("memory.clear", principal);
 
-      const agentName = resolveAgentNameForMemory(ctx, principal, p.agentName);
+      const agentName = requireAgentForMemory(ctx, principal, params);
       const memory = await ctx.ensureMemoryService();
       await memory.clear(agentName);
       const result: MemoryClearResult = { ok: true };

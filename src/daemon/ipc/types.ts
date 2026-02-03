@@ -65,7 +65,6 @@ export interface EnvelopeSendParams {
 
 export interface EnvelopeListParams {
   token: string;
-  address?: string;
   box?: "inbox" | "outbox";
   status?: "pending" | "done";
   limit?: number;
@@ -114,7 +113,7 @@ export interface AgentRegisterParams {
   model?: string;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | null;
   autoLevel?: "medium" | "high";
-  permissionLevel?: "restricted" | "standard" | "privileged";
+  permissionLevel?: "restricted" | "standard" | "privileged" | "boss";
   metadata?: Record<string, unknown>;
   sessionDailyResetAt?: string;
   sessionIdleTimeout?: string;
@@ -192,7 +191,7 @@ export interface AgentSetParams {
   model?: string | null;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | null;
   autoLevel?: "medium" | "high" | null;
-  permissionLevel?: "restricted" | "standard" | "privileged";
+  permissionLevel?: "restricted" | "standard" | "privileged" | "boss";
   sessionPolicy?: {
     dailyResetAt?: string;
     idleTimeout?: string;
@@ -214,7 +213,7 @@ export interface AgentSetResult {
     model?: string;
     reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
     autoLevel: "medium" | "high";
-    permissionLevel: "restricted" | "standard" | "privileged";
+    permissionLevel: "restricted" | "standard" | "privileged" | "boss";
     sessionPolicy?: unknown;
     metadata?: unknown;
   };
@@ -250,7 +249,7 @@ export interface SetupExecuteParams {
     model?: string | null;
     reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null;
     autoLevel?: 'medium' | 'high';
-    permissionLevel?: 'restricted' | 'standard' | 'privileged';
+    permissionLevel?: 'restricted' | 'standard' | 'privileged' | 'boss';
     sessionPolicy?: {
       dailyResetAt?: string;
       idleTimeout?: string;
@@ -291,7 +290,6 @@ export interface BossVerifyResult {
 export interface MemoryAddParams {
   token: string;
   text: string;
-  agentName?: string;  // Required for boss, ignored for agent
   category?: string;
 }
 
@@ -302,7 +300,6 @@ export interface MemoryAddResult {
 export interface MemorySearchParams {
   token: string;
   query: string;
-  agentName?: string;
   category?: string;
   limit?: number;
 }
@@ -319,7 +316,6 @@ export interface MemorySearchResult {
 
 export interface MemoryListParams {
   token: string;
-  agentName?: string;
   category?: string;
   limit?: number;
 }
@@ -335,7 +331,6 @@ export interface MemoryListResult {
 
 export interface MemoryCategoriesParams {
   token: string;
-  agentName?: string;
 }
 
 export interface MemoryCategoriesResult {
@@ -344,7 +339,6 @@ export interface MemoryCategoriesResult {
 
 export interface MemoryDeleteCategoryParams {
   token: string;
-  agentName?: string;
   category: string;
 }
 
@@ -355,7 +349,6 @@ export interface MemoryDeleteCategoryResult {
 
 export interface MemoryGetParams {
   token: string;
-  agentName?: string;
   id: string;
 }
 
@@ -370,7 +363,6 @@ export interface MemoryGetResult {
 
 export interface MemoryDeleteParams {
   token: string;
-  agentName?: string;
   id: string;
 }
 
@@ -380,7 +372,6 @@ export interface MemoryDeleteResult {
 
 export interface MemoryClearParams {
   token: string;
-  agentName?: string;
 }
 
 export interface MemoryClearResult {

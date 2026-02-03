@@ -26,7 +26,6 @@ export interface SendEnvelopeOptions {
 
 export interface ListEnvelopesOptions {
   token?: string;
-  address?: string;
   box?: "inbox" | "outbox";
   status?: "pending" | "done";
   limit?: number;
@@ -123,7 +122,6 @@ export async function listEnvelopes(options: ListEnvelopesOptions): Promise<void
 
     const result = await client.call<ListEnvelopesResult>("envelope.list", {
       token,
-      address: options.address,
       box: options.box,
       status: options.status,
       limit: options.limit,

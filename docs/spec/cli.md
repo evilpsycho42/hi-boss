@@ -53,11 +53,11 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 |--------|---------|-----------------|--------------------|
 | `hiboss setup` | Initialize Hi-Boss (interactive wizard) | No (bootstrap) | n/a |
 | `hiboss setup default` | Initialize Hi-Boss (non-interactive) | No (bootstrap; requires `--config`) | n/a |
-| `hiboss daemon start` | Start the daemon | Yes (boss token) | boss |
-| `hiboss daemon stop` | Stop the daemon | Yes (boss token) | boss |
-| `hiboss daemon status` | Show daemon status | Yes (boss token) | boss |
+| `hiboss daemon start` | Start the daemon | Yes (boss-privileged token) | boss |
+| `hiboss daemon stop` | Stop the daemon | Yes (boss-privileged token) | boss |
+| `hiboss daemon status` | Show daemon status | Yes (boss-privileged token) | boss |
 | `hiboss envelope send` | Send an envelope | Yes (agent token) | restricted |
-| `hiboss envelope list` | List envelopes | Yes (agent/boss token) | restricted |
+| `hiboss envelope list` | List envelopes | Yes (agent token) | restricted |
 | `hiboss cron create` | Create a cron schedule | Yes (agent token) | restricted |
 | `hiboss cron list` | List cron schedules | Yes (agent token) | restricted |
 | `hiboss cron enable` | Enable a cron schedule | Yes (agent token) | restricted |
@@ -67,10 +67,10 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | `hiboss memory add/search/list/categories/get/delete/delete-category` | Semantic memory operations | Yes (agent token) | restricted |
 | `hiboss memory clear` | Clear all semantic memories for an agent | Yes (agent token) | standard |
 | `hiboss memory setup` | Configure semantic memory model | Yes (agent/boss token) | privileged |
-| `hiboss agent register` | Register a new agent | Yes (boss token) | boss |
+| `hiboss agent register` | Register a new agent | Yes (boss-privileged token) | boss |
 | `hiboss agent set` | Update agent settings and bindings | Yes (agent/boss token) | privileged |
 | `hiboss agent list` | List agents | Yes (agent/boss token) | restricted |
-| `hiboss agent delete` | Delete an agent | Yes (boss token) | boss |
+| `hiboss agent delete` | Delete an agent | Yes (boss-privileged token) | boss |
 
 ---
 

@@ -59,11 +59,12 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
         if (
           p.agent.permissionLevel !== "restricted" &&
           p.agent.permissionLevel !== "standard" &&
-          p.agent.permissionLevel !== "privileged"
+          p.agent.permissionLevel !== "privileged" &&
+          p.agent.permissionLevel !== "boss"
         ) {
           rpcError(
             RPC_ERRORS.INVALID_PARAMS,
-            "Invalid permission-level (expected restricted, standard, privileged)"
+            "Invalid permission-level (expected restricted, standard, privileged, boss)"
           );
         }
       }

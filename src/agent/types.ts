@@ -2,9 +2,12 @@ import type { SessionPolicyConfig } from "../shared/session-policy.js";
 import type { PermissionLevel } from "../shared/permissions.js";
 
 /**
- * Agent permission level (excluding 'boss' which is only for the boss token).
+ * Agent permission level.
+ *
+ * Note: `permissionLevel: "boss"` grants boss-equivalent authorization but does
+ * not make the agent the boss identity (no `[boss]` markers; no `fromBoss: true`).
  */
-export type AgentPermissionLevel = Exclude<PermissionLevel, "boss">;
+export type AgentPermissionLevel = PermissionLevel;
 
 /**
  * Agent definition for the Hi-Boss system.

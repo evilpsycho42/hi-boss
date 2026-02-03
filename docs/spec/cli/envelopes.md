@@ -46,11 +46,12 @@ Rendering (default):
 - Prints one envelope instruction per envelope, separated by a blank line.
 - Each envelope is formatted by `formatEnvelopeInstruction()` using `prompts/envelope/instruction.md`.
 
-Note:
+Notes:
 - Envelopes are marked `done` automatically by the daemon after successful delivery (channels) or a successful agent run (agents).
+- `hiboss envelope list` lists envelopes for the authenticated **agent** address (`agent:<name>`).
+- Boss tokens cannot list envelopes (use an agent token).
 
 Flags:
-- `--address <address>` (boss token only)
 - `--box inbox|outbox`
 - `--status pending|done`
 - `-n, --limit <n>`
