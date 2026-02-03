@@ -302,10 +302,6 @@ export class Daemon {
       const enrichedCommand = command as typeof command & { agentName?: string };
 
       if (command.command === "new" && enrichedCommand.agentName) {
-        logEvent("info", "agent-session-refresh-requested", {
-          "agent-name": enrichedCommand.agentName,
-          trigger: "telegram:/new",
-        });
         this.executor.requestSessionRefresh(enrichedCommand.agentName, "telegram:/new");
       }
     });

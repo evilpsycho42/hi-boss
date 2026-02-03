@@ -172,6 +172,12 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 | `agent.lastSeenAt` | `last_seen_at` | Nullable |
 | `agent.metadata` | `metadata` | JSON (nullable) |
 
+### Agent Metadata (Reserved Keys)
+
+`agent.metadata` is user-extensible, but Hi-Boss reserves some keys for internal state:
+
+- `metadata.sessionHandle`: persisted session resume handle (see `docs/spec/components/session.md`). This key is maintained by the daemon, preserved across `hiboss agent set --metadata-*` and `hiboss agent set --clear-metadata`, and ignored if provided by the user.
+
 ### CLI
 
 Command flags:

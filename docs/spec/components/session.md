@@ -93,6 +93,8 @@ Session resume uses a small record stored in `agents.metadata.sessionHandle`:
 Notes:
 - The record is updated after successful runs (best-effort).
 - A manual refresh (`/new`) or policy refresh clears the persisted handle so the next run starts fresh.
+- For providers that support it, the `handle.metadata` includes a snapshot of the unified session config (workspace/access/model/reasoning). On resume, the provider may prefer this snapshot over the agent’s current settings. Practically, changing an agent’s `model` / `reasoning-effort` may not affect an already-resumed session until a fresh session is opened.
+- If the agent’s configured provider changes while a persisted handle exists, Hi-Boss may still resume the legacy provider session (best-effort) until the session is refreshed.
 
 ## Daemon Restart Recovery
 

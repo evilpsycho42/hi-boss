@@ -219,6 +219,15 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
           ctx.writeMemoryConfigToDb(memory);
 
           // Create the first agent
+          const metadata =
+            p.agent.metadata && typeof p.agent.metadata === "object" && !Array.isArray(p.agent.metadata)
+              ? (() => {
+                  const copy = { ...(p.agent.metadata as Record<string, unknown>) };
+                  // Reserved internal metadata key (best-effort session resume handle).
+                  delete copy.sessionHandle;
+                  return copy;
+                })()
+              : undefined;
           const agentResult = ctx.db.registerAgent({
             name: p.agent.name,
             description: p.agent.description,
@@ -229,7 +238,7 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
             autoLevel: p.agent.autoLevel,
             permissionLevel: p.agent.permissionLevel,
             sessionPolicy: p.agent.sessionPolicy,
-            metadata: p.agent.metadata,
+            metadata,
           });
 
           // Create adapter binding if provided

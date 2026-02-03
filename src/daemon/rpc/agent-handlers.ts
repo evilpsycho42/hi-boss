@@ -106,7 +106,10 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
         if (typeof p.metadata !== "object" || p.metadata === null || Array.isArray(p.metadata)) {
           rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid metadata (expected object)");
         }
-        metadata = p.metadata;
+        const copy = { ...(p.metadata as Record<string, unknown>) };
+        // Reserved internal metadata key (best-effort session resume handle).
+        delete copy.sessionHandle;
+        metadata = copy;
       }
 
       const sessionPolicy: Record<string, unknown> = {};

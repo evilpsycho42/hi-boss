@@ -11,7 +11,6 @@ import {
 } from "./instruction-generator.js";
 import { buildTurnInput } from "./turn-input.js";
 import { HIBOSS_TOKEN_ENV } from "../shared/env.js";
-import type { EnvelopeSource } from "../envelope/source.js";
 import {
   parseSessionPolicyConfig,
 } from "../shared/session-policy.js";
@@ -24,44 +23,21 @@ import {
   getBossInfo,
   getRefreshReasonForPolicy,
   queueAgentTask,
-  readTokenUsage,
   type AgentSession,
   type SessionRefreshRequest,
   type TurnTokenUsage,
 } from "./executor-support.js";
 import { readPersistedAgentSession, writePersistedAgentSession } from "./persisted-session.js";
+import type { AgentRunTrigger } from "./executor-triggers.js";
+import { getTriggerFields } from "./executor-triggers.js";
+import { openOrResumeUnifiedSession } from "./session-resume.js";
+import { countDuePendingEnvelopesForAgent } from "./executor-db.js";
+import { executeUnifiedTurn } from "./executor-turn.js";
 
 /**
  * Maximum number of pending envelopes to process in a single turn.
  */
 const MAX_ENVELOPES_PER_TURN = 10;
-export type AgentRunTrigger =
-  | { kind: "daemon-startup" }
-  | { kind: "scheduler"; reason: string }
-  | { kind: "envelope"; source: EnvelopeSource; envelopeId: string }
-  | { kind: "reschedule" };
-
-function getTriggerLabel(trigger: AgentRunTrigger | undefined): string {
-  if (!trigger) return "unknown";
-  switch (trigger.kind) {
-    case "daemon-startup":
-      return "daemon-startup";
-    case "scheduler":
-      return `scheduler:${trigger.reason}`;
-    case "envelope":
-      return `envelope:${trigger.source}`;
-    case "reschedule":
-      return "reschedule";
-  }
-}
-
-function getTriggerFields(trigger: AgentRunTrigger | undefined): Record<string, unknown> {
-  if (!trigger) return { trigger: "unknown" };
-  if (trigger.kind === "envelope") {
-    return { trigger: getTriggerLabel(trigger), "trigger-envelope-id": trigger.envelopeId };
-  }
-  return { trigger: getTriggerLabel(trigger) };
-}
 
 /**
  * Agent executor manages agent sessions and runs.
@@ -84,16 +60,6 @@ export class AgentExecutor {
     this.db = options.db ?? null;
     this.hibossDir = options.hibossDir ?? getHiBossDir();
     this.onEnvelopesDone = options.onEnvelopesDone;
-  }
-
-  private countDuePendingEnvelopesForAgent(db: HiBossDatabase, agentName: string): number {
-    const rawDb = (db as any).db as { prepare?: (sql: string) => { get: (...args: any[]) => unknown } };
-    if (!rawDb?.prepare) return 0;
-    const sql =
-      `SELECT COUNT(*) AS count FROM envelopes WHERE "to" = ? AND status = 'pending'` +
-      ` AND (deliver_at IS NULL OR deliver_at <= ?)`;
-    const row = rawDb.prepare(sql).get(`agent:${agentName}`, new Date().toISOString()) as { count: number } | undefined;
-    return row?.count ?? 0;
   }
 
   /**
@@ -124,7 +90,7 @@ export class AgentExecutor {
         await this.applyPendingSessionRefresh(agentName);
       },
     }).catch((err) => {
-      logEvent("error", "agent-session-refresh-queue-failed", {
+      logEvent("error", "agent-session-remove-queue-failed", {
         "agent-name": agentName,
         error: errorMessage(err),
       });
@@ -213,7 +179,7 @@ export class AgentExecutor {
       }
     }
 
-    const pendingRemainingCount = this.countDuePendingEnvelopesForAgent(db, agent.name);
+    const pendingRemainingCount = countDuePendingEnvelopesForAgent(db, agent.name);
 
     // Create run record for auditing
     const run = db.createAgentRun(agent.name, envelopeIds);
@@ -243,7 +209,7 @@ export class AgentExecutor {
       runStartedAtMs = Date.now();
 
       // Execute the turn
-      const turn = await this.executeTurn(session, turnInput);
+      const turn = await executeUnifiedTurn(session, turnInput);
       const response = turn.finalText;
       session.lastRunCompletedAtMs = Date.now();
 
@@ -344,7 +310,13 @@ export class AgentExecutor {
         throw new Error(`Agent ${agent.name} not found in database`);
       }
 
-      const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
+      const desiredProvider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
+      const persisted = readPersistedAgentSession(agentRecord);
+      // Experiment: if a resumable session handle exists, prefer its provider even if the agent's provider changed.
+      const provider =
+        persisted?.handle.sessionId && (persisted.provider === "claude" || persisted.provider === "codex")
+          ? persisted.provider
+          : desiredProvider;
       const homePath = getAgentHomePath(agent.name, provider, this.hibossDir);
       const workspace = agent.workspace ?? process.cwd();
       const internalSpaceDir = getAgentInternalSpaceDir(agent.name, this.hibossDir);
@@ -389,30 +361,6 @@ export class AgentExecutor {
               defaultOpts,
             });
 
-        let persisted = readPersistedAgentSession(agentRecord);
-        let openMode: "open" | "resume" = "open";
-        let openReason = "no-session-handle";
-
-        if (persisted && persisted.provider !== provider) {
-          openReason = `persisted-provider-mismatch:${persisted.provider}!=${provider}`;
-          writePersistedAgentSession(db, agent.name, null);
-          persisted = null;
-        }
-
-        if (persisted) {
-          const policy = this.getSessionPolicy(agent);
-          const reason = getRefreshReasonForPolicy(
-            { createdAtMs: persisted.createdAtMs, lastRunCompletedAtMs: persisted.lastRunCompletedAtMs } as unknown as AgentSession,
-            policy,
-            new Date()
-          );
-          if (reason) {
-            openReason = `persisted-policy:${reason}`;
-            writePersistedAgentSession(db, agent.name, null);
-            persisted = null;
-          }
-        }
-
         const openSessionOpts =
           provider === "claude"
             ? {
@@ -435,54 +383,34 @@ export class AgentExecutor {
             }
             : {};
 
-        // Open or resume a session (instructions are loaded from home directory files)
-        let unifiedSession: AgentSession["session"];
-        if (persisted?.handle.sessionId && persisted.handle.provider === runtime.provider) {
-          try {
-            unifiedSession = await runtime.resumeSession(persisted.handle);
-            openMode = "resume";
-            openReason = "resume";
-          } catch (err) {
-            logEvent("warn", "agent-session-resume-failed", {
-              "agent-name": agent.name,
-              provider,
-              "session-id": persisted.handle.sessionId,
-              error: errorMessage(err),
-            });
-            openReason = "resume-failed";
-            writePersistedAgentSession(db, agent.name, null);
-            persisted = null;
-            unifiedSession = await runtime.openSession(openSessionOpts as any);
-          }
-        } else {
-          if (persisted?.handle.sessionId && persisted.handle.provider !== runtime.provider) {
-            openReason = "session-handle-provider-mismatch";
-            writePersistedAgentSession(db, agent.name, null);
-            persisted = null;
-          } else if (persisted && !persisted.handle.sessionId) {
-            openReason = "missing-session-id";
-            writePersistedAgentSession(db, agent.name, null);
-            persisted = null;
-          }
-
-          unifiedSession = await runtime.openSession(openSessionOpts as any);
-        }
+        const { unifiedSession, createdAtMs, lastRunCompletedAtMs, openMode, openReason } =
+          await openOrResumeUnifiedSession({
+            agent,
+            agentRecord,
+            provider,
+            runtime,
+            db,
+            policy: this.getSessionPolicy(agent),
+            openSessionOpts,
+          });
 
         session = {
           runtime,
-          session: unifiedSession!,
+          session: unifiedSession,
           agentToken: agentRecord.token,
           provider,
           homePath,
-          createdAtMs: persisted?.createdAtMs ?? Date.now(),
-          ...(persisted?.lastRunCompletedAtMs ? { lastRunCompletedAtMs: persisted.lastRunCompletedAtMs } : {}),
+          createdAtMs,
+          ...(lastRunCompletedAtMs !== undefined ? { lastRunCompletedAtMs } : {}),
         };
         this.sessions.set(agent.name, session);
 
         const refreshReasons = [...pendingRefreshReasons, ...(policyRefreshReason ? [policyRefreshReason] : [])];
-        logEvent("info", "agent-session-create", {
+        const event = openMode === "resume" ? "agent-session-load" : "agent-session-create";
+        logEvent("info", event, {
           "agent-name": agent.name,
           provider,
+          ...(provider !== desiredProvider ? { "desired-provider": desiredProvider } : {}),
           state: "success",
           ...triggerFields,
           "open-mode": openMode,
@@ -500,41 +428,8 @@ export class AgentExecutor {
         });
         throw err;
       }
-    } else {
-      logEvent("info", "agent-session-resume", {
-        "agent-name": agent.name,
-        provider: session.provider,
-        state: "success",
-        ...triggerFields,
-      });
     }
     return session;
-  }
-
-  /**
-   * Execute a turn using the agent SDK.
-   */
-  private async executeTurn(
-    session: AgentSession,
-    turnInput: string
-  ): Promise<{ finalText: string; usage: TurnTokenUsage }> {
-    const runHandle = await session.session.run({
-      input: { parts: [{ type: "text", text: turnInput }] },
-    });
-
-    // Drain events silently (required for run completion)
-    for await (const _ of runHandle.events) {
-      // Events must be consumed for the run to complete
-    }
-
-    const result = await runHandle.result;
-
-    if (result.status !== "success") {
-      throw new Error(`Agent run ${result.status}`);
-    }
-
-    const usage = readTokenUsage(result.usage);
-    return { finalText: result.finalText ?? "", usage };
   }
 
   /**
@@ -574,7 +469,7 @@ export class AgentExecutor {
       this.sessions.delete(agentName);
     }
 
-    logEvent("info", "agent-session-refresh", {
+    logEvent("info", "agent-session-remove", {
       "agent-name": agentName,
       reason,
       state: "success",

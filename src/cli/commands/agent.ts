@@ -5,7 +5,7 @@ import { formatUtcIsoAsLocalOffset } from "../../shared/time.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../shared/validation.js";
 import { resolveToken } from "../token.js";
 import { DEFAULT_AGENT_PERMISSION_LEVEL } from "../../shared/defaults.js";
-import { normalizeDefaultSentinel, readMetadataInput } from "./agent-shared.js";
+import { normalizeDefaultSentinel, readMetadataInput, sanitizeAgentMetadata } from "./agent-shared.js";
 
 interface RegisterAgentResult {
   agent: Omit<Agent, "token">;
@@ -150,7 +150,7 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
       reasoningEffort,
       autoLevel: options.autoLevel,
       permissionLevel: options.permissionLevel,
-      metadata: await readMetadataInput(options),
+      metadata: sanitizeAgentMetadata(await readMetadataInput(options)),
       sessionDailyResetAt: options.sessionDailyResetAt,
       sessionIdleTimeout: options.sessionIdleTimeout,
       sessionMaxContextLength: options.sessionMaxContextLength,
@@ -200,7 +200,7 @@ export async function setAgent(options: SetAgentOptions): Promise<void> {
 
     const metadata = options.clearMetadata
       ? null
-      : (await readMetadataInput(options)) ?? undefined;
+      : sanitizeAgentMetadata(await readMetadataInput(options)) ?? undefined;
 
     const sessionPolicy =
       options.clearSessionPolicy ||

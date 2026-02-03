@@ -378,6 +378,64 @@ export class HiBossDatabase {
   }
 
   /**
+   * Update (or clear) the reserved `metadata.sessionHandle` field without rewriting the full metadata blob.
+   *
+   * This is used for best-effort session resume across daemon restarts.
+   */
+  setAgentMetadataSessionHandle(name: string, sessionHandle: unknown | null): void {
+    if (sessionHandle === null) {
+      // Preserve historical behavior: when metadata becomes empty, store NULL instead of "{}".
+      const stmt = this.db.prepare(`
+        UPDATE agents
+        SET metadata = CASE
+          WHEN metadata IS NULL THEN NULL
+          WHEN json_remove(metadata, '$.sessionHandle') = '{}' THEN NULL
+          ELSE json_remove(metadata, '$.sessionHandle')
+        END
+        WHERE name = ?
+      `);
+      stmt.run(name);
+      return;
+    }
+
+    const stmt = this.db.prepare(`
+      UPDATE agents
+      SET metadata = json_set(COALESCE(metadata, '{}'), '$.sessionHandle', json(?))
+      WHERE name = ?
+    `);
+    stmt.run(JSON.stringify(sessionHandle), name);
+  }
+
+  /**
+   * Replace user-controlled agent metadata, preserving the reserved `metadata.sessionHandle` field when present.
+   *
+   * - When `metadata` is `null`, user metadata is cleared but `sessionHandle` is preserved if it exists.
+   * - When no `sessionHandle` exists and `metadata` is `null`, the stored metadata becomes `NULL`.
+   */
+  replaceAgentMetadataPreservingSessionHandle(name: string, metadata: Record<string, unknown> | null): void {
+    const clearUserMetadata = metadata === null ? 1 : 0;
+    const userJson = JSON.stringify(metadata ?? {});
+
+    const stmt = this.db.prepare(`
+      UPDATE agents
+      SET metadata = CASE
+        WHEN json_type(metadata, '$.sessionHandle') IS NOT NULL THEN
+          CASE
+            WHEN ? = 1 THEN json_set('{}', '$.sessionHandle', json_extract(metadata, '$.sessionHandle'))
+            ELSE json_set(json(?), '$.sessionHandle', json_extract(metadata, '$.sessionHandle'))
+          END
+        ELSE
+          CASE
+            WHEN ? = 1 THEN NULL
+            ELSE json(?)
+          END
+      END
+      WHERE name = ?
+    `);
+    stmt.run(clearUserMetadata, userJson, clearUserMetadata, userJson, name);
+  }
+
+  /**
    * Set agent permission level stored in permission_level column.
    *
    * Notes:

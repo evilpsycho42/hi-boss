@@ -218,7 +218,10 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         if (p.metadata === null) {
           metadata = null;
         } else if (typeof p.metadata === "object" && p.metadata !== null && !Array.isArray(p.metadata)) {
-          metadata = p.metadata;
+          const copy = { ...(p.metadata as Record<string, unknown>) };
+          // Reserved internal metadata key (best-effort session resume handle).
+          delete copy.sessionHandle;
+          metadata = copy;
         } else {
           rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid metadata (expected object or null)");
         }
@@ -327,6 +330,20 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         updates.provider = provider;
       }
 
+      // Experiment: when switching providers, clear model/reasoning-effort unless explicitly set.
+      // This avoids carrying incompatible model overrides across providers.
+      const providerChanged =
+        (provider === "claude" || provider === "codex") &&
+        before.provider !== provider;
+      if (providerChanged) {
+        if (p.model === undefined) {
+          updates.model = null;
+        }
+        if (p.reasoningEffort === undefined) {
+          updates.reasoningEffort = null;
+        }
+      }
+
       if (p.model !== undefined) {
         if (p.model !== null && typeof p.model !== "string") {
           rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid model");
@@ -361,7 +378,7 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         }
 
         if (metadata !== undefined) {
-          ctx.db.updateAgentMetadata(agentName, metadata);
+          ctx.db.replaceAgentMetadataPreservingSessionHandle(agentName, metadata);
         }
       });
 
@@ -369,9 +386,6 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
       const bindings = ctx.db.getBindingsByAgentName(agentName).map((b) => b.adapterType);
 
       const needsRefresh =
-        (provider !== undefined && before.provider !== updated.provider) ||
-        (p.model !== undefined && before.model !== updated.model) ||
-        (reasoningEffort !== undefined && before.reasoningEffort !== updated.reasoningEffort) ||
         (autoLevel !== undefined && before.autoLevel !== updated.autoLevel) ||
         (p.workspace !== undefined && before.workspace !== updated.workspace);
 

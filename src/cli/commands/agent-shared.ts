@@ -43,6 +43,14 @@ export async function readMetadataInput(options: {
   return undefined;
 }
 
+export function sanitizeAgentMetadata(metadata: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!metadata) return undefined;
+  const copy = { ...metadata };
+  // Reserved internal metadata key (best-effort session resume handle).
+  delete (copy as any).sessionHandle;
+  return copy;
+}
+
 export function normalizeDefaultSentinel(value: string | undefined): string | null | undefined {
   if (value === undefined) return undefined;
   const trimmed = value.trim();
@@ -53,4 +61,3 @@ export function normalizeDefaultSentinel(value: string | undefined): string | nu
   if (trimmed === "default") return null;
   return trimmed;
 }
-

@@ -65,16 +65,9 @@ export function writePersistedAgentSession(
   agentName: string,
   session: PersistedAgentSessionV1 | null
 ): void {
-  const agent = db.getAgentByName(agentName);
-  if (!agent) return;
-
-  const next = isRecord(agent.metadata) ? { ...agent.metadata } : {};
   if (session) {
-    next[AGENT_PERSISTED_SESSION_KEY] = session;
+    db.setAgentMetadataSessionHandle(agentName, session);
   } else {
-    delete next[AGENT_PERSISTED_SESSION_KEY];
+    db.setAgentMetadataSessionHandle(agentName, null);
   }
-
-  db.updateAgentMetadata(agentName, Object.keys(next).length ? next : null);
 }
-

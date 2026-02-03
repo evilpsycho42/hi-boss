@@ -68,6 +68,11 @@ Flags:
   - `--bind-adapter-type <type>` + `--bind-adapter-token <token>` (optional)
   - `--unbind-adapter-type <type>` (optional)
 
+Notes:
+- Updating `--provider`, `--model`, or `--reasoning-effort` does **not** force a session refresh. Existing/resumed sessions may continue using the previous session config until a refresh (`/new`) or policy refresh opens a new session.
+- When switching providers without specifying `--model` / `--reasoning-effort`, Hi-Boss clears these overrides so the new provider can use its defaults when a fresh session is eventually opened.
+- `--clear-metadata` clears user metadata but preserves the internal session resume handle (`metadata.sessionHandle`). The `sessionHandle` key is reserved and is ignored if provided via `--metadata-*`.
+
 Provider config import:
 - When `--provider` is provided, Hi-Boss imports provider config files into the agent’s provider home.
 - If `--provider-source-home` is omitted, Hi-Boss uses the provider default source home:
