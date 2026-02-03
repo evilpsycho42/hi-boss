@@ -1,15 +1,16 @@
 import type { HiBossDatabase } from "../db/database.js";
 import type { Envelope, CreateEnvelopeInput } from "../../envelope/types.js";
+import { getEnvelopeSourceFromCreateInput } from "../../envelope/source.js";
 import { parseAddress } from "../../adapters/types.js";
 import type { ChatAdapter } from "../../adapters/types.js";
-import { isDueUtcIso, nowLocalIso } from "../../shared/time.js";
+import { isDueUtcIso } from "../../shared/time.js";
+import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 import { RPC_ERRORS } from "../ipc/types.js";
 import type { OutgoingParseMode } from "../../adapters/types.js";
 
 export type EnvelopeHandler = (envelope: Envelope) => void | Promise<void>;
 
 export interface MessageRouterOptions {
-  debug?: boolean;
   onEnvelopeDone?: EnvelopeHandler;
 }
 
@@ -19,11 +20,9 @@ export interface MessageRouterOptions {
 export class MessageRouter {
   private adaptersByToken: Map<string, ChatAdapter> = new Map();
   private agentHandlers: Map<string, EnvelopeHandler> = new Map();
-  private debug: boolean;
   private onEnvelopeDone?: EnvelopeHandler;
 
   constructor(private db: HiBossDatabase, options: MessageRouterOptions = {}) {
-    this.debug = options.debug ?? false;
     this.onEnvelopeDone = options.onEnvelopeDone;
   }
 
@@ -56,22 +55,39 @@ export class MessageRouter {
   async routeEnvelope(input: CreateEnvelopeInput): Promise<Envelope> {
     const envelope = this.db.createEnvelope(input);
 
-    // Debug logging for created envelope
-    if (this.debug) {
-      console.log(`[${nowLocalIso()}] Envelope created:`);
-      console.log(JSON.stringify(envelope, null, 2));
+    const source = getEnvelopeSourceFromCreateInput(input);
+    const fields: Record<string, unknown> = {
+      "envelope-id": envelope.id,
+      source,
+      from: envelope.from,
+      to: envelope.to,
+      "deliver-at": envelope.deliverAt ?? "none",
+    };
+
+    if (source === "channel") {
+      try {
+        const from = parseAddress(envelope.from);
+        if (from.type === "channel") {
+          fields["adapter-type"] = from.adapter;
+          fields["chat-id"] = from.chatId;
+        }
+      } catch {
+        // ignore
+      }
+
+      const md = envelope.metadata;
+      if (md && typeof md === "object") {
+        const channelMessageId = (md as Record<string, unknown>).channelMessageId;
+        if (typeof channelMessageId === "string" && channelMessageId.trim()) {
+          fields["channel-message-id"] = channelMessageId.trim();
+        }
+      }
     }
+
+    logEvent("info", "envelope-created", fields);
 
     if (isDueUtcIso(envelope.deliverAt)) {
       await this.deliverEnvelope(envelope);
-    } else if (this.debug) {
-      console.log(`[${nowLocalIso()}] Envelope scheduled for future delivery:`);
-      console.log(JSON.stringify({
-        id: envelope.id,
-        to: envelope.to,
-        deliverAt: envelope.deliverAt,
-        status: envelope.status,
-      }, null, 2));
     }
     return envelope;
   }
@@ -91,17 +107,21 @@ export class MessageRouter {
 
   private async deliverToAgent(envelope: Envelope, agentName: string): Promise<void> {
     const handler = this.agentHandlers.get(agentName);
-    if (this.debug) {
-      console.log(`[${nowLocalIso()}] [Router] deliverToAgent: agent=${agentName} handler=${handler ? "found" : "NOT_FOUND"}`);
-    }
     if (handler) {
       try {
         await handler(envelope);
       } catch (err) {
-        console.error(`[Router] Error delivering to agent ${agentName}:`, err);
+        logEvent("error", "router-deliver-to-agent-failed", {
+          "envelope-id": envelope.id,
+          "agent-name": agentName,
+          error: errorMessage(err),
+        });
       }
     } else {
-      console.warn(`[Router] No handler registered for agent ${agentName}`);
+      logEvent("warn", "router-no-agent-handler", {
+        "envelope-id": envelope.id,
+        "agent-name": agentName,
+      });
     }
     // If no handler, message stays in inbox with pending status
   }
@@ -114,7 +134,11 @@ export class MessageRouter {
     // Find the sender's agent name
     const sender = parseAddress(envelope.from);
     if (sender.type !== "agent") {
-      console.error(`[Router] Cannot send to channel from non-agent address: ${envelope.from}`);
+      logEvent("error", "router-invalid-channel-sender", {
+        "envelope-id": envelope.id,
+        from: envelope.from,
+        to: envelope.to,
+      });
       return;
     }
 
@@ -174,28 +198,27 @@ export class MessageRouter {
         replyToMessageId,
       });
       this.db.updateEnvelopeStatus(envelope.id, "done");
-      console.log(`[${nowLocalIso()}] [Router] Delivered message from ${envelope.from} to ${adapterType}:${chatId}`);
-
-      // Debug logging for delivered envelope
-      if (this.debug) {
-        console.log(`[${nowLocalIso()}] Envelope delivered to channel:`);
-        console.log(JSON.stringify({
-          id: envelope.id,
-          to: envelope.to,
-          status: "done",
-        }, null, 2));
-      }
 
       if (this.onEnvelopeDone) {
         try {
           await this.onEnvelopeDone(envelope);
         } catch (err) {
-          console.error(`[Router] onEnvelopeDone failed for envelope ${envelope.id}:`, err);
+          logEvent("error", "router-on-envelope-done-failed", {
+            "envelope-id": envelope.id,
+            error: errorMessage(err),
+          });
         }
       }
     } catch (err) {
       const details = this.extractAdapterErrorDetails(adapterType, err);
       const msg = `Delivery to ${adapterType}:${chatId} failed: ${details.summary}`;
+      logEvent("error", "channel-delivery-failed", {
+        "envelope-id": envelope.id,
+        "adapter-type": adapterType,
+        "chat-id": chatId,
+        error: details.summary,
+        hint: details.hint ?? undefined,
+      });
       this.recordDeliveryError(envelope, {
         kind: "send-failed",
         message: msg,
@@ -247,7 +270,10 @@ export class MessageRouter {
     try {
       this.db.updateEnvelopeMetadata(envelope.id, next);
     } catch (err) {
-      console.error(`[Router] Failed to persist lastDeliveryError for envelope ${envelope.id}:`, err);
+      logEvent("error", "envelope-metadata-update-failed", {
+        "envelope-id": envelope.id,
+        error: errorMessage(err),
+      });
     }
   }
 

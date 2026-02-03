@@ -14,11 +14,9 @@ interface DaemonStatusResult {
   startTime?: string;
   adapters: string[];
   dataDir: string;
-  debug?: boolean;
 }
 
 export interface StartDaemonOptions {
-  debug?: boolean;
   token?: string;
 }
 
@@ -181,11 +179,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<voi
   const logPath = path.join(config.dataDir, "daemon.log");
   const logFile = fs.openSync(logPath, "a");
 
-  // Pass debug flag via environment variable
   const env = { ...process.env };
-  if (options.debug) {
-    args.push("--debug");
-  }
 
   let child: ReturnType<typeof spawn>;
   try {
@@ -298,7 +292,6 @@ export async function daemonStatus(options: DaemonStatusOptions = {}): Promise<v
   if (!(await isDaemonRunning(config))) {
     console.log("running: false");
     console.log("start-time: (none)");
-    console.log(`debug: ${(config.debug ?? false) ? "enabled" : "disabled"}`);
     console.log("adapters: (none)");
     console.log(`data-dir: ${config.dataDir}`);
     return;
@@ -310,7 +303,6 @@ export async function daemonStatus(options: DaemonStatusOptions = {}): Promise<v
 
     console.log(`running: ${status.running ? "true" : "false"}`);
     console.log(`start-time: ${status.startTime ?? "(none)"}`);
-    console.log(`debug: ${status.debug ? "enabled" : "disabled"}`);
     console.log(`adapters: ${status.adapters.join(", ") || "(none)"}`);
     console.log(`data-dir: ${status.dataDir}`);
   } catch (err) {

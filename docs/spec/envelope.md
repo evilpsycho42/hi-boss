@@ -55,10 +55,10 @@ New envelopes are stored as `status = pending`.
 
 ### When does an envelope become `done`?
 
-- **To an agent**: the envelope stays `pending` until the agent runs successfully; after a successful run, the daemon marks all envelopes in that run as `done` (`src/agent/executor.ts`).
+- **To an agent**: the daemon marks the envelope `done` immediately after it is read for an agent run (`src/agent/executor.ts`). This is **at-most-once**: if the agent run fails, the envelope will not be retried.
 - **To a channel**: the daemon marks the envelope as `done` after a successful adapter send (`src/daemon/router/message-router.ts`).
 
-If delivery/run fails, the envelope generally remains `pending` and will be retried by later triggers (new activity, scheduler tick, daemon restart recovery).
+If delivery to a **channel** fails, the envelope remains `pending` and will be retried by later triggers (new activity, scheduler tick, daemon restart recovery). If an **agent run** fails, already-read envelopes stay `done` (no retry).
 
 ---
 

@@ -7,6 +7,7 @@ import { RPC_ERRORS } from "../ipc/types.js";
 import type { DaemonContext } from "./context.js";
 import { requireToken, rpcError } from "./context.js";
 import { removeAgentHome } from "../../agent/home-setup.js";
+import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 
 function deleteAgentRow(ctx: DaemonContext, agentName: string): boolean {
   const rawDb = (ctx.db as any).db as { prepare: (sql: string) => { run: (...args: any[]) => { changes: number } } };
@@ -26,60 +27,82 @@ export function createAgentDeleteHandler(ctx: DaemonContext): RpcMethodRegistry 
       const principal = ctx.resolvePrincipal(token);
       ctx.assertOperationAllowed("agent.delete", principal);
 
-      if (typeof p.agentName !== "string" || !p.agentName.trim()) {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid agentName");
-      }
+      const startedAtMs = Date.now();
+      const requestedAgentName = typeof p.agentName === "string" ? p.agentName.trim() : "";
 
-      const agent = ctx.db.getAgentByNameCaseInsensitive(p.agentName.trim());
-      if (!agent) {
-        rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
-      }
-
-      // Best-effort: stop routing and close the runtime session before deleting on disk.
-      ctx.router.unregisterAgentHandler(agent.name);
-      await ctx.executor.refreshSession(agent.name).catch(() => undefined);
-
-      // Capture bindings for cleanup (adapter removal) before deleting.
-      const bindings = ctx.db.getBindingsByAgentName(agent.name);
-
-      const deleted = ctx.db.runInTransaction(() => {
-        // Delete cron schedules (cancel pending envelopes to avoid scheduler retry loops).
-        const schedules = ctx.db.listCronSchedulesByAgent(agent.name);
-        for (const schedule of schedules) {
-          if (schedule.pendingEnvelopeId) {
-            ctx.db.updateEnvelopeStatus(schedule.pendingEnvelopeId, "done");
-          }
-          ctx.db.deleteCronSchedule(schedule.id);
-        }
-
-        // Delete bindings.
-        for (const binding of bindings) {
-          ctx.db.deleteBinding(agent.name, binding.adapterType);
-        }
-
-        // Finally, delete the agent row.
-        return deleteAgentRow(ctx, agent.name);
-      });
-
-      if (!deleted) {
-        rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
-      }
-
-      // Best-effort: remove loaded adapters for any deleted bindings.
-      for (const binding of bindings) {
-        await ctx.removeAdapter(binding.adapterToken).catch(() => undefined);
-      }
-
-      // Best-effort: remove agent home directories.
       try {
-        removeAgentHome(agent.name, ctx.config.dataDir);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error(`[agent.delete] failed to remove home for ${agent.name}: ${message}`);
-      }
+        if (typeof p.agentName !== "string" || !p.agentName.trim()) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid agentName");
+        }
 
-      return { success: true, agentName: agent.name };
+        const agent = ctx.db.getAgentByNameCaseInsensitive(p.agentName.trim());
+        if (!agent) {
+          rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
+        }
+
+        // Best-effort: stop routing and close the runtime session before deleting on disk.
+        ctx.router.unregisterAgentHandler(agent.name);
+        await ctx.executor.refreshSession(agent.name).catch(() => undefined);
+
+        // Capture bindings for cleanup (adapter removal) before deleting.
+        const bindings = ctx.db.getBindingsByAgentName(agent.name);
+
+        const deleted = ctx.db.runInTransaction(() => {
+          // Delete cron schedules (cancel pending envelopes to avoid scheduler retry loops).
+          const schedules = ctx.db.listCronSchedulesByAgent(agent.name);
+          for (const schedule of schedules) {
+            if (schedule.pendingEnvelopeId) {
+              ctx.db.updateEnvelopeStatus(schedule.pendingEnvelopeId, "done");
+            }
+            ctx.db.deleteCronSchedule(schedule.id);
+          }
+
+          // Delete bindings.
+          for (const binding of bindings) {
+            ctx.db.deleteBinding(agent.name, binding.adapterType);
+          }
+
+          // Finally, delete the agent row.
+          return deleteAgentRow(ctx, agent.name);
+        });
+
+        if (!deleted) {
+          rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
+        }
+
+        // Best-effort: remove loaded adapters for any deleted bindings.
+        for (const binding of bindings) {
+          await ctx.removeAdapter(binding.adapterToken).catch(() => undefined);
+        }
+
+        // Best-effort: remove agent home directories.
+        try {
+          removeAgentHome(agent.name, ctx.config.dataDir);
+        } catch (err) {
+          logEvent("warn", "agent-home-remove-failed", {
+            "agent-name": agent.name,
+            error: errorMessage(err),
+          });
+        }
+
+        logEvent("info", "agent-delete", {
+          actor: principal.kind,
+          "agent-name": agent.name,
+          state: "success",
+          "duration-ms": Date.now() - startedAtMs,
+        });
+
+        return { success: true, agentName: agent.name };
+      } catch (err) {
+        logEvent("info", "agent-delete", {
+          actor: principal.kind,
+          "agent-name": requestedAgentName || undefined,
+          state: "failed",
+          "duration-ms": Date.now() - startedAtMs,
+          error: errorMessage(err),
+        });
+        throw err;
+      }
     },
   };
 }
-

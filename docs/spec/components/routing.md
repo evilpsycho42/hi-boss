@@ -8,7 +8,7 @@ Key implementation files:
 - `src/daemon/bridges/channel-bridge.ts` — converts adapter messages → envelopes
 - `src/daemon/router/message-router.ts` — creates and delivers envelopes
 - `src/daemon/scheduler/envelope-scheduler.ts` — wakes scheduled envelopes and triggers agent runs
-- `src/agent/executor.ts` — runs agents and marks envelopes `done`
+- `src/agent/executor.ts` — runs agents and acknowledges envelopes (marks `done` on read)
 
 ---
 
@@ -53,7 +53,7 @@ See `docs/spec/adapters/telegram.md`.
 4. `MessageRouter.routeEnvelope()` persists the envelope in SQLite (`status = pending`).
 5. If the envelope is due now (no `deliver-at`, or `deliver-at <= now`), the router calls `deliverEnvelope()`.
 6. For agent destinations, `deliverToAgent()` triggers the registered handler, which calls `AgentExecutor.checkAndRun(...)`.
-7. `AgentExecutor` loads pending envelopes from SQLite and runs the agent. After a successful run it marks the processed envelopes as `done`.
+7. `AgentExecutor` loads pending envelopes from SQLite, marks them `done` immediately, and runs the agent (at-most-once).
 
 If no binding exists:
 

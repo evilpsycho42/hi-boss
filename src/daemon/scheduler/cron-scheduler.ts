@@ -3,6 +3,7 @@ import type { CronSchedule, CreateCronScheduleInput } from "../../cron/types.js"
 import type { Envelope } from "../../envelope/types.js";
 import { computeNextCronUtcIso, normalizeTimeZoneInput } from "../../shared/cron.js";
 import { formatAgentAddress, parseAddress } from "../../adapters/types.js";
+import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 import type { EnvelopeScheduler } from "./envelope-scheduler.js";
 
 function getCronScheduleIdFromEnvelopeMetadata(metadata: unknown): string | null {
@@ -14,15 +15,8 @@ function getCronScheduleIdFromEnvelopeMetadata(metadata: unknown): string | null
 export class CronScheduler {
   constructor(
     private readonly db: HiBossDatabase,
-    private readonly envelopeScheduler: EnvelopeScheduler,
-    private readonly options: { debug?: boolean } = {}
+    private readonly envelopeScheduler: EnvelopeScheduler
   ) {}
-
-  private log(message: string): void {
-    if (this.options.debug) {
-      console.log(`[CronScheduler] ${message}`);
-    }
-  }
 
   private buildCronEnvelopeMetadata(schedule: CronSchedule): Record<string, unknown> {
     const template =
@@ -67,6 +61,15 @@ export class CronScheduler {
     });
 
     this.db.updateCronSchedulePendingEnvelopeId(schedule.id, envelope.id);
+    logEvent("info", "envelope-created", {
+      "envelope-id": envelope.id,
+      source: "cron",
+      "cron-id": schedule.id,
+      "agent-name": schedule.agentName,
+      from: envelope.from,
+      to: envelope.to,
+      "deliver-at": envelope.deliverAt ?? "none",
+    });
     return envelope;
   }
 
@@ -249,7 +252,10 @@ export class CronScheduler {
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        this.log(`Reconcile failed schedule=${schedule.id}: ${message}`);
+        logEvent("warn", "cron-reconcile-failed", {
+          "cron-id": schedule.id,
+          error: message,
+        });
       }
     }
   }
@@ -278,10 +284,11 @@ export class CronScheduler {
         this.envelopeScheduler.onEnvelopeCreated(created);
       }
     } catch (err) {
-      console.error(
-        `[CronScheduler] Failed to advance schedule=${scheduleId} from envelope=${envelope.id}:`,
-        err
-      );
+      logEvent("error", "cron-advance-failed", {
+        "cron-id": scheduleId,
+        "envelope-id": envelope.id,
+        error: errorMessage(err),
+      });
     }
   }
 

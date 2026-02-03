@@ -21,7 +21,6 @@ export function createDaemonHandlers(ctx: DaemonContext): RpcMethodRegistry {
       return {
         running: ctx.running,
         startTime: ctx.startTime?.toISOString(),
-        debug: ctx.config.debug ?? false,
         adapters: Array.from(ctx.adapters.values()).map((a) => a.platform),
         bindings: bindings.map((b) => ({
           agentName: b.agentName,

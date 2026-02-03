@@ -1,20 +1,12 @@
-import { Telegraf, Context } from "telegraf";
+import { Telegraf } from "telegraf";
 import * as fs from "fs";
 import * as path from "path";
-import * as crypto from "crypto";
-import type { Message as TelegramMessage } from "telegraf/types";
-import type { ChatAdapter, ChannelMessage, MessageContent, ChannelMessageHandler, Attachment, ChannelCommandHandler, ChannelCommand, OutgoingParseMode, SendMessageOptions } from "./types.js";
+import type { ChatAdapter, MessageContent, ChannelMessageHandler, Attachment, ChannelCommandHandler, ChannelCommand, OutgoingParseMode, SendMessageOptions } from "./types.js";
 import { detectAttachmentType } from "./types.js";
 import { getDefaultMediaDir } from "../shared/defaults.js";
+import { errorMessage, logEvent } from "../shared/daemon-log.js";
 import { parseTelegramMessageId } from "../shared/telegram-message-id.js";
-
-type TextContext = Context & { message: TelegramMessage.TextMessage };
-type PhotoContext = Context & { message: TelegramMessage.PhotoMessage };
-type VideoContext = Context & { message: TelegramMessage.VideoMessage };
-type DocumentContext = Context & { message: TelegramMessage.DocumentMessage };
-type VoiceContext = Context & { message: TelegramMessage.VoiceMessage };
-type AudioContext = Context & { message: TelegramMessage.AudioMessage };
-type MessageContext = TextContext | PhotoContext | VideoContext | DocumentContext | VoiceContext | AudioContext;
+import { buildTelegramChannelMessage, type MessageContext } from "./telegram-inbound.js";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -48,11 +40,6 @@ function toTelegramParseMode(mode: OutgoingParseMode | undefined): "MarkdownV2" 
     case undefined:
       return undefined;
   }
-}
-
-function truncateText(text: string, maxChars: number): string {
-  if (text.length <= maxChars) return text;
-  return text.slice(0, maxChars) + "\n\n[...truncated...]\n";
 }
 
 /**
@@ -109,190 +96,16 @@ export class TelegramAdapter implements ChatAdapter {
   }
 
   private async handleMessage(ctx: MessageContext): Promise<void> {
-    const message = await this.buildMessage(ctx);
+    const message = await buildTelegramChannelMessage({
+      ctx,
+      bot: this.bot,
+      platform: this.platform,
+      mediaDir: this.mediaDir,
+    });
 
     for (const handler of this.handlers) {
       await handler(message);
     }
-  }
-
-  private async buildMessage(ctx: MessageContext): Promise<ChannelMessage> {
-    const telegramMsg = ctx.message;
-    const chat = ctx.chat!;
-    const from = ctx.from!;
-
-    const attachments = await this.extractAttachments(ctx);
-    const text = this.extractText(telegramMsg);
-    const inReplyTo = this.extractInReplyTo(telegramMsg);
-
-    const chatName =
-      chat.type === "group" || chat.type === "supergroup"
-        ? chat.title
-        : undefined;
-
-    return {
-      id: String(telegramMsg.message_id),
-      platform: this.platform,
-      author: {
-        id: String(from.id),
-        username: from.username,
-        displayName: from.first_name,
-      },
-      inReplyTo,
-      chat: {
-        id: String(chat.id),
-        name: chatName,
-      },
-      content: {
-        text,
-        attachments: attachments.length > 0 ? attachments : undefined,
-      },
-      raw: telegramMsg,
-    };
-  }
-
-  private extractInReplyTo(msg: MessageContext["message"]): ChannelMessage["inReplyTo"] | undefined {
-    const raw = msg as unknown as { reply_to_message?: unknown };
-    const reply = raw.reply_to_message;
-    if (!reply || typeof reply !== "object") return undefined;
-
-    const replyMsg = reply as {
-      message_id?: number;
-      from?: { id?: number; username?: string; first_name?: string };
-      text?: string;
-      caption?: string;
-    };
-
-    if (typeof replyMsg.message_id !== "number") return undefined;
-
-    const author =
-      replyMsg.from && typeof replyMsg.from === "object" && typeof replyMsg.from.id === "number"
-        ? {
-            id: String(replyMsg.from.id),
-            username: typeof replyMsg.from.username === "string" ? replyMsg.from.username : undefined,
-            displayName: typeof replyMsg.from.first_name === "string" ? replyMsg.from.first_name : "",
-          }
-        : undefined;
-
-    const text = typeof replyMsg.text === "string"
-      ? replyMsg.text
-      : typeof replyMsg.caption === "string"
-        ? replyMsg.caption
-        : undefined;
-
-    return {
-      channelMessageId: String(replyMsg.message_id),
-      author: author && author.displayName ? author : undefined,
-      text: text ? truncateText(text, 1200) : undefined,
-    };
-  }
-
-  private extractText(msg: MessageContext["message"]): string | undefined {
-    if ("text" in msg) return msg.text;
-    if ("caption" in msg) return msg.caption;
-    return undefined;
-  }
-
-  private async extractAttachments(ctx: MessageContext): Promise<Attachment[]> {
-    const msg = ctx.message;
-    const attachments: Attachment[] = [];
-
-    if ("photo" in msg && msg.photo) {
-      const photo = msg.photo[msg.photo.length - 1];
-      attachments.push(await this.getTelegramAttachment(photo.file_id));
-    }
-
-    if ("video" in msg && msg.video) {
-      attachments.push(
-        await this.getTelegramAttachment(msg.video.file_id, msg.video.file_name)
-      );
-    }
-
-    if ("document" in msg && msg.document) {
-      attachments.push(
-        await this.getTelegramAttachment(
-          msg.document.file_id,
-          msg.document.file_name
-        )
-      );
-    }
-
-    if ("voice" in msg && msg.voice) {
-      attachments.push(
-        await this.getTelegramAttachment(msg.voice.file_id, `voice_${Date.now()}.oga`)
-      );
-    }
-
-    if ("audio" in msg && msg.audio) {
-      attachments.push(
-        await this.getTelegramAttachment(msg.audio.file_id, msg.audio.file_name)
-      );
-    }
-
-    return attachments;
-  }
-
-  /**
-   * Get a unique file path in the given directory, adding incremental suffix for duplicates.
-   */
-  private getUniqueFilePath(dir: string, filename: string): string {
-    const ext = path.extname(filename);
-    const base = path.basename(filename, ext);
-    let candidate = path.join(dir, filename);
-    let counter = 1;
-
-    while (fs.existsSync(candidate)) {
-      candidate = path.join(dir, `${base}_${counter}${ext}`);
-      counter++;
-    }
-    return candidate;
-  }
-
-  /**
-   * Download Telegram file and store locally.
-   *
-   * Downloads the file to ~/.hiboss/media/ using the original filename when
-   * available, with incremental suffix for duplicates. The original file_id
-   * is preserved for efficient re-sending via Telegram API.
-   */
-  private async getTelegramAttachment(
-    fileId: string,
-    preferredFilename?: string
-  ): Promise<Attachment> {
-    const file = await this.bot.telegram.getFile(fileId);
-    const derivedFilename = file.file_path
-      ? path.posix.basename(file.file_path)
-      : undefined;
-    const filename = preferredFilename ?? derivedFilename;
-
-    // Derive extension from file_path (e.g., "photos/file_123.jpg" -> "jpg")
-    const ext = file.file_path
-      ? path.extname(file.file_path).slice(1) || "bin"
-      : "bin";
-
-    // Get download URL and fetch the file
-    const fileUrl = await this.bot.telegram.getFileLink(fileId);
-    const response = await fetch(fileUrl.toString());
-    if (!response.ok) {
-      throw new Error(`Failed to download Telegram file: ${response.status}`);
-    }
-    const buffer = Buffer.from(await response.arrayBuffer());
-
-    // Ensure media directory exists
-    if (!fs.existsSync(this.mediaDir)) {
-      fs.mkdirSync(this.mediaDir, { recursive: true });
-    }
-
-    // Use original filename when available, with incremental suffix for duplicates
-    const targetFilename = filename || `file_${crypto.randomUUID()}.${ext}`;
-    const localPath = this.getUniqueFilePath(this.mediaDir, targetFilename);
-    fs.writeFileSync(localPath, buffer);
-
-    return {
-      source: localPath,
-      filename,
-      telegramFileId: fileId,
-    };
   }
 
   async sendMessage(chatId: string, content: MessageContent, options: SendMessageOptions = {}): Promise<void> {
@@ -537,7 +350,7 @@ export class TelegramAdapter implements ChatAdapter {
     }
     this.started = true;
     this.stopped = false;
-    console.log(`[${this.platform}] Bot starting...`);
+    logEvent("info", "adapter-start", { "adapter-type": this.platform });
 
     // Fire-and-forget: launch() only resolves when the bot stops,
     // so we run the retry loop in the background.
@@ -556,14 +369,22 @@ export class TelegramAdapter implements ChatAdapter {
 
         if (isGetUpdatesConflict(err)) {
           const delayMs = computeBackoff(attempt);
-          console.log(`[${this.platform}] 409 conflict, retrying in ${delayMs}ms (attempt ${attempt + 1})`);
+          logEvent("warn", "adapter-launch-retry", {
+            "adapter-type": this.platform,
+            "delay-ms": delayMs,
+            attempt: attempt + 1,
+            reason: "telegram-409-getupdates-conflict",
+          });
           await sleep(delayMs);
           attempt++;
           continue;
         }
 
         // Non-recoverable error
-        console.error(`[${this.platform}] Bot launch error:`, err);
+        logEvent("error", "adapter-launch-failed", {
+          "adapter-type": this.platform,
+          error: errorMessage(err),
+        });
         return;
       }
     }
@@ -573,6 +394,6 @@ export class TelegramAdapter implements ChatAdapter {
     this.stopped = true;
     this.started = false;
     this.bot.stop();
-    console.log(`[${this.platform}] Bot stopped`);
+    logEvent("info", "adapter-stop", { "adapter-type": this.platform });
   }
 }

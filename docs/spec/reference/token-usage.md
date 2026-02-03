@@ -4,7 +4,7 @@ This document specifies how Hi-Boss records and interprets token usage for agent
 
 ## What Hi-Boss logs
 
-Hi-Boss logs per-run usage from `UnifiedSession.run()` results (for successful runs, in both normal and debug mode):
+Hi-Boss logs per-run usage from `UnifiedSession.run()` results (for successful runs):
 
 - `context_length`: best-effort estimate of the **final model-call context length** for the turn (SDK-provided; may be missing)
 - `input_tokens`: total input tokens processed for the run (including any cached tokens)

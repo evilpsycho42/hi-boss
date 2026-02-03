@@ -38,7 +38,7 @@ hiboss setup default --config scripts/test-auto-level/setup-default.claude.sonne
 4) Start the daemon:
 
 ```bash
-hiboss daemon start --debug --token "<boss-token>"
+hiboss daemon start --token "<boss-token>"
 ```
 
 Notes:

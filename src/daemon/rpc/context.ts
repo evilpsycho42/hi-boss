@@ -37,7 +37,7 @@ export interface DaemonContext {
   readonly adapters: Map<string, ChatAdapter>;
 
   // Configuration
-  readonly config: { dataDir: string; debug?: boolean };
+  readonly config: { dataDir: string };
   readonly running: boolean;
   readonly startTime: Date | null;
 

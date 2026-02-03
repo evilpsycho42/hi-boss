@@ -26,6 +26,7 @@ import {
   DEFAULT_AGENT_PROVIDER,
 } from "../../shared/defaults.js";
 import { isPermissionLevel } from "../../shared/permissions.js";
+import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 
 /**
  * Create agent RPC handlers (excluding agent.set which is in its own file).
@@ -38,6 +39,10 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const principal = ctx.resolvePrincipal(token);
       ctx.assertOperationAllowed("agent.register", principal);
 
+      const startedAtMs = Date.now();
+      const requestedAgentName = typeof p.name === "string" ? p.name.trim() : "";
+
+      try {
       if (typeof p.name !== "string" || !isValidAgentName(p.name)) {
         rpcError(RPC_ERRORS.INVALID_PARAMS, AGENT_NAME_ERROR_MESSAGE);
       }
@@ -224,6 +229,12 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
       // Register agent handler for auto-execution
       ctx.registerAgentHandler(p.name);
 
+      logEvent("info", "agent-register", {
+        actor: principal.kind,
+        "agent-name": result.agent.name,
+        state: "success",
+        "duration-ms": Date.now() - startedAtMs,
+      });
       return {
         agent: {
           name: result.agent.name,
@@ -233,6 +244,16 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
         },
         token: result.token,
       };
+      } catch (err) {
+        logEvent("info", "agent-register", {
+          actor: principal.kind,
+          "agent-name": requestedAgentName || undefined,
+          state: "failed",
+          "duration-ms": Date.now() - startedAtMs,
+          error: errorMessage(err),
+        });
+        throw err;
+      }
     },
 
     "agent.list": async (params) => {

@@ -259,7 +259,6 @@ Command flags:
 `hiboss daemon status` prints:
 - `running:`
 - `start-time:`
-- `debug:`
 - `adapters:`
 - `data-dir:`
 

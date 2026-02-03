@@ -14,6 +14,7 @@ import { RPC_ERRORS } from "../ipc/types.js";
 import type { DaemonContext } from "./context.js";
 import { requireToken, rpcError } from "./context.js";
 import { parseAddress } from "../../adapters/types.js";
+import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 
 /**
  * Create cron RPC handlers.
@@ -28,6 +29,8 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
     if (principal.kind !== "agent") {
       rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
     }
+
+    const startedAtMs = Date.now();
 
     if (typeof p.cron !== "string" || !p.cron.trim()) {
       rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid cron");
@@ -107,9 +110,21 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
         },
         metadata: finalMetadata,
       });
+      logEvent("info", "cron-create", {
+        "agent-name": agent.name,
+        "cron-id": schedule.id,
+        state: "success",
+        "duration-ms": Date.now() - startedAtMs,
+      });
       return { id: schedule.id };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      logEvent("info", "cron-create", {
+        "agent-name": agent.name,
+        state: "failed",
+        "duration-ms": Date.now() - startedAtMs,
+        error: errorMessage(err),
+      });
       if (message.includes("not bound to adapter")) {
         rpcError(RPC_ERRORS.UNAUTHORIZED, message);
       }
@@ -156,11 +171,26 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
       rpcError(RPC_ERRORS.INTERNAL_ERROR, "Cron scheduler not initialized");
     }
 
+    const startedAtMs = Date.now();
+
     try {
       cron.enableSchedule(principal.agent.name, p.id.trim());
+      logEvent("info", "cron-enable", {
+        "agent-name": principal.agent.name,
+        "cron-id": p.id.trim(),
+        state: "success",
+        "duration-ms": Date.now() - startedAtMs,
+      });
       return { success: true };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      logEvent("info", "cron-enable", {
+        "agent-name": principal.agent.name,
+        "cron-id": p.id.trim(),
+        state: "failed",
+        "duration-ms": Date.now() - startedAtMs,
+        error: errorMessage(err),
+      });
       if (message === "Cron schedule not found") {
         rpcError(RPC_ERRORS.NOT_FOUND, message);
       }
@@ -194,11 +224,26 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
       rpcError(RPC_ERRORS.INTERNAL_ERROR, "Cron scheduler not initialized");
     }
 
+    const startedAtMs = Date.now();
+
     try {
       cron.disableSchedule(principal.agent.name, p.id.trim());
+      logEvent("info", "cron-disable", {
+        "agent-name": principal.agent.name,
+        "cron-id": p.id.trim(),
+        state: "success",
+        "duration-ms": Date.now() - startedAtMs,
+      });
       return { success: true };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      logEvent("info", "cron-disable", {
+        "agent-name": principal.agent.name,
+        "cron-id": p.id.trim(),
+        state: "failed",
+        "duration-ms": Date.now() - startedAtMs,
+        error: errorMessage(err),
+      });
       if (message === "Cron schedule not found") {
         rpcError(RPC_ERRORS.NOT_FOUND, message);
       }
@@ -229,14 +274,29 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
       rpcError(RPC_ERRORS.INTERNAL_ERROR, "Cron scheduler not initialized");
     }
 
+    const startedAtMs = Date.now();
+
     try {
       const deleted = cron.deleteSchedule(principal.agent.name, p.id.trim());
       if (!deleted) {
         rpcError(RPC_ERRORS.NOT_FOUND, "Cron schedule not found");
       }
+      logEvent("info", "cron-delete", {
+        "agent-name": principal.agent.name,
+        "cron-id": p.id.trim(),
+        state: "success",
+        "duration-ms": Date.now() - startedAtMs,
+      });
       return { success: true };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      logEvent("info", "cron-delete", {
+        "agent-name": principal.agent.name,
+        "cron-id": p.id.trim(),
+        state: "failed",
+        "duration-ms": Date.now() - startedAtMs,
+        error: errorMessage(err),
+      });
       if (message === "Cron schedule not found") {
         rpcError(RPC_ERRORS.NOT_FOUND, message);
       }

@@ -3,7 +3,7 @@ import { formatChannelAddress, formatAgentAddress } from "../../adapters/types.j
 import type { MessageRouter } from "../router/message-router.js";
 import type { HiBossDatabase } from "../db/database.js";
 import type { DaemonConfig } from "../daemon.js";
-import { nowLocalIso } from "../../shared/time.js";
+import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 
 /**
  * Bridge between ChannelMessages and Envelopes.
@@ -63,9 +63,12 @@ export class ChannelBridge {
     // Find the agent bound to this adapter
     const binding = this.db.getBindingByAdapter(adapter.platform, adapterToken);
     if (!binding) {
-      console.warn(
-        `[channel-bridge] no-binding: true platform: ${adapter.platform} chat-id: ${command.chatId} from-boss: ${fromBoss}`
-      );
+      logEvent("warn", "channel-no-binding", {
+        "message-kind": "command",
+        "adapter-type": adapter.platform,
+        "chat-id": command.chatId,
+        "from-boss": fromBoss,
+      });
 
       if (fromBoss) {
         try {
@@ -73,7 +76,12 @@ export class ChannelBridge {
             text: ChannelBridge.getUnboundAdapterText(adapter.platform),
           });
         } catch (err) {
-          console.warn(`[channel-bridge] send-failed: true error: ${(err as Error).message}`);
+          logEvent("warn", "channel-send-failed", {
+            "message-kind": "command",
+            "adapter-type": adapter.platform,
+            "chat-id": command.chatId,
+            error: errorMessage(err),
+          });
         }
       }
       return;
@@ -98,27 +106,15 @@ export class ChannelBridge {
     const platform = adapter.platform;
     const fromBoss = this.isBoss(platform, message.author.username);
 
-    // Debug logging for ChannelMessage
-    if (this.config.debug) {
-      console.log(`[${nowLocalIso()}] [ChannelBridge] ChannelMessage received:`);
-      console.log(JSON.stringify({
-        id: message.id,
-        platform: message.platform,
-        author: message.author,
-        chat: message.chat,
-        content: {
-          text: message.content.text,
-          attachments: message.content.attachments?.length ?? 0,
-        },
-      }, null, 2));
-    }
-
     // Find the agent bound to this adapter
     const binding = this.db.getBindingByAdapter(platform, adapterToken);
     if (!binding) {
-      console.warn(
-        `[channel-bridge] no-binding: true platform: ${platform} chat-id: ${message.chat.id} from-boss: ${fromBoss}`
-      );
+      logEvent("warn", "channel-no-binding", {
+        "message-kind": "message",
+        "adapter-type": platform,
+        "chat-id": message.chat.id,
+        "from-boss": fromBoss,
+      });
 
       if (fromBoss) {
         try {
@@ -126,7 +122,12 @@ export class ChannelBridge {
             text: ChannelBridge.getUnboundAdapterText(platform),
           });
         } catch (err) {
-          console.warn(`[channel-bridge] send-failed: true error: ${(err as Error).message}`);
+          logEvent("warn", "channel-send-failed", {
+            "message-kind": "message",
+            "adapter-type": platform,
+            "chat-id": message.chat.id,
+            error: errorMessage(err),
+          });
         }
       }
       return;
@@ -155,8 +156,6 @@ export class ChannelBridge {
         ...(message.inReplyTo ? { inReplyTo: message.inReplyTo } : {}),
       },
     });
-
-    console.log(`[${nowLocalIso()}] [ChannelBridge] Routed message from ${fromAddress} to ${toAddress}`);
   }
 
   private isBoss(platform: string, username?: string): boolean {

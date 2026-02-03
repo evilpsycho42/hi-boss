@@ -7,6 +7,7 @@ import type {
   RpcMethodRegistry,
 } from "./types.js";
 import { RPC_ERRORS } from "./types.js";
+import { logEvent } from "../../shared/daemon-log.js";
 
 async function isSocketAcceptingConnections(socketPath: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -122,7 +123,7 @@ export class IpcServer {
     });
 
     socket.on("error", (err) => {
-      console.error("[IPC] Socket error:", err.message);
+      logEvent("error", "ipc-socket-error", { error: err.message });
     });
   }
 

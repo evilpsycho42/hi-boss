@@ -47,7 +47,7 @@ This happens before the envelope scheduler’s startup tick, so missed cron runs
 ## Delivery + advancement
 
 - Channel envelopes created by cron are marked `done` after a successful adapter send (`src/daemon/router/message-router.ts`), then the schedule is advanced.
-- Agent envelopes created by cron are marked `done` after a successful agent run auto-acks envelopes (`src/agent/executor.ts`), then the schedule is advanced.
+- Agent envelopes created by cron are marked `done` when they are read for an agent run (`src/agent/executor.ts`), then the schedule is advanced (at-most-once).
 
 Cron-created envelopes include `metadata.cronScheduleId` so the daemon can advance the correct schedule.
 

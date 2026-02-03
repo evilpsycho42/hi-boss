@@ -26,6 +26,7 @@ import type {
 import { RPC_ERRORS } from "../ipc/types.js";
 import type { DaemonContext, Principal } from "./context.js";
 import { requireToken, rpcError } from "./context.js";
+import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 
 function requireAgentForMemory(
   ctx: DaemonContext,
@@ -63,9 +64,28 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
 
       const agentName = requireAgentForMemory(ctx, principal, params);
       const memory = await ctx.ensureMemoryService();
-      const id = await memory.add(agentName, p.text, { category: p.category });
-      const result: MemoryAddResult = { id };
-      return result;
+      const startedAtMs = Date.now();
+      try {
+        const id = await memory.add(agentName, p.text, { category: p.category });
+        logEvent("info", "memory-add", {
+          "agent-name": agentName,
+          "memory-id": id,
+          category: p.category ?? "fact",
+          state: "success",
+          "duration-ms": Date.now() - startedAtMs,
+        });
+        const result: MemoryAddResult = { id };
+        return result;
+      } catch (err) {
+        logEvent("info", "memory-add", {
+          "agent-name": agentName,
+          category: p.category ?? "fact",
+          state: "failed",
+          "duration-ms": Date.now() - startedAtMs,
+          error: errorMessage(err),
+        });
+        throw err;
+      }
     },
 
     "memory.search": async (params) => {
@@ -152,9 +172,28 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
 
       const agentName = requireAgentForMemory(ctx, principal, params);
       const memory = await ctx.ensureMemoryService();
-      const deleted = await memory.deleteCategory(agentName, p.category);
-      const result: MemoryDeleteCategoryResult = { ok: true, deleted };
-      return result;
+      const startedAtMs = Date.now();
+      try {
+        const deleted = await memory.deleteCategory(agentName, p.category);
+        logEvent("info", "memory-delete-category", {
+          "agent-name": agentName,
+          category: p.category,
+          "deleted-count": deleted,
+          state: "success",
+          "duration-ms": Date.now() - startedAtMs,
+        });
+        const result: MemoryDeleteCategoryResult = { ok: true, deleted };
+        return result;
+      } catch (err) {
+        logEvent("info", "memory-delete-category", {
+          "agent-name": agentName,
+          category: p.category,
+          state: "failed",
+          "duration-ms": Date.now() - startedAtMs,
+          error: errorMessage(err),
+        });
+        throw err;
+      }
     },
 
     "memory.get": async (params) => {
@@ -185,9 +224,27 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
 
       const agentName = requireAgentForMemory(ctx, principal, params);
       const memory = await ctx.ensureMemoryService();
-      await memory.delete(agentName, p.id);
-      const result: MemoryDeleteResult = { ok: true };
-      return result;
+      const startedAtMs = Date.now();
+      try {
+        await memory.delete(agentName, p.id);
+        logEvent("info", "memory-delete", {
+          "agent-name": agentName,
+          "memory-id": p.id,
+          state: "success",
+          "duration-ms": Date.now() - startedAtMs,
+        });
+        const result: MemoryDeleteResult = { ok: true };
+        return result;
+      } catch (err) {
+        logEvent("info", "memory-delete", {
+          "agent-name": agentName,
+          "memory-id": p.id,
+          state: "failed",
+          "duration-ms": Date.now() - startedAtMs,
+          error: errorMessage(err),
+        });
+        throw err;
+      }
     },
 
     "memory.clear": async (params) => {
@@ -198,9 +255,25 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
 
       const agentName = requireAgentForMemory(ctx, principal, params);
       const memory = await ctx.ensureMemoryService();
-      await memory.clear(agentName);
-      const result: MemoryClearResult = { ok: true };
-      return result;
+      const startedAtMs = Date.now();
+      try {
+        await memory.clear(agentName);
+        logEvent("info", "memory-clear", {
+          "agent-name": agentName,
+          state: "success",
+          "duration-ms": Date.now() - startedAtMs,
+        });
+        const result: MemoryClearResult = { ok: true };
+        return result;
+      } catch (err) {
+        logEvent("info", "memory-clear", {
+          "agent-name": agentName,
+          state: "failed",
+          "duration-ms": Date.now() - startedAtMs,
+          error: errorMessage(err),
+        });
+        throw err;
+      }
     },
 
     "memory.setup": async (params) => {
@@ -208,6 +281,8 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const token = requireToken(p.token);
       const principal = ctx.resolvePrincipal(token);
       ctx.assertOperationAllowed("memory.setup", principal);
+
+      const startedAtMs = Date.now();
 
       if (typeof p.memory !== "object" || p.memory === null) {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config");
@@ -267,6 +342,14 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
         dims,
         lastError,
       };
+      logEvent("info", "memory-setup", {
+        actor: principal.kind,
+        state: result.memoryEnabled ? "success" : "failed",
+        "duration-ms": Date.now() - startedAtMs,
+        "memory-enabled": result.memoryEnabled,
+        dims: result.dims,
+        error: result.lastError || undefined,
+      });
       return result;
     },
   };

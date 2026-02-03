@@ -17,6 +17,7 @@ import {
   DEFAULT_AGENT_PROVIDER,
 } from "../../shared/defaults.js";
 import { isPermissionLevel } from "../../shared/permissions.js";
+import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 
 /**
  * Create agent.set RPC handler.
@@ -29,6 +30,12 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
       const principal = ctx.resolvePrincipal(token);
       ctx.assertOperationAllowed("agent.set", principal);
 
+      const startedAtMs = Date.now();
+      const requestedAgentName = typeof p.agentName === "string" ? p.agentName.trim() : "";
+      let resolvedAgentName: string | undefined;
+      let changedKeys: string[] = [];
+
+      try {
       if (typeof p.agentName !== "string" || !p.agentName.trim()) {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid agent-name");
       }
@@ -38,6 +45,7 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
       }
       const agentName = agent.name;
+      resolvedAgentName = agentName;
 
       const wantsBind = p.bindAdapterType !== undefined || p.bindAdapterToken !== undefined;
       const wantsUnbind = p.unbindAdapterType !== undefined;
@@ -58,6 +66,21 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
       if (!hasAnyUpdate) {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "No updates provided");
       }
+
+      changedKeys = [
+        ...(p.description !== undefined ? ["description"] : []),
+        ...(p.workspace !== undefined ? ["workspace"] : []),
+        ...(p.provider !== undefined ? ["provider"] : []),
+        ...(p.providerSourceHome !== undefined ? ["provider-source-home"] : []),
+        ...(p.model !== undefined ? ["model"] : []),
+        ...(p.reasoningEffort !== undefined ? ["reasoning-effort"] : []),
+        ...(p.autoLevel !== undefined ? ["auto-level"] : []),
+        ...(p.permissionLevel !== undefined ? ["permission-level"] : []),
+        ...(p.sessionPolicy !== undefined ? ["session-policy"] : []),
+        ...(p.metadata !== undefined ? ["metadata"] : []),
+        ...(wantsBind ? ["bind-adapter"] : []),
+        ...(wantsUnbind ? ["unbind-adapter"] : []),
+      ];
 
       if (wantsBind) {
         if (typeof p.bindAdapterType !== "string" || !p.bindAdapterType.trim()) {
@@ -356,6 +379,13 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         ctx.executor.requestSessionRefresh(agentName, "rpc:agent.set");
       }
 
+      logEvent("info", "agent-set", {
+        actor: principal.kind,
+        "agent-name": agentName,
+        changed: changedKeys.length > 0 ? changedKeys.join(",") : undefined,
+        state: "success",
+        "duration-ms": Date.now() - startedAtMs,
+      });
       return {
         success: true,
         agent: {
@@ -372,6 +402,17 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         },
         bindings,
       };
+      } catch (err) {
+        logEvent("info", "agent-set", {
+          actor: principal.kind,
+          "agent-name": (resolvedAgentName ?? requestedAgentName) || undefined,
+          changed: changedKeys.length > 0 ? changedKeys.join(",") : undefined,
+          state: "failed",
+          "duration-ms": Date.now() - startedAtMs,
+          error: errorMessage(err),
+        });
+        throw err;
+      }
     },
   };
 }

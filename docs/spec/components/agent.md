@@ -78,7 +78,7 @@ To validate that agents can actually use the Hi-Boss envelope system end-to-end 
 
 1) Stop the daemon and delete `~/.hiboss`
 2) Run `hiboss setup default` using a known-good template (see `scripts/test-auto-level/`)
-3) Start the daemon with `--debug`
+3) Start the daemon
 4) Send a boss-marked envelope that instructs a `high` and a `medium` agent to send to a non-existent sink address (e.g., `agent:test-sink`)
 5) Verify each sender's outbox contains the expected `pong` messages via `hiboss envelope list --box outbox`
 
@@ -162,7 +162,7 @@ Located in `src/agent/executor.ts`:
 3. **Session**: Get or create session (see [Session Management](session.md))
 4. **Turn Input**: Format pending envelopes into turn input
 5. **Execute**: Run agent SDK session with turn input
-6. **Auto-Ack**: Mark all envelopes in the run as `done` after a successful run
+6. **Auto-Ack**: Mark read envelopes as `done` immediately after they are loaded for a run (at-most-once)
 7. **Audit**: Record run in `agent_runs` table
 8. **Reschedule**: If more pending envelopes exist, schedule another turn via `setImmediate`
 
@@ -203,9 +203,9 @@ Note: consecutive group-chat envelopes from the same `from:` address are batched
 
 ### Auto-Acknowledgment
 
-After a successful agent run, Hi-Boss marks all envelopes included in that run as `done`.
+Hi-Boss marks envelopes as `done` immediately after they are read for a run.
 
-If a run fails, those envelopes remain `pending` and will be retried on the next trigger (new envelope, scheduler tick, or daemon restart recovery).
+This is **at-most-once**: if a run fails, already-read envelopes stay `done` and will not be retried.
 
 ## Agent Bindings
 

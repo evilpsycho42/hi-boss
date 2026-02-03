@@ -27,9 +27,3 @@ It also prints a **boss token** (also shown once) that you’ll use for daemon a
 ```bash
 hiboss daemon start --token <boss-token>
 ```
-
-Debug mode (more logs):
-
-```bash
-hiboss daemon start --token <boss-token> --debug
-```

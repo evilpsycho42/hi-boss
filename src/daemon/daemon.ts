@@ -15,10 +15,7 @@ import { MemoryService } from "./memory/index.js";
 import type { RpcMethodRegistry } from "./ipc/types.js";
 import { RPC_ERRORS } from "./ipc/types.js";
 import type { ChatAdapter } from "../adapters/types.js";
-import { formatAgentAddress } from "../adapters/types.js";
 import { TelegramAdapter } from "../adapters/telegram.adapter.js";
-import { nowLocalIso } from "../shared/time.js";
-import { red } from "../shared/ansi.js";
 import { DEFAULT_AGENT_PERMISSION_LEVEL, getDefaultHiBossDir } from "../shared/defaults.js";
 import {
   DEFAULT_PERMISSION_POLICY,
@@ -28,6 +25,8 @@ import {
   isAtLeastPermissionLevel,
   parsePermissionPolicyV1OrDefault,
 } from "../shared/permissions.js";
+import { errorMessage, logEvent } from "../shared/daemon-log.js";
+import { getEnvelopeSourceFromEnvelope } from "../envelope/source.js";
 import { PidLock, isDaemonRunning, isSocketAcceptingConnections } from "./pid-lock.js";
 import type { DaemonContext, Principal } from "./rpc/context.js";
 import { rpcError } from "./rpc/context.js";
@@ -51,7 +50,6 @@ export { isDaemonRunning, isSocketAcceptingConnections };
  */
 export interface DaemonConfig {
   dataDir: string;
-  debug?: boolean;
   boss?: {
     telegram?: string;
   };
@@ -100,20 +98,15 @@ export class Daemon {
     this.db = new HiBossDatabase(dbPath);
     this.ipc = new IpcServer(socketPath);
     this.router = new MessageRouter(this.db, {
-      debug: config.debug,
       onEnvelopeDone: (envelope) => this.cronScheduler?.onEnvelopeDone(envelope),
     });
     this.bridge = new ChannelBridge(this.router, this.db, config);
     this.executor = createAgentExecutor({
-      debug: config.debug,
-      db: this.db,
       hibossDir: config.dataDir,
       onEnvelopesDone: (envelopeIds) => this.cronScheduler?.onEnvelopesDone(envelopeIds),
     });
-    this.scheduler = new EnvelopeScheduler(this.db, this.router, this.executor, {
-      debug: config.debug,
-    });
-    this.cronScheduler = new CronScheduler(this.db, this.scheduler, { debug: config.debug });
+    this.scheduler = new EnvelopeScheduler(this.db, this.router, this.executor);
+    this.cronScheduler = new CronScheduler(this.db, this.scheduler);
 
     this.registerRpcMethods();
   }
@@ -286,9 +279,10 @@ export class Daemon {
       throw err;
     }
 
-    console.log(`[${nowLocalIso()}] [Daemon] Started`);
-    console.log(`[${nowLocalIso()}] [Daemon] Data directory: ${this.config.dataDir}`);
-    console.log(`[${nowLocalIso()}] [Daemon] Loaded ${this.adapters.size} adapter(s)`);
+    logEvent("info", "daemon-started", {
+      "data-dir": this.config.dataDir,
+      "adapters-count": this.adapters.size,
+    });
   }
 
   /**
@@ -299,9 +293,10 @@ export class Daemon {
       const enrichedCommand = command as typeof command & { agentName?: string };
 
       if (command.command === "new" && enrichedCommand.agentName) {
-        console.log(
-          red(`[${nowLocalIso()}] [Daemon] Session refresh requested for ${formatAgentAddress(enrichedCommand.agentName)}`)
-        );
+        logEvent("info", "agent-session-refresh-requested", {
+          "agent-name": enrichedCommand.agentName,
+          trigger: "telegram:/new",
+        });
         this.executor.requestSessionRefresh(enrichedCommand.agentName, "telegram:/new");
       }
     });
@@ -312,7 +307,6 @@ export class Daemon {
    */
   private async registerAgentExecutionHandlers(): Promise<void> {
     const agents = this.db.listAgents();
-    console.log(`[${nowLocalIso()}] [Daemon] Registering handlers for ${agents.length} agent(s)`);
 
     for (const agent of agents) {
       this.registerSingleAgentHandler(agent.name);
@@ -323,19 +317,23 @@ export class Daemon {
    * Register a single agent handler for auto-execution.
    */
   private registerSingleAgentHandler(agentName: string): void {
-    console.log(`[${nowLocalIso()}] [Daemon] Registering handler for ${formatAgentAddress(agentName)}`);
-    this.router.registerAgentHandler(agentName, async () => {
-      console.log(`[${nowLocalIso()}] [Daemon] Handler triggered for ${formatAgentAddress(agentName)}`);
-
+    this.router.registerAgentHandler(agentName, async (envelope) => {
       const currentAgent = this.db.getAgentByName(agentName);
       if (!currentAgent) {
-        console.error(`[Daemon] Agent ${agentName} not found in database`);
+        logEvent("error", "agent-not-found", { "agent-name": agentName });
         return;
       }
 
       // Non-blocking: trigger agent run
-      this.executor.checkAndRun(currentAgent, this.db).catch((err) => {
-        console.error(`[Daemon] Agent ${agentName} run failed:`, err);
+      this.executor.checkAndRun(currentAgent, this.db, {
+        kind: "envelope",
+        source: getEnvelopeSourceFromEnvelope(envelope),
+        envelopeId: envelope.id,
+      }).catch((err) => {
+        logEvent("error", "agent-check-and-run-failed", {
+          "agent-name": agentName,
+          error: errorMessage(err),
+        });
       });
     });
   }
@@ -349,11 +347,11 @@ export class Daemon {
     for (const agent of agents) {
       const pending = this.db.getPendingEnvelopesForAgent(agent.name, 1);
       if (pending.length > 0) {
-        console.log(
-          `[${nowLocalIso()}] [Daemon] Found ${pending.length}+ pending envelope(s) for ${formatAgentAddress(agent.name)}, triggering run`
-        );
-        this.executor.checkAndRun(agent, this.db).catch((err) => {
-          console.error(`[Daemon] Agent ${agent.name} startup run failed:`, err);
+        this.executor.checkAndRun(agent, this.db, { kind: "daemon-startup" }).catch((err) => {
+          logEvent("error", "agent-check-and-run-failed", {
+            "agent-name": agent.name,
+            error: errorMessage(err),
+          });
         });
       }
     }
@@ -389,7 +387,7 @@ export class Daemon {
         adapter = new TelegramAdapter(adapterToken);
         break;
       default:
-        console.error(`[Daemon] Unknown adapter type: ${adapterType}`);
+        logEvent("error", "adapter-unknown-type", { "adapter-type": adapterType });
         return null;
     }
 
@@ -400,7 +398,6 @@ export class Daemon {
       await adapter.start();
     }
 
-    console.log(`[${nowLocalIso()}] [Daemon] Created ${adapterType} adapter`);
     return adapter;
   }
 
@@ -412,7 +409,6 @@ export class Daemon {
     if (adapter) {
       await adapter.stop();
       this.adapters.delete(adapterToken);
-      console.log(`[${nowLocalIso()}] [Daemon] Removed adapter`);
     }
   }
 
@@ -447,7 +443,7 @@ export class Daemon {
     await this.pidLock.release();
 
     this.running = false;
-    console.log(`[${nowLocalIso()}] [Daemon] Stopped`);
+    logEvent("info", "daemon-stopped");
   }
 
   /**

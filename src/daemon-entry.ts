@@ -1,4 +1,5 @@
 import { Daemon, getDefaultConfig } from "./daemon/daemon.js";
+import { errorMessage, logEvent } from "./shared/daemon-log.js";
 
 /**
  * Daemon entry point for background process.
@@ -6,16 +7,11 @@ import { Daemon, getDefaultConfig } from "./daemon/daemon.js";
 async function main() {
   const config = getDefaultConfig();
 
-  // Parse --debug flag from command line
-  if (process.argv.includes("--debug")) {
-    config.debug = true;
-  }
-
   const daemon = new Daemon(config);
 
   // Graceful shutdown
   const shutdown = async () => {
-    console.log("[Daemon] Shutting down...");
+    logEvent("info", "daemon-shutdown-requested");
     await daemon.stop();
     process.exit(0);
   };
@@ -25,11 +21,8 @@ async function main() {
 
   try {
     await daemon.start();
-    if (config.debug) {
-      console.log("[Daemon] Debug mode enabled");
-    }
   } catch (err) {
-    console.error("[Daemon] Failed to start:", err);
+    logEvent("error", "daemon-start-failed", { error: errorMessage(err) });
     process.exit(1);
   }
 }

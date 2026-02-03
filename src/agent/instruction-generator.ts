@@ -12,7 +12,6 @@ import { renderPrompt } from "../shared/prompt-renderer.js";
 import { buildSystemPromptContext } from "../shared/prompt-context.js";
 import { formatAgentAddress } from "../adapters/types.js";
 import { getCodexHomePath, getClaudeHomePath } from "./home-setup.js";
-import { nowLocalIso } from "../shared/time.js";
 import { ensureAgentInternalSpaceLayout, readAgentInternalNoteSnapshot } from "../shared/internal-space.js";
 
 /**
@@ -97,22 +96,14 @@ export function generateSystemInstructions(ctx: InstructionContext): string {
  *
  * @param agentName - The agent's name
  * @param instructions - The instruction content
- * @param options - Optional settings (hibossDir, debug)
+ * @param options - Optional settings (hibossDir)
  */
 export async function writeInstructionFiles(
   agentName: string,
   instructions: string,
-  options?: { hibossDir?: string; debug?: boolean }
+  options?: { hibossDir?: string }
 ): Promise<void> {
-  const { hibossDir, debug } = options ?? {};
-
-  // Log only metadata (never dump full system prompt into logs).
-  if (debug) {
-    const bytes = Buffer.byteLength(instructions, "utf-8");
-    console.log(
-      `[${nowLocalIso()}] [InstructionGenerator] Writing AGENTS.md / CLAUDE.md for ${formatAgentAddress(agentName)} bytes=${bytes}`
-    );
-  }
+  const { hibossDir } = options ?? {};
 
   // Write to codex_home/AGENTS.md
   const codexHome = getCodexHomePath(agentName, hibossDir);

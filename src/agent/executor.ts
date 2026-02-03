@@ -1,13 +1,6 @@
 /**
  * Agent executor for running agent sessions with the unified agent SDK.
- *
- * Features:
- * - Atomic per-agent queue locks (no concurrent runs for same agent)
- * - Session persistence (reuses sessions until refresh)
- * - Auto-ack of processed envelopes
- * - Auditing via agent_runs table
  */
-
 import { createRuntime } from "@unified-agent-sdk/runtime";
 import type { Agent } from "./types.js";
 import type { HiBossDatabase } from "../daemon/db/database.js";
@@ -18,16 +11,15 @@ import {
 } from "./instruction-generator.js";
 import { buildTurnInput } from "./turn-input.js";
 import { HIBOSS_TOKEN_ENV } from "../shared/env.js";
+import type { EnvelopeSource } from "../envelope/source.js";
 import {
   parseSessionPolicyConfig,
 } from "../shared/session-policy.js";
-import { nowLocalIso } from "../shared/time.js";
-import { orange, red } from "../shared/ansi.js";
-import { formatAgentAddress } from "../adapters/types.js";
 import {
   DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PROVIDER,
 } from "../shared/defaults.js";
+import { errorMessage, logEvent } from "../shared/daemon-log.js";
 import {
   getBossInfo,
   getRefreshReasonForPolicy,
@@ -42,6 +34,33 @@ import {
  * Maximum number of pending envelopes to process in a single turn.
  */
 const MAX_ENVELOPES_PER_TURN = 10;
+export type AgentRunTrigger =
+  | { kind: "daemon-startup" }
+  | { kind: "scheduler"; reason: string }
+  | { kind: "envelope"; source: EnvelopeSource; envelopeId: string }
+  | { kind: "reschedule" };
+
+function getTriggerLabel(trigger: AgentRunTrigger | undefined): string {
+  if (!trigger) return "unknown";
+  switch (trigger.kind) {
+    case "daemon-startup":
+      return "daemon-startup";
+    case "scheduler":
+      return `scheduler:${trigger.reason}`;
+    case "envelope":
+      return `envelope:${trigger.source}`;
+    case "reschedule":
+      return "reschedule";
+  }
+}
+
+function getTriggerFields(trigger: AgentRunTrigger | undefined): Record<string, unknown> {
+  if (!trigger) return { trigger: "unknown" };
+  if (trigger.kind === "envelope") {
+    return { trigger: getTriggerLabel(trigger), "trigger-envelope-id": trigger.envelopeId };
+  }
+  return { trigger: getTriggerLabel(trigger) };
+}
 
 /**
  * Agent executor manages agent sessions and runs.
@@ -50,56 +69,27 @@ export class AgentExecutor {
   private sessions: Map<string, AgentSession> = new Map();
   private agentLocks: Map<string, Promise<void>> = new Map();
   private pendingSessionRefresh: Map<string, SessionRefreshRequest> = new Map();
-  private debug: boolean;
-  private db: HiBossDatabase | null;
   private hibossDir: string;
   private onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
 
   constructor(
     options: {
-      debug?: boolean;
-      db?: HiBossDatabase;
       hibossDir?: string;
       onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
     } = {}
   ) {
-    this.debug = options.debug ?? false;
-    this.db = options.db ?? null;
     this.hibossDir = options.hibossDir ?? getHiBossDir();
     this.onEnvelopesDone = options.onEnvelopesDone;
   }
 
-  /**
-   * Log debug messages.
-   */
-  private log(message: string, options?: { color?: "red" }): void {
-    if (this.debug) {
-      const line = `[${nowLocalIso()}] [AgentExecutor] ${message}`;
-      if (options?.color === "red") {
-        console.log(red(line));
-      } else {
-        console.log(line);
-      }
-    }
-  }
-
-  private logRunUsage(
-    agentName: string,
-    provider: AgentSession["provider"],
-    runId: string,
-    usage: TurnTokenUsage
-  ): void {
-    const line =
-      `[${nowLocalIso()}] [AgentExecutor] Run usage agent=${agentName}` +
-      ` provider=${provider}` +
-      ` run-id=${runId}` +
-      ` context-length=${usage.contextLength ?? "n/a"}` +
-      ` input-tokens=${usage.inputTokens ?? "n/a"}` +
-      ` output-tokens=${usage.outputTokens ?? "n/a"}` +
-      ` cache-read-tokens=${usage.cacheReadTokens ?? "n/a"}` +
-      ` cache-write-tokens=${usage.cacheWriteTokens ?? "n/a"}` +
-      ` total-tokens=${usage.totalTokens ?? "n/a"}`;
-    console.log(orange(line));
+  private countDuePendingEnvelopesForAgent(db: HiBossDatabase, agentName: string): number {
+    const rawDb = (db as any).db as { prepare?: (sql: string) => { get: (...args: any[]) => unknown } };
+    if (!rawDb?.prepare) return 0;
+    const sql =
+      `SELECT COUNT(*) AS count FROM envelopes WHERE "to" = ? AND status = 'pending'` +
+      ` AND (deliver_at IS NULL OR deliver_at <= ?)`;
+    const row = rawDb.prepare(sql).get(`agent:${agentName}`, new Date().toISOString()) as { count: number } | undefined;
+    return row?.count ?? 0;
   }
 
   /**
@@ -125,12 +115,15 @@ export class AgentExecutor {
     queueAgentTask({
       agentLocks: this.agentLocks,
       agentName,
-      log: (message) => this.log(message),
+      log: () => undefined,
       task: async () => {
         await this.applyPendingSessionRefresh(agentName);
       },
     }).catch((err) => {
-      console.error(`[AgentExecutor] queued refresh failed for ${agentName}:`, err);
+      logEvent("error", "agent-session-refresh-queue-failed", {
+        "agent-name": agentName,
+        error: errorMessage(err),
+      });
     });
   }
 
@@ -145,32 +138,11 @@ export class AgentExecutor {
     return pending.reasons;
   }
 
-  private async applyPendingSessionRefresh(agentName: string): Promise<void> {
+  private async applyPendingSessionRefresh(agentName: string): Promise<string[]> {
     const reasons = this.getAndClearPendingRefreshReasons(agentName);
-    if (reasons.length === 0) return;
-
-    this.log(
-      `Applying pending session refresh for ${agentName} reason=${reasons.join(",")}`,
-      { color: "red" }
-    );
+    if (reasons.length === 0) return [];
     await this.refreshSession(agentName);
-
-    // Re-write instruction files for the new session (debug logs only metadata).
-    if (this.debug && this.db) {
-      const agentRecord = this.db.getAgentByName(agentName);
-      if (agentRecord) {
-        const bindings = this.db.getBindingsByAgentName(agentName);
-        const boss = getBossInfo(this.db, bindings);
-        const instructions = generateSystemInstructions({
-          agent: agentRecord,
-          agentToken: agentRecord.token,
-          bindings,
-          hibossDir: this.hibossDir,
-          boss,
-        });
-        await writeInstructionFiles(agentName, instructions, { debug: true, hibossDir: this.hibossDir });
-      }
-    }
+    return reasons;
   }
 
   /**
@@ -179,25 +151,27 @@ export class AgentExecutor {
    * Non-blocking with queue-safe atomic locks per agent.
    * If an agent is already running, waits for completion then runs.
    */
-  async checkAndRun(agent: Agent, db: HiBossDatabase): Promise<void> {
+  async checkAndRun(agent: Agent, db: HiBossDatabase, trigger?: AgentRunTrigger): Promise<void> {
     const agentName = agent.name;
-    console.log(`[${nowLocalIso()}] [AgentExecutor] checkAndRun called for ${formatAgentAddress(agentName)}`);
 
     await queueAgentTask({
       agentLocks: this.agentLocks,
       agentName,
-      log: (message) => this.log(message),
+      log: () => undefined,
       task: async () => {
-        const acknowledged = await this.runAgent(agent, db);
+        const acknowledged = await this.runAgent(agent, db, trigger);
 
         // Self-reschedule if more pending work exists
         if (acknowledged > 0) {
           const pending = db.getPendingEnvelopesForAgent(agent.name, 1);
           if (pending.length > 0) {
-            this.log(`More pending envelopes for ${agent.name}, rescheduling`);
             setImmediate(() => {
-              this.checkAndRun(agent, db).catch((err) => {
-                this.log(`Rescheduled run failed for ${agent.name}: ${err}`);
+              this.checkAndRun(agent, db, { kind: "reschedule" }).catch((err) => {
+                logEvent("error", "agent-check-and-run-failed", {
+                  "agent-name": agent.name,
+                  ...getTriggerFields({ kind: "reschedule" }),
+                  error: errorMessage(err),
+                });
               });
             });
           }
@@ -209,7 +183,7 @@ export class AgentExecutor {
   /**
    * Run the agent with pending envelopes.
    */
-  private async runAgent(agent: Agent, db: HiBossDatabase): Promise<number> {
+  private async runAgent(agent: Agent, db: HiBossDatabase, trigger?: AgentRunTrigger): Promise<number> {
     // Get pending envelopes
     const envelopes = db.getPendingEnvelopesForAgent(
       agent.name,
@@ -217,19 +191,34 @@ export class AgentExecutor {
     );
 
     if (envelopes.length === 0) {
-      this.log(`No pending envelopes for ${agent.name}`);
       return 0;
     }
 
-    this.log(`Running ${agent.name} with ${envelopes.length} envelope(s)`);
+    // Mark envelopes done immediately after read (at-most-once).
+    const envelopeIds = envelopes.map((e) => e.id);
+    db.markEnvelopesDone(envelopeIds);
+
+    if (this.onEnvelopesDone) {
+      try {
+        await this.onEnvelopesDone(envelopeIds, db);
+      } catch (err) {
+        logEvent("error", "agent-on-envelopes-done-failed", {
+          "agent-name": agent.name,
+          error: errorMessage(err),
+        });
+      }
+    }
+
+    const pendingRemainingCount = this.countDuePendingEnvelopesForAgent(db, agent.name);
 
     // Create run record for auditing
-    const envelopeIds = envelopes.map((e) => e.id);
     const run = db.createAgentRun(agent.name, envelopeIds);
+    const triggerFields = getTriggerFields(trigger);
+    let runStartedAtMs: number | null = null;
 
     try {
       // Get or create session
-      const session = await this.getOrCreateSession(agent, db);
+      const session = await this.getOrCreateSession(agent, db, trigger);
 
       // Build turn input
       const turnInput = buildTurnInput({
@@ -240,26 +229,35 @@ export class AgentExecutor {
         envelopes,
       });
 
+      logEvent("info", "agent-run-start", {
+        "agent-name": agent.name,
+        "agent-run-id": run.id,
+        "envelopes-read-count": envelopeIds.length,
+        "pending-remaining-count": pendingRemainingCount,
+        ...triggerFields,
+      });
+      runStartedAtMs = Date.now();
+
       // Execute the turn
       const turn = await this.executeTurn(session, turnInput);
       const response = turn.finalText;
       session.lastRunCompletedAtMs = Date.now();
 
-      // Auto-ack all processed envelopes after successful run
-      db.markEnvelopesDone(envelopeIds);
-
-      if (this.onEnvelopesDone) {
-        try {
-          await this.onEnvelopesDone(envelopeIds, db);
-        } catch (err) {
-          console.error(`[AgentExecutor] onEnvelopesDone failed for ${agent.name}:`, err);
-        }
-      }
-
       // Complete the run record
       db.completeAgentRun(run.id, response);
 
-      this.logRunUsage(agent.name, session.provider, run.id, turn.usage);
+      logEvent("info", "agent-run-complete", {
+        "agent-name": agent.name,
+        "agent-run-id": run.id,
+        state: "success",
+        "duration-ms": runStartedAtMs ? Date.now() - runStartedAtMs : 0,
+        "context-length": turn.usage.contextLength,
+        "input-tokens": turn.usage.inputTokens,
+        "output-tokens": turn.usage.outputTokens,
+        "cache-read-tokens": turn.usage.cacheReadTokens,
+        "cache-write-tokens": turn.usage.cacheWriteTokens,
+        "total-tokens": turn.usage.totalTokens,
+      });
 
       // Context-length refresh: if a run grew the context too large, reset the session for the next run.
       const policy = this.getSessionPolicy(agent);
@@ -268,19 +266,20 @@ export class AgentExecutor {
         turn.usage.contextLength !== null &&
         turn.usage.contextLength > policy.maxContextLength
       ) {
-        this.log(
-          `Refreshing session for ${agent.name} context-length=${turn.usage.contextLength} max-context-length=${policy.maxContextLength}`,
-          { color: "red" }
-        );
         await this.refreshSession(agent.name);
       }
-
-      this.log(`Completed run for ${agent.name}`);
       return envelopeIds.length;
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       db.failAgentRun(run.id, errorMessage);
-      this.log(`Failed run for ${agent.name}: ${errorMessage}`);
+      logEvent("info", "agent-run-complete", {
+        "agent-name": agent.name,
+        "agent-run-id": run.id,
+        state: "failed",
+        "duration-ms": runStartedAtMs ? Date.now() - runStartedAtMs : 0,
+        "context-length": null,
+        error: errorMessage,
+      });
       throw error;
     }
   }
@@ -290,19 +289,22 @@ export class AgentExecutor {
    */
   private async getOrCreateSession(
     agent: Agent,
-    db: HiBossDatabase
+    db: HiBossDatabase,
+    trigger?: AgentRunTrigger
   ): Promise<AgentSession> {
     // Apply any pending refresh request at the first safe point (before a run).
-    await this.applyPendingSessionRefresh(agent.name);
+    const pendingRefreshReasons = await this.applyPendingSessionRefresh(agent.name);
+    const triggerFields = getTriggerFields(trigger);
 
     let session = this.sessions.get(agent.name);
+    let policyRefreshReason: string | null = null;
 
     // Apply policy-based refreshes before starting a new run.
     if (session) {
       const policy = this.getSessionPolicy(agent);
       const reason = getRefreshReasonForPolicy(session, policy, new Date());
       if (reason) {
-        this.log(`Refreshing session for ${agent.name} policy=${reason}`, { color: "red" });
+        policyRefreshReason = reason;
         await this.refreshSession(agent.name);
         session = undefined;
       }
@@ -320,82 +322,107 @@ export class AgentExecutor {
       const workspace = agent.workspace ?? process.cwd();
       const internalSpaceDir = getAgentInternalSpaceDir(agent.name, this.hibossDir);
 
-      // Generate and write instruction files for new session
-      const bindings = db.getBindingsByAgentName(agent.name);
-      const boss = getBossInfo(db, bindings);
-      const instructions = generateSystemInstructions({
-        agent,
-        agentToken: agentRecord.token,
-        bindings,
-        hibossDir: this.hibossDir,
-        boss,
-      });
-      await writeInstructionFiles(agent.name, instructions, { debug: this.debug, hibossDir: this.hibossDir });
+      try {
+        // Generate and write instruction files for new session
+        const bindings = db.getBindingsByAgentName(agent.name);
+        const boss = getBossInfo(db, bindings);
+        const instructions = generateSystemInstructions({
+          agent,
+          agentToken: agentRecord.token,
+          bindings,
+          hibossDir: this.hibossDir,
+          boss,
+        });
+        await writeInstructionFiles(agent.name, instructions, { hibossDir: this.hibossDir });
 
-      // Create runtime with provider-specific configuration
-      const defaultOpts: Record<string, unknown> = {
-        workspace: { cwd: workspace, additionalDirs: [internalSpaceDir, this.hibossDir] },
-        access: { auto: this.mapAccessLevel(agent.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL) },
-      };
-      if (agent.model !== undefined) {
-        defaultOpts.model = agent.model;
-      }
-      if (agent.reasoningEffort !== undefined) {
-        defaultOpts.reasoningEffort = agent.reasoningEffort;
-      }
+        // Create runtime with provider-specific configuration
+        const defaultOpts: Record<string, unknown> = {
+          workspace: { cwd: workspace, additionalDirs: [internalSpaceDir, this.hibossDir] },
+          access: { auto: this.mapAccessLevel(agent.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL) },
+        };
+        if (agent.model !== undefined) {
+          defaultOpts.model = agent.model;
+        }
+        if (agent.reasoningEffort !== undefined) {
+          defaultOpts.reasoningEffort = agent.reasoningEffort;
+        }
 
-      const runtime =
-        provider === "claude"
-          ? createRuntime({
-            provider: "@anthropic-ai/claude-agent-sdk",
-            home: homePath,
-            env: { [HIBOSS_TOKEN_ENV]: agentRecord.token },
-            defaultOpts,
-          })
-          : createRuntime({
-            provider: "@openai/codex-sdk",
-            home: homePath,
-            env: { [HIBOSS_TOKEN_ENV]: agentRecord.token },
-            defaultOpts,
-          });
+        const runtime =
+          provider === "claude"
+            ? createRuntime({
+              provider: "@anthropic-ai/claude-agent-sdk",
+              home: homePath,
+              env: { [HIBOSS_TOKEN_ENV]: agentRecord.token },
+              defaultOpts,
+            })
+            : createRuntime({
+              provider: "@openai/codex-sdk",
+              home: homePath,
+              env: { [HIBOSS_TOKEN_ENV]: agentRecord.token },
+              defaultOpts,
+            });
 
-      // Open a session (instructions are loaded from home directory files)
-      const unifiedSession = await runtime.openSession(
-        provider === "claude"
-          ? {
-            config: {
-              provider: {
-                // Allow the agent to send envelopes via the Hi-Boss CLI without permission prompts.
-                allowedTools: [
-                  // Claude Code often permission-gates Bash at the command-prefix level (e.g. `git diff`).
-                  // Hi-Boss replies are sent via `hiboss envelope send`, so allow the full prefix and a
-                  // couple of best-effort fallbacks for prefix extractors that truncate.
-                  "Bash(hiboss envelope send:*)",
-                  "Bash(hiboss envelope:*)",
-                  "Bash(hiboss:*)",
-                ],
-                // Only use project settings, not user settings from ~/.claude which may conflict
-                // with the agent's CLAUDE_CONFIG_DIR settings (e.g., different ANTHROPIC_BASE_URL).
-                settingSources: ["project", "user"],
+        // Open a session (instructions are loaded from home directory files)
+        const unifiedSession = await runtime.openSession(
+          provider === "claude"
+            ? {
+              config: {
+                provider: {
+                  // Allow the agent to send envelopes via the Hi-Boss CLI without permission prompts.
+                  allowedTools: [
+                    // Claude Code often permission-gates Bash at the command-prefix level (e.g. `git diff`).
+                    // Hi-Boss replies are sent via `hiboss envelope send`, so allow the full prefix and a
+                    // couple of best-effort fallbacks for prefix extractors that truncate.
+                    "Bash(hiboss envelope send:*)",
+                    "Bash(hiboss envelope:*)",
+                    "Bash(hiboss:*)",
+                  ],
+                  // Only use project settings, not user settings from ~/.claude which may conflict
+                  // with the agent's CLAUDE_CONFIG_DIR settings (e.g., different ANTHROPIC_BASE_URL).
+                  settingSources: ["project", "user"],
+                },
               },
-            },
-          }
-          : {}
-      );
+            }
+            : {}
+        );
 
-      session = {
-        runtime,
-        session: unifiedSession,
-        agentToken: agentRecord.token,
-        provider,
-        homePath,
-        createdAtMs: Date.now(),
-      };
-      this.sessions.set(agent.name, session);
+        session = {
+          runtime,
+          session: unifiedSession,
+          agentToken: agentRecord.token,
+          provider,
+          homePath,
+          createdAtMs: Date.now(),
+        };
+        this.sessions.set(agent.name, session);
 
-      this.log(`Created new session for ${agent.name} with provider ${provider}`, { color: "red" });
+        const refreshReasons = [...pendingRefreshReasons, ...(policyRefreshReason ? [policyRefreshReason] : [])];
+        logEvent("info", "agent-session-create", {
+          "agent-name": agent.name,
+          provider,
+          state: "success",
+          ...triggerFields,
+          "refresh-reasons": refreshReasons.length > 0 ? refreshReasons.join(",") : undefined,
+        });
+      } catch (err) {
+        const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
+        logEvent("info", "agent-session-create", {
+          "agent-name": agent.name,
+          provider,
+          state: "failed",
+          ...triggerFields,
+          error: errorMessage(err),
+        });
+        throw err;
+      }
+    } else {
+      logEvent("info", "agent-session-resume", {
+        "agent-name": agent.name,
+        provider: session.provider,
+        state: "success",
+        ...triggerFields,
+      });
     }
-
     return session;
   }
 
@@ -406,16 +433,6 @@ export class AgentExecutor {
     session: AgentSession,
     turnInput: string
   ): Promise<{ finalText: string; usage: TurnTokenUsage }> {
-    this.log(`Executing turn with ${session.provider} provider`);
-
-    // Debug: display turn input
-    if (this.debug) {
-      console.log(`[${nowLocalIso()}] Turn input:`);
-      console.log("─".repeat(60));
-      console.log(turnInput);
-      console.log("─".repeat(60));
-    }
-
     const runHandle = await session.session.run({
       input: { parts: [{ type: "text", text: turnInput }] },
     });
@@ -426,7 +443,6 @@ export class AgentExecutor {
     }
 
     const result = await runHandle.result;
-    this.log("Run completed");
 
     if (result.status !== "success") {
       throw new Error(`Agent run ${result.status}`);
@@ -459,7 +475,6 @@ export class AgentExecutor {
       await session.session.dispose();
       await session.runtime.close();
       this.sessions.delete(agentName);
-      this.log(`Refreshed session for ${agentName}`, { color: "red" });
     }
   }
 
@@ -470,7 +485,6 @@ export class AgentExecutor {
     for (const [agentName, session] of this.sessions) {
       await session.session.dispose();
       await session.runtime.close();
-      this.log(`Closed session for ${agentName}`);
     }
     this.sessions.clear();
     this.agentLocks.clear();
@@ -478,8 +492,6 @@ export class AgentExecutor {
 }
 
 export function createAgentExecutor(options?: {
-  debug?: boolean;
-  db?: HiBossDatabase;
   hibossDir?: string;
   onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
 }): AgentExecutor {

@@ -70,7 +70,7 @@ npm i
 npm run build && npm link
 
 hiboss setup
-hiboss daemon start --debug --token <boss-token>
+hiboss daemon start --token <boss-token>
 hiboss agent register --token <boss-token> --name nex --description "AI assistant" --workspace "$PWD"
 ```
 

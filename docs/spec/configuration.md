@@ -88,10 +88,6 @@ The `--config` JSON fields are persisted as:
 - `telegram.adapter-token` → creates an initial `agent_bindings` row for the first agent
 - `memory.*` → stored in `config.memory_*` keys (model source/path/dims/last error)
 
-### Daemon debug (`hiboss daemon start --debug`)
-
-Debug logging is not persisted; it only affects that daemon run.
-
 ---
 
 ## Persisted Settings (SQLite)

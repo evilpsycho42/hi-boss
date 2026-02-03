@@ -11,7 +11,7 @@ Log behavior:
 - A new empty `~/.hiboss/daemon.log` is created for the new daemon process.
 
 Flags:
-- `--debug` enables verbose logs for inbound/outbound messages
+- (none)
 
 Output (human-oriented):
 - `Daemon started successfully`
@@ -30,7 +30,6 @@ Shows daemon status as parseable keys:
 
 - `running: true|false`
 - `start-time: <iso>|(none)`
-- `debug: enabled|disabled`
 - `adapters: <csv>|(none)`
 - `data-dir: <path>`
 
