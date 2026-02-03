@@ -42,7 +42,7 @@ export function createAgentDeleteHandler(ctx: DaemonContext): RpcMethodRegistry 
 
         // Best-effort: stop routing and close the runtime session before deleting on disk.
         ctx.router.unregisterAgentHandler(agent.name);
-        await ctx.executor.refreshSession(agent.name).catch(() => undefined);
+        await ctx.executor.refreshSession(agent.name, "agent-delete").catch(() => undefined);
 
         // Capture bindings for cleanup (adapter removal) before deleting.
         const bindings = ctx.db.getBindingsByAgentName(agent.name);

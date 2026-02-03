@@ -4,7 +4,9 @@ This document describes how Hi-Boss manages agent sessions.
 
 ## Overview
 
-Hi-Boss uses **ephemeral sessions**: sessions exist only in memory and are not persisted across daemon restarts. This prioritizes envelope delivery guarantees over session continuity.
+Hi-Boss caches sessions **in-memory** for performance, and also persists a **minimal session handle** (thread/session id + metadata) to enable **best-effort resume across daemon restarts** (when the provider supports it).
+
+Envelope delivery remains the priority: if session resume fails (missing/expired session id, provider error, etc), Hi-Boss falls back to starting a fresh session so envelopes still get processed.
 
 ## Session Lifecycle
 
@@ -15,8 +17,9 @@ Sessions are created on-demand when an agent needs to process envelopes:
 1. `AgentExecutor.getOrCreateSession()` checks if a session exists in memory
 2. If not (or if refresh is needed), generates fresh instruction files (AGENTS.md/CLAUDE.md) in the agent home directory (including injected `internal_space/Note.md` snapshot and optional customization files)
 3. Creates a new `UnifiedAgentRuntime` with home path pointing to instruction files
-4. Opens a `UnifiedSession` via `runtime.openSession({})` which loads instructions from home directory
-5. Caches the session in memory by agent name
+4. If the agent has a persisted `sessionHandle` and session policy allows it, attempts `runtime.resumeSession(handle)`
+5. If resume is not possible or fails, opens a new session via `runtime.openSession({})`
+6. Caches the session in memory by agent name
 
 ### Reuse
 
@@ -32,7 +35,7 @@ Sessions are refreshed (disposed and recreated) when:
 | `idleTimeout` | No activity for configured duration (e.g., `"2h"`) |
 | `maxContextLength` | Context length exceeds threshold (evaluated after a successful run; uses `usage.context_length` when present; skipped when missing) |
 | Manual `/new` | User sends `/new` command via Telegram |
-| Daemon restart | All sessions are lost and recreated as needed |
+| Daemon restart | In-memory sessions are lost; Hi-Boss attempts to resume from persisted `sessionHandle` when possible |
 
 ### Disposal
 
@@ -69,6 +72,27 @@ interface AgentSession {
 
 - **Database** (`~/.hiboss/hiboss.db`): Agent metadata, envelope queue, bindings, session policies
 - **Home directories**: Provider configs and instruction files (see [Agents](agent.md#home-directories))
+
+Session resume uses a small record stored in `agents.metadata.sessionHandle`:
+
+```json
+{
+  "version": 1,
+  "provider": "codex",
+  "handle": {
+    "provider": "@openai/codex-sdk",
+    "sessionId": "<thread id>",
+    "metadata": { "...": "..." }
+  },
+  "createdAtMs": 0,
+  "lastRunCompletedAtMs": 0,
+  "updatedAtMs": 0
+}
+```
+
+Notes:
+- The record is updated after successful runs (best-effort).
+- A manual refresh (`/new`) or policy refresh clears the persisted handle so the next run starts fresh.
 
 ## Daemon Restart Recovery
 
@@ -119,5 +143,5 @@ After a successful run completes, the daemon may also refresh the session based 
 
 **Trade-offs:**
 
-- Conversation context is lost on session refresh or daemon restart
+- Conversation context is still lost on session refresh, and daemon restart resume is best-effort (may fall back to fresh session)
 - Agents must rely on envelope history (via CLI) for continuity, not session memory

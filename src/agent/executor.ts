@@ -29,6 +29,7 @@ import {
   type SessionRefreshRequest,
   type TurnTokenUsage,
 } from "./executor-support.js";
+import { readPersistedAgentSession, writePersistedAgentSession } from "./persisted-session.js";
 
 /**
  * Maximum number of pending envelopes to process in a single turn.
@@ -69,15 +70,18 @@ export class AgentExecutor {
   private sessions: Map<string, AgentSession> = new Map();
   private agentLocks: Map<string, Promise<void>> = new Map();
   private pendingSessionRefresh: Map<string, SessionRefreshRequest> = new Map();
+  private db: HiBossDatabase | null;
   private hibossDir: string;
   private onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
 
   constructor(
     options: {
+      db?: HiBossDatabase;
       hibossDir?: string;
       onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
     } = {}
   ) {
+    this.db = options.db ?? null;
     this.hibossDir = options.hibossDir ?? getHiBossDir();
     this.onEnvelopesDone = options.onEnvelopesDone;
   }
@@ -141,7 +145,7 @@ export class AgentExecutor {
   private async applyPendingSessionRefresh(agentName: string): Promise<string[]> {
     const reasons = this.getAndClearPendingRefreshReasons(agentName);
     if (reasons.length === 0) return [];
-    await this.refreshSession(agentName);
+    await this.refreshSession(agentName, reasons.join(","));
     return reasons;
   }
 
@@ -243,6 +247,26 @@ export class AgentExecutor {
       const response = turn.finalText;
       session.lastRunCompletedAtMs = Date.now();
 
+      // Persist session handle for best-effort resume after daemon restart.
+      try {
+        const handle = await session.session.snapshot();
+        if (handle.sessionId) {
+          writePersistedAgentSession(db, agent.name, {
+            version: 1,
+            provider: session.provider,
+            handle,
+            createdAtMs: session.createdAtMs,
+            lastRunCompletedAtMs: session.lastRunCompletedAtMs,
+            updatedAtMs: Date.now(),
+          });
+        }
+      } catch (err) {
+        logEvent("warn", "agent-session-snapshot-failed", {
+          "agent-name": agent.name,
+          error: errorMessage(err),
+        });
+      }
+
       // Complete the run record
       db.completeAgentRun(run.id, response);
 
@@ -266,7 +290,10 @@ export class AgentExecutor {
         turn.usage.contextLength !== null &&
         turn.usage.contextLength > policy.maxContextLength
       ) {
-        await this.refreshSession(agent.name);
+        await this.refreshSession(
+          agent.name,
+          `max-context-length:${turn.usage.contextLength}>${policy.maxContextLength}`
+        );
       }
       return envelopeIds.length;
     } catch (error) {
@@ -362,8 +389,31 @@ export class AgentExecutor {
               defaultOpts,
             });
 
-        // Open a session (instructions are loaded from home directory files)
-        const unifiedSession = await runtime.openSession(
+        let persisted = readPersistedAgentSession(agentRecord);
+        let openMode: "open" | "resume" = "open";
+        let openReason = "no-session-handle";
+
+        if (persisted && persisted.provider !== provider) {
+          openReason = `persisted-provider-mismatch:${persisted.provider}!=${provider}`;
+          writePersistedAgentSession(db, agent.name, null);
+          persisted = null;
+        }
+
+        if (persisted) {
+          const policy = this.getSessionPolicy(agent);
+          const reason = getRefreshReasonForPolicy(
+            { createdAtMs: persisted.createdAtMs, lastRunCompletedAtMs: persisted.lastRunCompletedAtMs } as unknown as AgentSession,
+            policy,
+            new Date()
+          );
+          if (reason) {
+            openReason = `persisted-policy:${reason}`;
+            writePersistedAgentSession(db, agent.name, null);
+            persisted = null;
+          }
+        }
+
+        const openSessionOpts =
           provider === "claude"
             ? {
               config: {
@@ -383,16 +433,49 @@ export class AgentExecutor {
                 },
               },
             }
-            : {}
-        );
+            : {};
+
+        // Open or resume a session (instructions are loaded from home directory files)
+        let unifiedSession: AgentSession["session"];
+        if (persisted?.handle.sessionId && persisted.handle.provider === runtime.provider) {
+          try {
+            unifiedSession = await runtime.resumeSession(persisted.handle);
+            openMode = "resume";
+            openReason = "resume";
+          } catch (err) {
+            logEvent("warn", "agent-session-resume-failed", {
+              "agent-name": agent.name,
+              provider,
+              "session-id": persisted.handle.sessionId,
+              error: errorMessage(err),
+            });
+            openReason = "resume-failed";
+            writePersistedAgentSession(db, agent.name, null);
+            persisted = null;
+            unifiedSession = await runtime.openSession(openSessionOpts as any);
+          }
+        } else {
+          if (persisted?.handle.sessionId && persisted.handle.provider !== runtime.provider) {
+            openReason = "session-handle-provider-mismatch";
+            writePersistedAgentSession(db, agent.name, null);
+            persisted = null;
+          } else if (persisted && !persisted.handle.sessionId) {
+            openReason = "missing-session-id";
+            writePersistedAgentSession(db, agent.name, null);
+            persisted = null;
+          }
+
+          unifiedSession = await runtime.openSession(openSessionOpts as any);
+        }
 
         session = {
           runtime,
-          session: unifiedSession,
+          session: unifiedSession!,
           agentToken: agentRecord.token,
           provider,
           homePath,
-          createdAtMs: Date.now(),
+          createdAtMs: persisted?.createdAtMs ?? Date.now(),
+          ...(persisted?.lastRunCompletedAtMs ? { lastRunCompletedAtMs: persisted.lastRunCompletedAtMs } : {}),
         };
         this.sessions.set(agent.name, session);
 
@@ -402,6 +485,8 @@ export class AgentExecutor {
           provider,
           state: "success",
           ...triggerFields,
+          "open-mode": openMode,
+          "open-reason": openReason,
           "refresh-reasons": refreshReasons.length > 0 ? refreshReasons.join(",") : undefined,
         });
       } catch (err) {
@@ -465,9 +550,21 @@ export class AgentExecutor {
    *
    * Clears the existing session so a new one will be created on next run.
    */
-  async refreshSession(agentName: string): Promise<void> {
+  async refreshSession(agentName: string, reason?: string): Promise<void> {
     // If a refresh is requested (or just happened), clear any pending flags to avoid duplicate refreshes.
     this.pendingSessionRefresh.delete(agentName);
+
+    if (this.db) {
+      try {
+        writePersistedAgentSession(this.db, agentName, null);
+      } catch (err) {
+        logEvent("warn", "agent-session-handle-clear-failed", {
+          "agent-name": agentName,
+          reason,
+          error: errorMessage(err),
+        });
+      }
+    }
 
     const session = this.sessions.get(agentName);
     if (session) {
@@ -476,6 +573,12 @@ export class AgentExecutor {
       await session.runtime.close();
       this.sessions.delete(agentName);
     }
+
+    logEvent("info", "agent-session-refresh", {
+      "agent-name": agentName,
+      reason,
+      state: "success",
+    });
   }
 
   /**
@@ -492,6 +595,7 @@ export class AgentExecutor {
 }
 
 export function createAgentExecutor(options?: {
+  db?: HiBossDatabase;
   hibossDir?: string;
   onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
 }): AgentExecutor {

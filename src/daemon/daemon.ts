@@ -102,6 +102,7 @@ export class Daemon {
     });
     this.bridge = new ChannelBridge(this.router, this.db, config);
     this.executor = createAgentExecutor({
+      db: this.db,
       hibossDir: config.dataDir,
       onEnvelopesDone: (envelopeIds) => this.cronScheduler?.onEnvelopesDone(envelopeIds),
     });
