@@ -55,6 +55,7 @@ The Telegram adapter connects Hi-Boss to Telegram bots, enabling agents to commu
 
 - **Incoming media groups (albums)**: When users send multiple images/videos together, Telegram delivers each as a separate message. Only the first message contains the caption. These are currently emitted as independent messages (not grouped).
 - **Outgoing media groups (albums)**: When an agent sends 2+ compatible attachments (photos/videos, or same-type documents/audios), Hi-Boss sends them via `sendMediaGroup` so they render as a single album in Telegram.
+- **Outgoing captions**: Telegram captions are limited to 1024 characters. If an outgoing envelope includes attachments and text longer than that, Hi-Boss sends the text as a separate message and sends the attachments without a caption.
 
 ## Address Format
 

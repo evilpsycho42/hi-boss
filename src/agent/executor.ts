@@ -1,12 +1,4 @@
-/**
- * Agent executor for running agent sessions with the unified agent SDK.
- *
- * Features:
- * - Atomic per-agent queue locks (no concurrent runs for same agent)
- * - Session persistence (reuses sessions until refresh)
- * - Auto-ack of processed envelopes
- * - Auditing via agent_runs table
- */
+/** Agent executor for running agent sessions with the unified agent SDK. */
 
 import { createRuntime } from "@unified-agent-sdk/runtime";
 import type { Agent } from "./types.js";
@@ -37,15 +29,11 @@ import {
   type SessionRefreshRequest,
   type TurnTokenUsage,
 } from "./executor-support.js";
+import { readPersistedAgentSession, writePersistedAgentSession } from "./persisted-session.js";
 
-/**
- * Maximum number of pending envelopes to process in a single turn.
- */
+// Maximum number of pending envelopes to process in a single turn.
 const MAX_ENVELOPES_PER_TURN = 10;
 
-/**
- * Agent executor manages agent sessions and runs.
- */
 export class AgentExecutor {
   private sessions: Map<string, AgentSession> = new Map();
   private agentLocks: Map<string, Promise<void>> = new Map();
@@ -69,18 +57,14 @@ export class AgentExecutor {
     this.onEnvelopesDone = options.onEnvelopesDone;
   }
 
-  /**
-   * Log debug messages.
-   */
-  private log(message: string, options?: { color?: "red" }): void {
-    if (this.debug) {
-      const line = `[${nowLocalIso()}] [AgentExecutor] ${message}`;
-      if (options?.color === "red") {
-        console.log(red(line));
-      } else {
-        console.log(line);
-      }
-    }
+  private log(message: string, options?: { color?: "red"; always?: boolean; level?: "log" | "warn" | "error" }): void {
+    if (!this.debug && !options?.always) return;
+    const line = `[${nowLocalIso()}] [AgentExecutor] ${message}`;
+    const formatted = options?.color === "red" ? red(line) : line;
+    const level = options?.level ?? "log";
+    if (level === "warn") console.warn(formatted);
+    else if (level === "error") console.error(formatted);
+    else console.log(formatted);
   }
 
   private logRunUsage(
@@ -102,14 +86,7 @@ export class AgentExecutor {
     console.log(orange(line));
   }
 
-  /**
-   * Request a session refresh for an agent.
-   *
-   * Safe to call at any time (including during a run). The refresh will be applied
-   * at the next safe point (before the next run, or after the current queue drains).
-   *
-   * Non-blocking: callers should not await this for interactive UX (e.g., Telegram /new).
-   */
+  // Request a session refresh for an agent (applied at next safe point).
   requestSessionRefresh(agentName: string, reason: string): void {
     const existing = this.pendingSessionRefresh.get(agentName);
     if (existing) {
@@ -148,12 +125,7 @@ export class AgentExecutor {
   private async applyPendingSessionRefresh(agentName: string): Promise<void> {
     const reasons = this.getAndClearPendingRefreshReasons(agentName);
     if (reasons.length === 0) return;
-
-    this.log(
-      `Applying pending session refresh for ${agentName} reason=${reasons.join(",")}`,
-      { color: "red" }
-    );
-    await this.refreshSession(agentName);
+    await this.refreshSession(agentName, reasons.join(","));
 
     // Re-write instruction files for the new session (debug logs only metadata).
     if (this.debug && this.db) {
@@ -173,12 +145,6 @@ export class AgentExecutor {
     }
   }
 
-  /**
-   * Check and run agent if pending envelopes exist.
-   *
-   * Non-blocking with queue-safe atomic locks per agent.
-   * If an agent is already running, waits for completion then runs.
-   */
   async checkAndRun(agent: Agent, db: HiBossDatabase): Promise<void> {
     const agentName = agent.name;
     console.log(`[${nowLocalIso()}] [AgentExecutor] checkAndRun called for ${formatAgentAddress(agentName)}`);
@@ -206,9 +172,6 @@ export class AgentExecutor {
     });
   }
 
-  /**
-   * Run the agent with pending envelopes.
-   */
   private async runAgent(agent: Agent, db: HiBossDatabase): Promise<number> {
     // Get pending envelopes
     const envelopes = db.getPendingEnvelopesForAgent(
@@ -259,6 +222,23 @@ export class AgentExecutor {
       // Complete the run record
       db.completeAgentRun(run.id, response);
 
+      // Persist session handle for resume after daemon restart (best-effort).
+      try {
+        const handle = await session.session.snapshot();
+        if (handle.sessionId) {
+          writePersistedAgentSession(db, agent.name, {
+            version: 1,
+            provider: session.provider,
+            handle,
+            createdAtMs: session.createdAtMs,
+            lastRunCompletedAtMs: session.lastRunCompletedAtMs,
+            updatedAtMs: Date.now(),
+          });
+        }
+      } catch (err) {
+        console.error(`[AgentExecutor] snapshot failed for ${agent.name}:`, err);
+      }
+
       this.logRunUsage(agent.name, session.provider, run.id, turn.usage);
 
       // Context-length refresh: if a run grew the context too large, reset the session for the next run.
@@ -268,11 +248,7 @@ export class AgentExecutor {
         turn.usage.contextLength !== null &&
         turn.usage.contextLength > policy.maxContextLength
       ) {
-        this.log(
-          `Refreshing session for ${agent.name} context-length=${turn.usage.contextLength} max-context-length=${policy.maxContextLength}`,
-          { color: "red" }
-        );
-        await this.refreshSession(agent.name);
+        await this.refreshSession(agent.name, `max-context-length:${turn.usage.contextLength}>${policy.maxContextLength}`);
       }
 
       this.log(`Completed run for ${agent.name}`);
@@ -285,13 +261,7 @@ export class AgentExecutor {
     }
   }
 
-  /**
-   * Get or create a session for an agent.
-   */
-  private async getOrCreateSession(
-    agent: Agent,
-    db: HiBossDatabase
-  ): Promise<AgentSession> {
+  private async getOrCreateSession(agent: Agent, db: HiBossDatabase): Promise<AgentSession> {
     // Apply any pending refresh request at the first safe point (before a run).
     await this.applyPendingSessionRefresh(agent.name);
 
@@ -302,8 +272,7 @@ export class AgentExecutor {
       const policy = this.getSessionPolicy(agent);
       const reason = getRefreshReasonForPolicy(session, policy, new Date());
       if (reason) {
-        this.log(`Refreshing session for ${agent.name} policy=${reason}`, { color: "red" });
-        await this.refreshSession(agent.name);
+        await this.refreshSession(agent.name, `policy:${reason}`);
         session = undefined;
       }
     }
@@ -359,29 +328,69 @@ export class AgentExecutor {
             defaultOpts,
           });
 
-      // Open a session (instructions are loaded from home directory files)
-      const unifiedSession = await runtime.openSession(
+      let persisted = readPersistedAgentSession(agentRecord);
+      let openReason = "no-session-handle";
+      if (persisted && persisted.provider !== provider) {
+        openReason = `persisted-provider-mismatch:${persisted.provider}!=${provider}`;
+        writePersistedAgentSession(db, agent.name, null);
+        persisted = null;
+      }
+      if (persisted) {
+        const reason = getRefreshReasonForPolicy(
+          { createdAtMs: persisted.createdAtMs, lastRunCompletedAtMs: persisted.lastRunCompletedAtMs } as unknown as AgentSession,
+          this.getSessionPolicy(agent),
+          new Date()
+        );
+        if (reason) {
+          openReason = `persisted-policy:${reason}`;
+          writePersistedAgentSession(db, agent.name, null);
+          persisted = null;
+        }
+      }
+
+      const openSessionOpts =
         provider === "claude"
           ? {
             config: {
               provider: {
-                // Allow the agent to send envelopes via the Hi-Boss CLI without permission prompts.
-                allowedTools: [
-                  // Claude Code often permission-gates Bash at the command-prefix level (e.g. `git diff`).
-                  // Hi-Boss replies are sent via `hiboss envelope send`, so allow the full prefix and a
-                  // couple of best-effort fallbacks for prefix extractors that truncate.
-                  "Bash(hiboss envelope send:*)",
-                  "Bash(hiboss envelope:*)",
-                  "Bash(hiboss:*)",
-                ],
-                // Only use project settings, not user settings from ~/.claude which may conflict
-                // with the agent's CLAUDE_CONFIG_DIR settings (e.g., different ANTHROPIC_BASE_URL).
+                allowedTools: ["Bash(hiboss envelope send:*)", "Bash(hiboss envelope:*)", "Bash(hiboss:*)"],
                 settingSources: ["project", "user"],
               },
             },
           }
-          : {}
-      );
+          : {};
+
+      let unifiedSession: AgentSession["session"];
+      if (persisted?.handle.sessionId && persisted.handle.provider === runtime.provider) {
+        const sessionId = persisted.handle.sessionId;
+        try {
+          unifiedSession = await runtime.resumeSession(persisted.handle);
+          this.log(`Session resumed for ${formatAgentAddress(agent.name)} session-id=${sessionId}`, { always: true });
+        } catch (err) {
+          console.warn(
+            `[${nowLocalIso()}] [AgentExecutor] Session resume failed for ${formatAgentAddress(agent.name)} session-id=${sessionId}; starting fresh:`,
+            err
+          );
+          openReason = "resume-failed";
+          writePersistedAgentSession(db, agent.name, null);
+          persisted = null;
+          unifiedSession = await runtime.openSession(openSessionOpts as any);
+          this.log(`Session opened for ${formatAgentAddress(agent.name)} provider=${provider} reason=${openReason}`, { always: true });
+        }
+      } else {
+        if (persisted?.handle.sessionId && persisted.handle.provider !== runtime.provider) {
+          openReason = "session-handle-provider-mismatch";
+          writePersistedAgentSession(db, agent.name, null);
+          persisted = null;
+        } else if (persisted && !persisted.handle.sessionId) {
+          openReason = "missing-session-id";
+          writePersistedAgentSession(db, agent.name, null);
+          persisted = null;
+        }
+
+        unifiedSession = await runtime.openSession(openSessionOpts as any);
+        this.log(`Session opened for ${formatAgentAddress(agent.name)} provider=${provider} reason=${openReason}`, { always: true });
+      }
 
       session = {
         runtime,
@@ -389,19 +398,15 @@ export class AgentExecutor {
         agentToken: agentRecord.token,
         provider,
         homePath,
-        createdAtMs: Date.now(),
+        createdAtMs: persisted?.createdAtMs ?? Date.now(),
+        ...(persisted?.lastRunCompletedAtMs ? { lastRunCompletedAtMs: persisted.lastRunCompletedAtMs } : {}),
       };
       this.sessions.set(agent.name, session);
-
-      this.log(`Created new session for ${agent.name} with provider ${provider}`, { color: "red" });
     }
 
     return session;
   }
 
-  /**
-   * Execute a turn using the agent SDK.
-   */
   private async executeTurn(
     session: AgentSession,
     turnInput: string
@@ -436,22 +441,23 @@ export class AgentExecutor {
     return { finalText: result.finalText ?? "", usage };
   }
 
-  /**
-   * Map auto level to SDK access level.
-   */
   private mapAccessLevel(autoLevel: "medium" | "high"): "medium" | "high" {
     // Direct mapping - SDK uses same values
     return autoLevel;
   }
 
-  /**
-   * Refresh session for an agent (called by /new command).
-   *
-   * Clears the existing session so a new one will be created on next run.
-   */
-  async refreshSession(agentName: string): Promise<void> {
+  async refreshSession(agentName: string, reason?: string): Promise<void> {
     // If a refresh is requested (or just happened), clear any pending flags to avoid duplicate refreshes.
     this.pendingSessionRefresh.delete(agentName);
+    this.log(`Session refresh for ${formatAgentAddress(agentName)}${reason ? ` reason=${reason}` : ""}`, { always: true, color: "red" });
+
+    if (this.db) {
+      try {
+        writePersistedAgentSession(this.db, agentName, null);
+      } catch (err) {
+        console.error(`[AgentExecutor] Failed to clear persisted session for ${agentName}:`, err);
+      }
+    }
 
     const session = this.sessions.get(agentName);
     if (session) {
@@ -459,13 +465,9 @@ export class AgentExecutor {
       await session.session.dispose();
       await session.runtime.close();
       this.sessions.delete(agentName);
-      this.log(`Refreshed session for ${agentName}`, { color: "red" });
     }
   }
 
-  /**
-   * Close all sessions on shutdown.
-   */
   async closeAll(): Promise<void> {
     for (const [agentName, session] of this.sessions) {
       await session.session.dispose();

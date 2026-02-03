@@ -207,33 +207,38 @@ export class Daemon {
    * Create the DaemonContext for RPC handlers.
    */
   private createContext(): DaemonContext {
+    const daemon = this;
     return {
-      db: this.db,
-      router: this.router,
-      executor: this.executor,
-      scheduler: this.scheduler,
-      cronScheduler: this.cronScheduler,
-      adapters: this.adapters,
-      config: this.config,
-      running: this.running,
-      startTime: this.startTime,
-
-      resolvePrincipal: (token) => this.resolvePrincipal(token),
-      assertOperationAllowed: (op, principal) => this.assertOperationAllowed(op, principal),
-      getPermissionPolicy: () => this.getPermissionPolicy(),
-
-      ensureMemoryService: () => this.ensureMemoryService(),
-      getMemoryDisabledMessage: () => this.getMemoryDisabledMessage(),
-      writeMemoryConfigToDb: (m) => this.writeMemoryConfigToDb(m),
-      closeMemoryService: async () => {
-        await this.memoryService?.close().catch(() => undefined);
-        this.memoryService = null;
+      db: daemon.db,
+      router: daemon.router,
+      executor: daemon.executor,
+      scheduler: daemon.scheduler,
+      cronScheduler: daemon.cronScheduler,
+      adapters: daemon.adapters,
+      config: daemon.config,
+      get running() {
+        return daemon.running;
+      },
+      get startTime() {
+        return daemon.startTime;
       },
 
-      createAdapterForBinding: (type, token) => this.createAdapterForBinding(type, token),
-      removeAdapter: (token) => this.removeAdapter(token),
+      resolvePrincipal: (token) => daemon.resolvePrincipal(token),
+      assertOperationAllowed: (op, principal) => daemon.assertOperationAllowed(op, principal),
+      getPermissionPolicy: () => daemon.getPermissionPolicy(),
 
-      registerAgentHandler: (name) => this.registerSingleAgentHandler(name),
+      ensureMemoryService: () => daemon.ensureMemoryService(),
+      getMemoryDisabledMessage: () => daemon.getMemoryDisabledMessage(),
+      writeMemoryConfigToDb: (m) => daemon.writeMemoryConfigToDb(m),
+      closeMemoryService: async () => {
+        await daemon.memoryService?.close().catch(() => undefined);
+        daemon.memoryService = null;
+      },
+
+      createAdapterForBinding: (type, token) => daemon.createAdapterForBinding(type, token),
+      removeAdapter: (token) => daemon.removeAdapter(token),
+
+      registerAgentHandler: (name) => daemon.registerSingleAgentHandler(name),
     };
   }
 
