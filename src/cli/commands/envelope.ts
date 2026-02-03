@@ -26,8 +26,9 @@ export interface SendEnvelopeOptions {
 
 export interface ListEnvelopesOptions {
   token?: string;
-  box?: "inbox" | "outbox";
-  status?: "pending" | "done";
+  to?: string;
+  from?: string;
+  status: "pending" | "done";
   limit?: number;
 }
 
@@ -119,10 +120,20 @@ export async function listEnvelopes(options: ListEnvelopesOptions): Promise<void
 
   try {
     const token = resolveToken(options.token);
+    const hasTo = typeof options.to === "string" && options.to.trim();
+    const hasFrom = typeof options.from === "string" && options.from.trim();
+    if ((hasTo && hasFrom) || (!hasTo && !hasFrom)) {
+      throw new Error("Provide exactly one of --to or --from");
+    }
+
+    if (!options.status) {
+      throw new Error("Missing --status (pending or done)");
+    }
 
     const result = await client.call<ListEnvelopesResult>("envelope.list", {
       token,
-      box: options.box,
+      to: options.to,
+      from: options.from,
       status: options.status,
       limit: options.limit,
     });

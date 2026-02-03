@@ -410,6 +410,7 @@ export function buildCliEnvelopePromptContext(params: {
       id: env.id,
       from: env.from,
       to: env.to,
+      status: env.status,
       fromName: semantic?.fromName ?? "",
       fromBoss: env.fromBoss,
       isGroup: semantic?.isGroup ?? false,

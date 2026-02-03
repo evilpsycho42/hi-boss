@@ -34,7 +34,7 @@ Default permission:
 
 ## `hiboss envelope list`
 
-Lists envelopes (defaults: `--box inbox`).
+Lists envelopes relevant to the authenticated agent.
 
 Empty output:
 
@@ -45,16 +45,20 @@ no-envelopes: true
 Rendering (default):
 - Prints one envelope instruction per envelope, separated by a blank line.
 - Each envelope is formatted by `formatEnvelopeInstruction()` using `prompts/envelope/instruction.md`.
+- Envelope instructions include `status: pending|done` in the header so agents can avoid reprocessing already-handled items.
 
 Notes:
-- Envelopes are marked `done` automatically by the daemon after successful delivery (channels) or a successful agent run (agents).
-- `hiboss envelope list` lists envelopes for the authenticated **agent** address (`agent:<name>`).
+- Envelopes are marked `done` automatically by the daemon after successful delivery (channels) or immediately after being read for an agent run (agents, at-most-once).
+- `hiboss envelope list` only lists envelopes where the authenticated agent is either the sender (`from: agent:<name>`) or the recipient (`to: agent:<name>`).
+- Listing with `--from <address> --status pending` is treated as a work-queue read: the daemon immediately acknowledges the returned envelopes (marks them `done`, at-most-once) so they won’t be reprocessed.
 - Boss tokens cannot list envelopes (use an agent token).
 
 Flags:
-- `--box inbox|outbox`
-- `--status pending|done`
-- `-n, --limit <n>`
+- Exactly one of:
+  - `--to <address>`: list envelopes sent **by this agent** to `<address>`
+  - `--from <address>`: list envelopes sent **to this agent** from `<address>`
+- `--status <pending|done>` (required)
+- `-n, --limit <n>` (default: `10`, max: `50`)
 
 Default permission:
 - `restricted`

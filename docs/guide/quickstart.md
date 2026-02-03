@@ -31,7 +31,7 @@ hiboss envelope send --to agent:nex --token <agent-token> --text "hello"
 ## 4) See pending messages (inbox)
 
 ```bash
-hiboss envelope list --token <agent-token> --box inbox --status pending -n 10
+hiboss envelope list --token <agent-token> --from channel:telegram:<chat-id> --status pending -n 10
 ```
 
 ## Next

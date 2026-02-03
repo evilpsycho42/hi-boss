@@ -65,8 +65,9 @@ export interface EnvelopeSendParams {
 
 export interface EnvelopeListParams {
   token: string;
-  box?: "inbox" | "outbox";
-  status?: "pending" | "done";
+  to?: string;
+  from?: string;
+  status: "pending" | "done";
   limit?: number;
 }
 

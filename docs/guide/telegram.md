@@ -26,7 +26,7 @@ Send a message to your bot in Telegram. Hi-Boss will route it to the bound agent
 To reply to a chat from the CLI, use the `from:` address shown by:
 
 ```bash
-hiboss envelope list --token <agent-token> --box inbox --status pending -n 10
+hiboss envelope list --token <agent-token> --from channel:telegram:<chat-id> --status pending -n 10
 ```
 
 You’ll see an address like:

@@ -16,6 +16,7 @@ Hi-Boss supplies fields as template variables (see `prompts/VARIABLES.md`).
 | Field | Shown | Description |
 |-------|-------|-------------|
 | `from` | Always | Raw address for routing (use with `--to` when replying) |
+| `status` | Always | Envelope status (`pending` or `done`) |
 | `from-name` | Only for channel messages | Group name or author name (for direct messages) |
 | `channel-message-id` | Only for channel messages | Platform message id (Telegram uses compact base36, no prefix; use with `hiboss envelope send --reply-to ...` and `hiboss reaction set --channel-message-id ...`) |
 | `created-at` | Only for direct/agent messages | Timestamp (group messages show per-message timestamps) |
@@ -35,6 +36,7 @@ Attachment format: `- [type] filename (source)` where type is `image`, `audio`, 
 
 ```
 from: channel:telegram:6447779930
+status: pending
 from-name: group "hiboss-test"
 channel-message-id: zik0zj
 
@@ -53,6 +55,7 @@ attachments:
 
 ```
 from: channel:telegram:6447779930
+status: pending
 from-name: Kevin (@kky1024) [boss]
 channel-message-id: zik0zi
 created-at: 2026-01-28T20:08:45+08:00
@@ -68,6 +71,7 @@ Note: Direct messages use the original format since there's no group and only on
 
 ```
 from: agent:scheduler
+status: pending
 created-at: 2026-01-28T20:08:45+08:00
 text:
 Time to run the daily backup.

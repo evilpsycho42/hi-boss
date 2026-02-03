@@ -57,6 +57,7 @@ Command flags:
 
 **Header keys**
 - `from:` (always; raw address)
+- `status:` (always; `pending|done`)
 - `from-name:` (only for channel messages; group name or author name with `[boss]` suffix for direct)
 - `channel-message-id:` (only for channel messages; platform message id. For Telegram, rendered in compact base36 (no prefix); accepted by `--reply-to` and `hiboss reaction set --channel-message-id` using the displayed value. Raw decimal can be passed as `dec:<id>`.)
 - `created-at:` (only for direct/agent messages; group messages show per-message timestamps)

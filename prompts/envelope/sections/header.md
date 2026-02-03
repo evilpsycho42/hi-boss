@@ -1,4 +1,5 @@
 from: {{ envelope.from }}
+status: {{ envelope.status }}
 {% if envelope.fromName %}
 from-name: {{ envelope.fromName }}
 {% endif %}

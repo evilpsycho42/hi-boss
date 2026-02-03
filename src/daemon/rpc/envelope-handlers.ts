@@ -12,7 +12,6 @@ import type { DaemonContext } from "./context.js";
 import { requireToken, rpcError } from "./context.js";
 import { formatAgentAddress, parseAddress } from "../../adapters/types.js";
 import { parseDateTimeInputToUtcIso } from "../../shared/time.js";
-import { DEFAULT_ENVELOPE_LIST_BOX } from "../../shared/defaults.js";
 
 /**
  * Create envelope RPC handlers.
@@ -169,14 +168,59 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
     }
 
     ctx.db.updateAgentLastSeen(principal.agent.name);
-    const address = formatAgentAddress(principal.agent.name);
+    const agentAddress = formatAgentAddress(principal.agent.name);
 
-    const envelopes = ctx.db.listEnvelopes({
-      address,
-      box: p.box ?? DEFAULT_ENVELOPE_LIST_BOX,
+    const rawTo = typeof p.to === "string" ? p.to.trim() : "";
+    const rawFrom = typeof p.from === "string" ? p.from.trim() : "";
+    if ((rawTo && rawFrom) || (!rawTo && !rawFrom)) {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, "Provide exactly one of: to, from");
+    }
+
+    if (p.status !== "pending" && p.status !== "done") {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid status (expected pending or done)");
+    }
+
+    let otherAddress: string;
+    try {
+      otherAddress = rawTo || rawFrom;
+      parseAddress(otherAddress);
+    } catch (err) {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, err instanceof Error ? err.message : "Invalid address");
+    }
+
+    const limit = (() => {
+      const v = p.limit;
+      if (v === undefined || v === null) return 10;
+      if (typeof v !== "number" || !Number.isFinite(v)) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid limit");
+      }
+      const n = Math.trunc(v);
+      if (n <= 0) rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid limit (must be >= 1)");
+      if (n > 50) rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid limit (max 50)");
+      return n;
+    })();
+
+    const isIncoming = Boolean(rawFrom);
+    const shouldAckIncomingPending = isIncoming && p.status === "pending";
+
+    const from = isIncoming ? otherAddress : agentAddress;
+    const to = isIncoming ? agentAddress : otherAddress;
+
+    const envelopes = ctx.db.listEnvelopesByRoute({
+      from,
+      to,
       status: p.status,
-      limit: p.limit,
+      limit,
+      dueOnly: shouldAckIncomingPending,
     });
+
+    if (shouldAckIncomingPending && envelopes.length > 0) {
+      const ids = envelopes.map((e) => e.id);
+      ctx.db.markEnvelopesDone(ids);
+      for (const env of envelopes) {
+        env.status = "done";
+      }
+    }
 
     return { envelopes };
   };

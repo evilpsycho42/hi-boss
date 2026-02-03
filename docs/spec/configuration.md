@@ -60,7 +60,7 @@ Example:
 
 ```bash
 export HIBOSS_TOKEN="<agent-token>"
-hiboss envelope list --box inbox --status pending
+hiboss envelope list --from channel:telegram:<chat-id> --status pending
 ```
 
 ---

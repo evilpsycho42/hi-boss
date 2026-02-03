@@ -80,7 +80,7 @@ To validate that agents can actually use the Hi-Boss envelope system end-to-end 
 2) Run `hiboss setup --config-file ...` using a known-good template (see `scripts/test-auto-level/`)
 3) Start the daemon
 4) Send a boss-marked envelope that instructs a `high` and a `medium` agent to send to a non-existent sink address (e.g., `agent:test-sink`)
-5) Verify each sender's outbox contains the expected `pong` messages via `hiboss envelope list --box outbox`
+5) Verify each sender's outbox contains the expected `pong` messages via `hiboss envelope list --to agent:test-sink --status done`
 
 This test incurs real provider usage (cost). See `scripts/test-auto-level/README.md` for the exact repeatable command sequence.
 

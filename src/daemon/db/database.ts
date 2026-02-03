@@ -544,8 +544,9 @@ export class HiBossDatabase {
     box: "inbox" | "outbox";
     status?: EnvelopeStatus;
     limit?: number;
+    dueOnly?: boolean;
   }): Envelope[] {
-    const { address, box, status, limit } = options;
+    const { address, box, status, limit, dueOnly } = options;
     const column = box === "inbox" ? '"to"' : '"from"';
 
     let sql = `SELECT * FROM envelopes WHERE ${column} = ?`;
@@ -556,12 +557,50 @@ export class HiBossDatabase {
       params.push(status);
     }
 
+    if (dueOnly) {
+      const nowIso = new Date().toISOString();
+      sql += " AND (deliver_at IS NULL OR deliver_at <= ?)";
+      params.push(nowIso);
+    }
+
     sql += " ORDER BY created_at DESC";
 
     if (limit) {
       sql += " LIMIT ?";
       params.push(limit);
     }
+
+    const stmt = this.db.prepare(sql);
+    const rows = stmt.all(...params) as EnvelopeRow[];
+    return rows.map((row) => this.rowToEnvelope(row));
+  }
+
+  /**
+   * List envelopes matching an exact from/to route.
+   *
+   * Used by `hiboss envelope list --to/--from` to fetch conversation slices
+   * relevant to the authenticated agent.
+   */
+  listEnvelopesByRoute(options: {
+    from: string;
+    to: string;
+    status: EnvelopeStatus;
+    limit: number;
+    dueOnly?: boolean;
+  }): Envelope[] {
+    const { from, to, status, limit, dueOnly } = options;
+
+    let sql = `SELECT * FROM envelopes WHERE "from" = ? AND "to" = ? AND status = ?`;
+    const params: (string | number)[] = [from, to, status];
+
+    if (dueOnly) {
+      const nowIso = new Date().toISOString();
+      sql += " AND (deliver_at IS NULL OR deliver_at <= ?)";
+      params.push(nowIso);
+    }
+
+    sql += " ORDER BY created_at DESC LIMIT ?";
+    params.push(limit);
 
     const stmt = this.db.prepare(sql);
     const rows = stmt.all(...params) as EnvelopeRow[];

@@ -56,6 +56,7 @@ New envelopes are stored as `status = pending`.
 ### When does an envelope become `done`?
 
 - **To an agent**: the daemon marks the envelope `done` immediately after it is read for an agent run (`src/agent/executor.ts`). This is **at-most-once**: if the agent run fails, the envelope will not be retried.
+- **To an agent (manual read)**: `hiboss envelope list --from <address> --status pending` is also treated as a read; listed envelopes are immediately marked `done` (at-most-once).
 - **To a channel**: the daemon marks the envelope as `done` after a successful adapter send (`src/daemon/router/message-router.ts`).
 
 If delivery to a **channel** fails, the envelope remains `pending` and will be retried by later triggers (new activity, scheduler tick, daemon restart recovery). If an **agent run** fails, already-read envelopes stay `done` (no retry).
@@ -81,7 +82,7 @@ hiboss envelope send --to agent:nex --token <agent-token> --text "reminder" --de
 List pending inbox:
 
 ```bash
-hiboss envelope list --token <agent-token> --box inbox --status pending --limit 10
+hiboss envelope list --token <agent-token> --from channel:telegram:<chat-id> --status pending --limit 10
 ```
 
 Notes:

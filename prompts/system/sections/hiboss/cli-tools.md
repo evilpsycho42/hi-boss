@@ -135,9 +135,21 @@ Notes:
 #### Listing Messages
 
 ```bash
-hiboss envelope list
-hiboss envelope list --box outbox
+# Incoming messages from an address (to you). When status=pending, this ACKs (marks done) what it returns.
+hiboss envelope list --from <address> --status pending
+
+# History: list done envelopes in each direction (run both if you need full context).
+hiboss envelope list --from <address> --status done -n 10
+hiboss envelope list --to <address> --status done -n 10
+
+# Outgoing pending (e.g., scheduled or retrying deliveries)
+hiboss envelope list --to <address> --status pending -n 10
 ```
+
+Notes:
+- `-n` is an alias for `--limit`
+- Default: `-n 10` when omitted
+- Max: `-n 50` (values must be `1..50`)
 
 #### Listing Agents
 
@@ -174,6 +186,8 @@ hiboss agent set --name <agent> --unbind-adapter-type <adapter-type>
 ### Guidelines
 
 1. Process all pending messages in your inbox
-2. Reply to messages appropriately using the `hiboss` CLI
-3. Respect the `from-boss` marker (`[boss]`) — messages from boss may have higher priority
-4. Use your workspace for file operations when needed
+2. The daemon already gathers pending envelopes into your turn input, so you usually do **not** need to run `hiboss envelope list` manually
+3. Use `hiboss envelope list --from <address> --status pending` only when you are waiting for additional input; it acknowledges what it returns (marks `done`, at-most-once)
+4. When you need historical context, list `--status done` in both directions (`--from` and `--to`) and reason over the combined timeline
+5. Respect the `from-boss` marker (`[boss]`) — messages from boss may have higher priority
+6. Use your workspace for file operations when needed

@@ -22,7 +22,6 @@ import {
   memoryClear,
   memorySetup,
 } from "./commands/index.js";
-import { DEFAULT_ENVELOPE_LIST_BOX } from "../shared/defaults.js";
 import { registerAgentCommands } from "./cli-agent.js";
 
 const program = new Command();
@@ -131,14 +130,23 @@ envelope
   .command("list")
   .description("List envelopes")
   .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
-  .option("--box <box>", "inbox or outbox", DEFAULT_ENVELOPE_LIST_BOX)
-  .option("--status <status>", "pending or done")
-  .option("-n, --limit <n>", "Maximum number of results", parseInt)
+  .option("--to <address>", "List envelopes you sent to an address")
+  .option("--from <address>", "List envelopes sent to you from an address")
+  .requiredOption(
+    "--status <status>",
+    "pending or done (note: --from + pending ACKs what is returned; marks done)"
+  )
+  .option("-n, --limit <n>", "Maximum number of results (default 10, max 50)", parseInt, 10)
+  .addHelpText(
+    "after",
+    "\nNotes:\n  - Listing with --from <address> --status pending ACKs what is returned (marks those envelopes done).\n  - Default limit is 10; maximum is 50.\n"
+  )
   .action((options) => {
     listEnvelopes({
       token: options.token,
-      box: options.box as "inbox" | "outbox",
-      status: options.status as "pending" | "done" | undefined,
+      to: options.to,
+      from: options.from,
+      status: options.status as "pending" | "done",
       limit: options.limit,
     });
   });
