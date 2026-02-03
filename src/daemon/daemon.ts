@@ -11,7 +11,7 @@ import { AgentExecutor, createAgentExecutor } from "../agent/executor.js";
 import type { Agent } from "../agent/types.js";
 import { EnvelopeScheduler } from "./scheduler/envelope-scheduler.js";
 import { CronScheduler } from "./scheduler/cron-scheduler.js";
-import { MemoryService } from "./memory/index.js";
+import { MemoryService, MemoryStore } from "./memory/index.js";
 import type { RpcMethodRegistry } from "./ipc/types.js";
 import { RPC_ERRORS } from "./ipc/types.js";
 import type { ChatAdapter } from "../adapters/types.js";
@@ -84,6 +84,7 @@ export class Daemon {
   private scheduler: EnvelopeScheduler;
   private cronScheduler: CronScheduler | null = null;
   private memoryService: MemoryService | null = null;
+  private memoryStore: MemoryStore | null = null;
   private adapters: Map<string, ChatAdapter> = new Map(); // token -> adapter
   private running = false;
   private startTime: Date | null = null;
@@ -173,12 +174,10 @@ export class Daemon {
 
   private async ensureMemoryService(): Promise<MemoryService> {
     if (this.memoryService) return this.memoryService;
-
     const enabled = this.db.getConfig("memory_enabled") === "true";
     if (!enabled) {
       rpcError(RPC_ERRORS.INTERNAL_ERROR, this.getMemoryDisabledMessage());
     }
-
     const modelPath = (this.db.getConfig("memory_model_path") ?? "").trim();
     if (!modelPath) {
       this.disableMemoryWithError("Missing memory model path");
@@ -186,11 +185,30 @@ export class Daemon {
     }
 
     try {
-      this.memoryService = await MemoryService.create({
-        dataDir: this.config.dataDir,
-        modelPath,
-      });
+      this.memoryService = await MemoryService.create({ dataDir: this.config.dataDir, modelPath });
       return this.memoryService;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.disableMemoryWithError(message);
+      rpcError(RPC_ERRORS.INTERNAL_ERROR, this.getMemoryDisabledMessage());
+    }
+  }
+
+  private async ensureMemoryStore(): Promise<MemoryStore> {
+    const enabled = this.db.getConfig("memory_enabled") === "true";
+    if (!enabled) {
+      rpcError(RPC_ERRORS.INTERNAL_ERROR, this.getMemoryDisabledMessage());
+    }
+    if (this.memoryStore) return this.memoryStore;
+    const modelPath = (this.db.getConfig("memory_model_path") ?? "").trim();
+    if (!modelPath) {
+      this.disableMemoryWithError("Missing memory model path");
+      rpcError(RPC_ERRORS.INTERNAL_ERROR, this.getMemoryDisabledMessage());
+    }
+
+    try {
+      this.memoryStore = await MemoryStore.create({ dataDir: this.config.dataDir });
+      return this.memoryStore;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.disableMemoryWithError(message);
@@ -202,9 +220,7 @@ export class Daemon {
    * Create the DaemonContext for RPC handlers.
    */
   private createContext(): DaemonContext {
-    // Important: `running`/`startTime` must reflect live daemon state.
-    // RPC method registries are created once at startup; if we snapshot these
-    // values here, `daemon.status` will report stale data forever.
+    // Important: `running`/`startTime` must reflect live daemon state (daemon.status depends on it).
     const daemon = this;
     return {
       db: this.db,
@@ -220,22 +236,17 @@ export class Daemon {
       get startTime() {
         return daemon.startTime;
       },
-
       resolvePrincipal: (token) => this.resolvePrincipal(token),
       assertOperationAllowed: (op, principal) => this.assertOperationAllowed(op, principal),
       getPermissionPolicy: () => this.getPermissionPolicy(),
-
       ensureMemoryService: () => this.ensureMemoryService(),
+      ensureMemoryStore: () => this.ensureMemoryStore(),
       getMemoryDisabledMessage: () => this.getMemoryDisabledMessage(),
       writeMemoryConfigToDb: (m) => this.writeMemoryConfigToDb(m),
-      closeMemoryService: async () => {
-        await this.memoryService?.close().catch(() => undefined);
-        this.memoryService = null;
-      },
-
+      closeMemoryService: async () => { await this.memoryService?.close().catch(() => undefined); this.memoryService = null; },
+      closeMemoryStore: async () => { await this.memoryStore?.close().catch(() => undefined); this.memoryStore = null; },
       createAdapterForBinding: (type, token) => this.createAdapterForBinding(type, token),
       removeAdapter: (token) => this.removeAdapter(token),
-
       registerAgentHandler: (name) => this.registerSingleAgentHandler(name),
     };
   }
@@ -258,6 +269,14 @@ export class Daemon {
       // Mark as running early so stop() can clean up partial startups.
       this.running = true;
       this.startTime = new Date();
+
+      const daemonMode = (process.env.HIBOSS_DAEMON_MODE ?? "").trim().toLowerCase();
+      const examplesMode = daemonMode === "examples";
+      if (examplesMode) {
+        // IPC-only daemon for generating deterministic docs (no schedulers/adapters/auto-execution).
+        logEvent("info", "daemon-started", { "data-dir": this.config.dataDir, "adapters-count": 0, mode: "examples" });
+        return;
+      }
 
       // Set up command handler for /new etc.
       this.setupCommandHandler();
@@ -435,6 +454,10 @@ export class Daemon {
     // Close semantic memory service
     await this.memoryService?.close().catch(() => undefined);
     this.memoryService = null;
+
+    // Close semantic memory store (non-embedding operations)
+    await this.memoryStore?.close().catch(() => undefined);
+    this.memoryStore = null;
 
     // Close database
     this.db.close();

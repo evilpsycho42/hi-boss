@@ -10,7 +10,7 @@ import type { MessageRouter } from "../router/message-router.js";
 import type { AgentExecutor } from "../../agent/executor.js";
 import type { EnvelopeScheduler } from "../scheduler/envelope-scheduler.js";
 import type { CronScheduler } from "../scheduler/cron-scheduler.js";
-import type { MemoryService } from "../memory/index.js";
+import type { MemoryService, MemoryStore } from "../memory/index.js";
 import type { ChatAdapter } from "../../adapters/types.js";
 import type { Agent } from "../../agent/types.js";
 import type { RpcMethodHandler, RpcMethodRegistry } from "../ipc/types.js";
@@ -48,6 +48,7 @@ export interface DaemonContext {
 
   // Memory service
   ensureMemoryService(): Promise<MemoryService>;
+  ensureMemoryStore(): Promise<MemoryStore>;
   getMemoryDisabledMessage(): string;
   writeMemoryConfigToDb(memory: {
     enabled: boolean;
@@ -58,6 +59,7 @@ export interface DaemonContext {
     lastError: string;
   }): void;
   closeMemoryService(): Promise<void>;
+  closeMemoryStore(): Promise<void>;
 
   // Adapter management
   createAdapterForBinding(adapterType: string, adapterToken: string): Promise<ChatAdapter | null>;

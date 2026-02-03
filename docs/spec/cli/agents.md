@@ -103,6 +103,22 @@ Output (parseable):
 
 Lists all agents.
 
+Example:
+
+```bash
+hiboss agent list
+```
+
+```text
+name: nex
+description: AI assistant
+workspace: /path/to/workspace
+created-at: 2026-02-03T14:22:10-08:00
+
+name: ops-bot
+created-at: 2026-02-01T09:05:44-08:00
+```
+
 Empty output:
 
 ```
@@ -113,9 +129,6 @@ Output (parseable, one block per agent):
 - `name:`
 - `description:` (optional)
 - `workspace:` (optional)
-- `model:` (optional)
-- `reasoning-effort:` (optional)
-- `session-daily-reset-at:` / `session-idle-timeout:` / `session-max-context-length:` (optional)
 - `created-at:` (local timezone offset)
 
 Default permission:
@@ -138,6 +151,34 @@ Flags:
 - `--name <name>` (required)
 - `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
 
+Example (with session policy and bindings):
+
+```bash
+hiboss agent status --name nex
+```
+
+```text
+name: nex
+workspace: /path/to/workspace
+provider: codex
+model: default
+reasoning-effort: default
+auto-level: medium
+permission-level: restricted
+bindings: telegram
+session-daily-reset-at: 03:00
+session-idle-timeout: 30m
+session-max-context-length: 180000
+agent-state: idle
+agent-health: ok
+pending-count: 0
+last-run-id: 2b7b6f0b-6f86-4f30-aeaa-3fbf9b2d8d2d
+last-run-status: completed
+last-run-started-at: 2026-02-03T12:00:00-08:00
+last-run-completed-at: 2026-02-03T12:01:03-08:00
+last-run-context-length: 4123
+```
+
 Output (parseable):
 - `name:`
 - `workspace:`
@@ -147,6 +188,9 @@ Output (parseable):
 - `auto-level:`
 - `permission-level:`
 - `bindings:` (optional; comma-separated adapter types)
+- `session-daily-reset-at:` (optional)
+- `session-idle-timeout:` (optional)
+- `session-max-context-length:` (optional)
 - `agent-state:` (`running|idle`)
 - `agent-health:` (`ok|error|unknown`)
 - `pending-count: <n>`

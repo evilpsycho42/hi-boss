@@ -7,6 +7,10 @@ import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../shared/validat
 import { resolveToken } from "../token.js";
 import { DEFAULT_AGENT_PERMISSION_LEVEL } from "../../shared/defaults.js";
 import { normalizeDefaultSentinel, readMetadataInput, sanitizeAgentMetadata } from "./agent-shared.js";
+export { bindAgent, unbindAgent } from "./agent-bindings.js";
+export type { BindAgentOptions, UnbindAgentOptions } from "./agent-bindings.js";
+export { setAgentSessionPolicy } from "./agent-session-policy.js";
+export type { SetAgentSessionPolicyOptions } from "./agent-session-policy.js";
 
 interface RegisterAgentResult {
   agent: Omit<Agent, "token">;
@@ -27,15 +31,6 @@ interface AgentSetResult {
     permissionLevel?: string;
   };
   bindings: string[];
-}
-
-interface BindAgentResult {
-  binding: {
-    id: string;
-    agentName: string;
-    adapterType: string;
-    createdAt: string;
-  };
 }
 
 interface AgentDeleteResult {
@@ -63,19 +58,6 @@ export interface RegisterAgentOptions {
   bindAdapterToken?: string;
 }
 
-export interface BindAgentOptions {
-  token?: string;
-  name: string;
-  adapterType: string;
-  adapterToken: string;
-}
-
-export interface UnbindAgentOptions {
-  token?: string;
-  name: string;
-  adapterType: string;
-}
-
 export interface DeleteAgentOptions {
   token?: string;
   name: string;
@@ -92,15 +74,6 @@ function formatMsAsLocalOffset(ms: number): string {
 
 export interface ListAgentsOptions {
   token?: string;
-}
-
-export interface SetAgentSessionPolicyOptions {
-  token?: string;
-  name: string;
-  sessionDailyResetAt?: string;
-  sessionIdleTimeout?: string;
-  sessionMaxContextLength?: number;
-  clear?: boolean;
 }
 
 export interface SetAgentOptions {
@@ -124,12 +97,6 @@ export interface SetAgentOptions {
   bindAdapterType?: string;
   bindAdapterToken?: string;
   unbindAdapterType?: string;
-}
-
-interface SetAgentSessionPolicyResult {
-  success: boolean;
-  agentName: string;
-  sessionPolicy?: unknown;
 }
 
 /**
@@ -316,23 +283,6 @@ export async function listAgents(options: ListAgentsOptions): Promise<void> {
       if (agent.workspace) {
         console.log(`workspace: ${agent.workspace}`);
       }
-      if (agent.model) {
-        console.log(`model: ${agent.model}`);
-      }
-      if (agent.reasoningEffort) {
-        console.log(`reasoning-effort: ${agent.reasoningEffort}`);
-      }
-      if (agent.sessionPolicy && typeof agent.sessionPolicy === "object") {
-        if (typeof agent.sessionPolicy.dailyResetAt === "string") {
-          console.log(`session-daily-reset-at: ${agent.sessionPolicy.dailyResetAt}`);
-        }
-        if (typeof agent.sessionPolicy.idleTimeout === "string") {
-          console.log(`session-idle-timeout: ${agent.sessionPolicy.idleTimeout}`);
-        }
-        if (typeof agent.sessionPolicy.maxContextLength === "number") {
-          console.log(`session-max-context-length: ${agent.sessionPolicy.maxContextLength}`);
-        }
-      }
       console.log(`created-at: ${formatUtcIsoAsLocalOffset(agent.createdAt)}`);
       console.log();
     }
@@ -369,6 +319,18 @@ export async function agentStatus(options: AgentStatusOptions): Promise<void> {
     console.log(`permission-level: ${result.effective.permissionLevel}`);
     if (result.bindings.length > 0) {
       console.log(`bindings: ${result.bindings.join(", ")}`);
+    }
+    if (result.agent.sessionPolicy && typeof result.agent.sessionPolicy === "object") {
+      const sp = result.agent.sessionPolicy as Record<string, unknown>;
+      if (typeof sp.dailyResetAt === "string") {
+        console.log(`session-daily-reset-at: ${sp.dailyResetAt}`);
+      }
+      if (typeof sp.idleTimeout === "string") {
+        console.log(`session-idle-timeout: ${sp.idleTimeout}`);
+      }
+      if (typeof sp.maxContextLength === "number") {
+        console.log(`session-max-context-length: ${sp.maxContextLength}`);
+      }
     }
     console.log(`agent-state: ${result.status.agentState}`);
     console.log(`agent-health: ${result.status.agentHealth}`);
@@ -421,100 +383,6 @@ export async function deleteAgent(options: DeleteAgentOptions): Promise<void> {
 
     console.log(`success: ${result.success ? "true" : "false"}`);
     console.log(`agent-name: ${result.agentName}`);
-  } catch (err) {
-    console.error("error:", (err as Error).message);
-    process.exit(1);
-  }
-}
-
-/**
- * Set an agent's session policy.
- */
-export async function setAgentSessionPolicy(
-  options: SetAgentSessionPolicyOptions
-): Promise<void> {
-  const config = getDefaultConfig();
-  const client = new IpcClient(getSocketPath(config));
-
-  try {
-    const token = resolveToken(options.token);
-    const result = await client.call<SetAgentSessionPolicyResult>(
-      "agent.session-policy.set",
-      {
-        token,
-        agentName: options.name,
-        sessionDailyResetAt: options.sessionDailyResetAt,
-        sessionIdleTimeout: options.sessionIdleTimeout,
-        sessionMaxContextLength: options.sessionMaxContextLength,
-        clear: options.clear,
-      }
-    );
-
-    console.log(`agent-name: ${result.agentName}`);
-    console.log(`success: ${result.success ? "true" : "false"}`);
-
-    const sessionPolicy = result.sessionPolicy;
-    if (sessionPolicy && typeof sessionPolicy === "object") {
-      const sp = sessionPolicy as Record<string, unknown>;
-      if (typeof sp.dailyResetAt === "string") {
-        console.log(`session-daily-reset-at: ${sp.dailyResetAt}`);
-      }
-      if (typeof sp.idleTimeout === "string") {
-        console.log(`session-idle-timeout: ${sp.idleTimeout}`);
-      }
-      if (typeof sp.maxContextLength === "number") {
-        console.log(`session-max-context-length: ${sp.maxContextLength}`);
-      }
-    }
-  } catch (err) {
-    console.error("error:", (err as Error).message);
-    process.exit(1);
-  }
-}
-
-/**
- * Bind an adapter to an agent.
- */
-export async function bindAgent(options: BindAgentOptions): Promise<void> {
-  const config = getDefaultConfig();
-  const client = new IpcClient(getSocketPath(config));
-
-  try {
-    const token = resolveToken(options.token);
-    const result = await client.call<BindAgentResult>("agent.bind", {
-      token,
-      agentName: options.name,
-      adapterType: options.adapterType,
-      adapterToken: options.adapterToken,
-    });
-
-    console.log(`id: ${result.binding.id}`);
-    console.log(`agent-name: ${result.binding.agentName}`);
-    console.log(`adapter-type: ${result.binding.adapterType}`);
-    console.log(`created-at: ${formatUtcIsoAsLocalOffset(result.binding.createdAt)}`);
-  } catch (err) {
-    console.error("error:", (err as Error).message);
-    process.exit(1);
-  }
-}
-
-/**
- * Unbind an adapter from an agent.
- */
-export async function unbindAgent(options: UnbindAgentOptions): Promise<void> {
-  const config = getDefaultConfig();
-  const client = new IpcClient(getSocketPath(config));
-
-  try {
-    await client.call("agent.unbind", {
-      token: resolveToken(options.token),
-      agentName: options.name,
-      adapterType: options.adapterType,
-    });
-
-    console.log(`agent-name: ${options.name}`);
-    console.log(`adapter-type: ${options.adapterType}`);
-    console.log("unbound: true");
   } catch (err) {
     console.error("error:", (err as Error).message);
     process.exit(1);

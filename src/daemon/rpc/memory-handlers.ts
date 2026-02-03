@@ -141,7 +141,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
       }
 
       const agentName = requireAgentForMemory(ctx, principal, params);
-      const memory = await ctx.ensureMemoryService();
+      const memory = await ctx.ensureMemoryStore();
       const memories = await memory.list(agentName, { category: p.category, limit });
       const result: MemoryListResult = { memories };
       return result;
@@ -154,7 +154,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
       ctx.assertOperationAllowed("memory.categories", principal);
 
       const agentName = requireAgentForMemory(ctx, principal, params);
-      const memory = await ctx.ensureMemoryService();
+      const memory = await ctx.ensureMemoryStore();
       const categories = await memory.categories(agentName);
       const result: MemoryCategoriesResult = { categories };
       return result;
@@ -171,7 +171,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
       }
 
       const agentName = requireAgentForMemory(ctx, principal, params);
-      const memory = await ctx.ensureMemoryService();
+      const memory = await ctx.ensureMemoryStore();
       const startedAtMs = Date.now();
       try {
         const deleted = await memory.deleteCategory(agentName, p.category);
@@ -207,7 +207,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
       }
 
       const agentName = requireAgentForMemory(ctx, principal, params);
-      const memory = await ctx.ensureMemoryService();
+      const memory = await ctx.ensureMemoryStore();
       const result: MemoryGetResult = { memory: await memory.get(agentName, p.id) };
       return result;
     },
@@ -223,7 +223,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
       }
 
       const agentName = requireAgentForMemory(ctx, principal, params);
-      const memory = await ctx.ensureMemoryService();
+      const memory = await ctx.ensureMemoryStore();
       const startedAtMs = Date.now();
       try {
         await memory.delete(agentName, p.id);
@@ -254,7 +254,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
       ctx.assertOperationAllowed("memory.clear", principal);
 
       const agentName = requireAgentForMemory(ctx, principal, params);
-      const memory = await ctx.ensureMemoryService();
+      const memory = await ctx.ensureMemoryStore();
       const startedAtMs = Date.now();
       try {
         await memory.clear(agentName);
@@ -322,6 +322,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
 
       ctx.writeMemoryConfigToDb(next);
       await ctx.closeMemoryService();
+      await ctx.closeMemoryStore();
 
       if (next.enabled) {
         try {

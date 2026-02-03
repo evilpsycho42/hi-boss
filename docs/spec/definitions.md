@@ -200,14 +200,14 @@ Clearing nullable overrides:
 - `hiboss agent delete` prints:
   - `success: true|false`
   - `agent-name:`
-- `hiboss agent list` prints fields like `reasoning-effort:`, `created-at:` (timestamps are shown in local timezone offset).
+- `hiboss agent list` prints fields like `created-at:` (timestamps are shown in local timezone offset).
 - `hiboss agent status` prints:
   - `agent-state:` (`running|idle`)
   - `agent-health:` (`ok|error|unknown`)
   - `pending-count:` (counts due pending envelopes)
   - `current-run-id:` / `current-run-started-at:` (optional)
   - `last-run-*:` fields (optional; see `docs/spec/cli/agents.md`)
-- Session policy is printed as:
+- In `hiboss agent status`, session policy is printed as:
   - `session-daily-reset-at:`
   - `session-idle-timeout:`
   - `session-max-context-length:`

@@ -188,6 +188,11 @@ export interface AgentStatusResult {
     reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
     autoLevel?: "medium" | "high";
     permissionLevel?: "restricted" | "standard" | "privileged" | "boss";
+    sessionPolicy?: {
+      dailyResetAt?: string;
+      idleTimeout?: string;
+      maxContextLength?: number;
+    };
   };
   bindings: string[];
   effective: {

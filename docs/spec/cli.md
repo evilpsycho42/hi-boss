@@ -30,6 +30,7 @@ To clear via CLI, use the sentinel value `default`, for example:
 - Most operational commands print key-value lines like `key: value` with kebab-case keys (intended to be parseable).
 - `hiboss setup` (interactive) prints a wizard with human-friendly prose plus a final key-value summary.
 - Envelope instruction output keys and placement are specified in `docs/spec/definitions.md`.
+- Agent configuration fields are primarily reported by `hiboss agent status`; `hiboss agent list` is intentionally a lightweight inventory.
 
 ### Provider config import
 

@@ -12,6 +12,8 @@
     "postbuild": "chmod +x dist/bin/hiboss.js",
     "typecheck": "tsc --noEmit",
     "hiboss": "tsx bin/hiboss.ts",
+    "examples:cli": "tsx scripts/gen-cli-examples.ts",
+    "examples:prompts": "tsx scripts/gen-prompt-examples.ts",
     "defaults:check": "tsx scripts/check-defaults.ts",
     "verify:token-usage:real": "tsx scripts/verify-token-usage-real.ts",
     "prompts:check": "tsx scripts/validate-prompts.ts",
