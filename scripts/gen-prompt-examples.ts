@@ -8,6 +8,9 @@ import { renderPrompt } from "../src/shared/prompt-renderer.js";
 
 import { createExampleFixture } from "./examples/fixtures.js";
 
+// Make outputs deterministic across machines.
+process.env.TZ ??= "UTC";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -144,4 +147,3 @@ main().catch((err) => {
   console.error("error:", err instanceof Error ? err.message : String(err));
   process.exit(1);
 });
-

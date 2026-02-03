@@ -139,6 +139,11 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
   const db = new Database(dbPath);
   db.exec(SCHEMA_SQL);
 
+  const CRON_ID_1 = "2c3c9c2f-9e8b-4f8a-9b8f-9e8a0f1a2b3c";
+  const CRON_ID_2 = "48b4a1d0-6d6a-4d4b-9c7f-2d9d2f3a4b5c";
+  const PENDING_ENV_CRON_1 = "9a0b1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d";
+  const BINDING_ID_1 = "f0e1d2c3-b4a5-4f6e-8d7c-9b0a1c2d3e4f";
+
   const upsertConfig = db.prepare(
     `INSERT INTO config (key, value, created_at)
      VALUES (?, ?, ?)
@@ -199,7 +204,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
      VALUES (?, ?, ?, ?, ?)`
   );
   insertBinding.run(
-    "bnd_01HZYZQ1X2Y3Z4A5B6C7D8E9F0",
+    BINDING_ID_1,
     "nex",
     "telegram",
     "telegram_bot_token_example",
@@ -283,7 +288,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
 
   // Cron pending envelope (referenced by cron schedule)
   insertEnvelope.run(
-    "env_cron_pending_001",
+    PENDING_ENV_CRON_1,
     "agent:nex",
     "agent:nex",
     0,
@@ -292,7 +297,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     "2026-01-30T17:00:00.000Z",
     "pending",
     "2026-01-15T10:30:00.000Z",
-    JSON.stringify({ cronScheduleId: "cron_01HZYZQ8PRV0XG5E5FZ9PS1WQK", parseMode: "plain" })
+    JSON.stringify({ cronScheduleId: CRON_ID_1, parseMode: "plain" })
   );
 
   const insertCron = db.prepare(
@@ -302,7 +307,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
   );
 
   insertCron.run(
-    "cron_01HZYZQ8PRV0XG5E5FZ9PS1WQK",
+    CRON_ID_1,
     "nex",
     "0 9 * * 1-5",
     "America/Los_Angeles",
@@ -311,13 +316,13 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     "Daily standup reminder: post your update in #team.",
     null,
     JSON.stringify({ parseMode: "plain" }),
-    "env_cron_pending_001",
+    PENDING_ENV_CRON_1,
     "2026-01-15T10:30:00.000Z",
     "2026-01-20T08:12:00.000Z"
   );
 
   insertCron.run(
-    "cron_01HZYZQB3K5P3JX0G1NQH1X5QG",
+    CRON_ID_2,
     "nex",
     "@daily",
     null,
@@ -351,14 +356,14 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
   const table = await mem.openTable(tableName);
   await table.add([
     {
-      id: "mem_001",
+      id: "c3f9b2b1-4b64-4e67-b25f-92a1d3b4c5d6",
       text: "Project X uses Node.js 22.",
       vector: [1, 0, 0],
       category: "fact",
       createdAt: "2026-01-05T12:00:00.000Z",
     },
     {
-      id: "mem_002",
+      id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
       text: "Weekly update is due every Friday 5pm PT.",
       vector: [0, 1, 0],
       category: "process",
