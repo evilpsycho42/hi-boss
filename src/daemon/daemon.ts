@@ -200,6 +200,10 @@ export class Daemon {
    * Create the DaemonContext for RPC handlers.
    */
   private createContext(): DaemonContext {
+    // Important: `running`/`startTime` must reflect live daemon state.
+    // RPC method registries are created once at startup; if we snapshot these
+    // values here, `daemon.status` will report stale data forever.
+    const daemon = this;
     return {
       db: this.db,
       router: this.router,
@@ -208,8 +212,12 @@ export class Daemon {
       cronScheduler: this.cronScheduler,
       adapters: this.adapters,
       config: this.config,
-      running: this.running,
-      startTime: this.startTime,
+      get running() {
+        return daemon.running;
+      },
+      get startTime() {
+        return daemon.startTime;
+      },
 
       resolvePrincipal: (token) => this.resolvePrincipal(token),
       assertOperationAllowed: (op, principal) => this.assertOperationAllowed(op, principal),
