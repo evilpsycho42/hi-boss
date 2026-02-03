@@ -67,6 +67,7 @@ Command flags:
 - `in-reply-to-channel-message-id:` (Telegram uses the same compact base36 (no prefix) form)
 - `in-reply-to-from-name:` (optional)
 - `in-reply-to-text:` (multiline)
+  - Note: adapters may truncate `in-reply-to-text` for safety/size. The Telegram adapter truncates at 1200 characters and appends `\n\n[...truncated...]\n`.
 
 **Delivery error keys** (only when a channel delivery attempt failed)
 - `last-delivery-error-at:`

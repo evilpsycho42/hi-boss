@@ -4,6 +4,8 @@ export type DaemonLogLevel = "info" | "warn" | "error";
 
 const SAFE_VALUE = /^[A-Za-z0-9._:@/+-]+$/;
 
+let debugEnabled = false;
+
 const DEBUG_ONLY_KEYS = new Set([
   "agent-run-id",
   "envelope-id",
@@ -15,10 +17,8 @@ const DEBUG_ONLY_KEYS = new Set([
   "total-tokens",
 ]);
 
-function isDebugEnabled(): boolean {
-  const raw = process.env.HIBOSS_DEBUG;
-  if (!raw) return false;
-  return raw === "1" || raw === "true" || raw === "yes" || raw === "on";
+export function setDaemonDebugEnabled(enabled: boolean): void {
+  debugEnabled = enabled;
 }
 
 function formatValue(value: unknown): string | null {
@@ -58,7 +58,7 @@ function normalizeField(
 }
 
 export function logEvent(level: DaemonLogLevel, event: string, fields?: Record<string, unknown>): void {
-  const debug = isDebugEnabled();
+  const debug = debugEnabled;
   const parts: string[] = [`ts=${nowLocalIso()}`, `level=${level}`, `event=${event}`];
   const seenKeys = new Set(parts.map((p) => p.split("=")[0]));
 

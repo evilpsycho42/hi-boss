@@ -59,6 +59,8 @@ Commands are boss-only: non-boss users get no reply.
 - **Incoming media groups (albums)**: When users send multiple images/videos together, Telegram delivers each as a separate message. Only the first message contains the caption. These are currently emitted as independent messages (not grouped).
 - **Outgoing media groups (albums)**: When an agent sends 2+ compatible attachments (photos/videos, or same-type documents/audios), Hi-Boss sends them via `sendMediaGroup` so they render as a single album in Telegram.
 - **Outgoing captions**: Telegram captions are limited to 1024 characters. If an outgoing envelope includes attachments and text longer than that, Hi-Boss sends the text as a separate message and sends the attachments without a caption.
+- **Outgoing long text**: Telegram text messages are limited to 4096 characters. Hi-Boss splits longer texts into multiple messages; if `--reply-to` is set, it is only applied to the first chunk.
+- **Incoming reply previews**: `in-reply-to-text` (quoted reply text/caption) is truncated to 1200 characters and includes a `[...truncated...]` marker when it exceeds the limit.
 
 ## Address Format
 

@@ -1,10 +1,11 @@
 import { Daemon, getDefaultConfig } from "./daemon/daemon.js";
-import { errorMessage, logEvent } from "./shared/daemon-log.js";
+import { errorMessage, logEvent, setDaemonDebugEnabled } from "./shared/daemon-log.js";
 
 /**
  * Daemon entry point for background process.
  */
 async function main() {
+  setDaemonDebugEnabled(process.argv.includes("--debug"));
   const config = getDefaultConfig();
 
   const daemon = new Daemon(config);
