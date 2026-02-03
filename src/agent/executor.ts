@@ -63,6 +63,15 @@ export class AgentExecutor {
   }
 
   /**
+   * True if the daemon currently has a queued or in-flight task for this agent.
+   *
+   * This is a busy-ness signal (used for operator UX); it is not persisted.
+   */
+  isAgentBusy(agentName: string): boolean {
+    return this.agentLocks.has(agentName);
+  }
+
+  /**
    * Request a session refresh for an agent.
    *
    * Safe to call at any time (including during a run). The refresh will be applied
@@ -234,7 +243,7 @@ export class AgentExecutor {
       }
 
       // Complete the run record
-      db.completeAgentRun(run.id, response);
+      db.completeAgentRun(run.id, response, turn.usage.contextLength);
 
       logEvent("info", "agent-run-complete", {
         "agent-name": agent.name,

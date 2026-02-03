@@ -123,6 +123,7 @@ export const DEFAULT_PERMISSION_POLICY: PermissionPolicyV1 = {
     "daemon.stop": "boss",
     "agent.register": "boss",
     "agent.list": "restricted",
+    "agent.status": "restricted",
     "agent.bind": "privileged",
     "agent.unbind": "privileged",
     "agent.refresh": "boss",

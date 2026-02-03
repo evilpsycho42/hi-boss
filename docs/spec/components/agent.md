@@ -255,6 +255,7 @@ All agent executions are recorded in the `agent_runs` table.
 | completed_at | INTEGER | Unix timestamp (ms) |
 | envelope_ids | TEXT | JSON array of processed envelope IDs |
 | final_response | TEXT | Full agent response text |
+| context_length | INTEGER | Context length (tokens) for the run when available |
 | status | TEXT | `running`, `completed`, `failed` |
 | error | TEXT | Error message if failed |
 

@@ -195,6 +195,7 @@ Cron schedules are stored per agent and materialize as normal envelopes (see `do
 | `completed_at` | INTEGER | `NULL` | Unix timestamp (ms) |
 | `envelope_ids` | TEXT | `NULL` | JSON array of processed envelope IDs |
 | `final_response` | TEXT | `NULL` | Stored for auditing |
+| `context_length` | INTEGER | `NULL` | Context length (tokens) for the run when available |
 | `status` | TEXT | `'running'` | `"running"`, `"completed"`, or `"failed"` |
 | `error` | TEXT | `NULL` | Error message if failed |
 
@@ -263,6 +264,7 @@ If an operation is missing from the policy, it defaults to `boss` (safe-by-defau
 | `agent.list` | `restricted` |
 | `agent.bind` | `privileged` |
 | `agent.unbind` | `privileged` |
+| `agent.status` | `restricted` |
 | `agent.refresh` | `boss` |
 | `agent.set` | `privileged` |
 | `agent.session-policy.set` | `privileged` |

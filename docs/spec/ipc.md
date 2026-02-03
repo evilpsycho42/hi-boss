@@ -77,6 +77,7 @@ Agents:
 - `agent.refresh` (requests a session refresh)
 - `agent.self` (resolve `token` → current agent config)
 - `agent.session-policy.set`
+- `agent.status`
 
 Daemon:
 

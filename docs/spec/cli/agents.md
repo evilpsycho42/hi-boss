@@ -113,12 +113,48 @@ Output (parseable, one block per agent):
 - `name:`
 - `description:` (optional)
 - `workspace:` (optional)
-- `provider:` / `model:` / `reasoning-effort:` / `auto-level:` (optional)
-- `permission-level:` (optional)
+- `model:` (optional)
+- `reasoning-effort:` (optional)
 - `session-daily-reset-at:` / `session-idle-timeout:` / `session-max-context-length:` (optional)
-- `bindings:` (optional; comma-separated adapter types)
 - `created-at:` (local timezone offset)
-- `last-seen-at:` (optional; local timezone offset)
 
 Default permission:
 - `restricted`
+
+---
+
+## `hiboss agent status`
+
+Shows runtime status for a single agent (intended for operator UX and dashboards).
+
+Notes:
+- Requires a token (agent or boss). The output must not include secrets (agent token, adapter token).
+- When called with an agent token, only `--name <self>` is allowed (agents cannot query other agents).
+- `agent-state` is a **busy-ness** signal: `running` means the daemon currently has a queued or in-flight task for this agent (so replies may be delayed).
+- `agent-health` is derived from the most recent finished run: `ok` (last run completed), `error` (last run failed), `unknown` (no finished runs yet).
+- `pending-count` counts **due** pending envelopes (`status=pending` and `deliver_at` is missing or `<= now`).
+
+Flags:
+- `--name <name>` (required)
+- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
+
+Output (parseable):
+- `name:`
+- `workspace:`
+- `provider:`
+- `model:` (`default` when unset)
+- `reasoning-effort:` (`default` when unset)
+- `auto-level:`
+- `permission-level:`
+- `bindings:` (optional; comma-separated adapter types)
+- `agent-state:` (`running|idle`)
+- `agent-health:` (`ok|error|unknown`)
+- `pending-count: <n>`
+- `current-run-id:` (optional; when `agent-state=running` and a run record exists)
+- `current-run-started-at:` (optional; local timezone offset)
+- `last-run-id:` (optional)
+- `last-run-status:` (`completed|failed|none`)
+- `last-run-started-at:` (optional; local timezone offset)
+- `last-run-completed-at:` (optional; local timezone offset)
+- `last-run-context-length:` (optional; integer, when available)
+- `last-run-error:` (optional; only when `last-run-status=failed`)

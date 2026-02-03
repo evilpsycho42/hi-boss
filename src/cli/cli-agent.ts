@@ -1,5 +1,5 @@
 import type { Command } from "commander";
-import { registerAgent, setAgent, listAgents, deleteAgent } from "./commands/index.js";
+import { registerAgent, setAgent, listAgents, deleteAgent, agentStatus } from "./commands/index.js";
 
 export function registerAgentCommands(program: Command): void {
   // Agent commands
@@ -160,5 +160,14 @@ export function registerAgentCommands(program: Command): void {
     .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
     .action((options) => {
       deleteAgent({ token: options.token, name: options.name });
+    });
+
+  agent
+    .command("status")
+    .description("Show runtime status for an agent")
+    .requiredOption("--name <name>", "Agent name")
+    .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+    .action((options) => {
+      agentStatus({ token: options.token, name: options.name });
     });
 }

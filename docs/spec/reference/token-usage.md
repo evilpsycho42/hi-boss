@@ -17,6 +17,9 @@ Important:
 - `usage.*_tokens` is the unified-agent-sdk **per-turn aggregate** for the whole run (including any internal agent/tool loops and multiple model calls). The SDK normalizes provider-specific usage into this breakdown; fields may be omitted.
 - `context_length` is a best-effort estimate of the **final** model-call context size, and is what Hi-Boss uses for the session refresh threshold (`--session-max-context-length` / `maxContextLength`) when present. If `context_length` is missing, the max-context-length policy is skipped for that run.
 
+Storage:
+- When available, `context_length` is persisted to `agent_runs.context_length` for operator introspection (see `docs/spec/configuration.md#agent_runs-table`).
+
 ## Provider behavior differences
 
 ### Claude (Claude Code)

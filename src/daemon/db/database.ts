@@ -81,6 +81,7 @@ interface AgentRunRow {
   completed_at: number | null;
   envelope_ids: string | null;
   final_response: string | null;
+  context_length: number | null;
   status: string;
   error: string | null;
 }
@@ -106,6 +107,7 @@ export interface AgentRun {
   completedAt?: number;
   envelopeIds: string[];
   finalResponse?: string;
+  contextLength?: number;
   status: "running" | "completed" | "failed";
   error?: string;
 }
@@ -204,6 +206,27 @@ export class HiBossDatabase {
           AND json_valid(session_policy)
           AND json_extract(session_policy, '$.maxTokens') IS NOT NULL;
       `);
+    }
+
+    // Migrate agent_runs.context_length column and reconcile stale running runs from previous daemon exits.
+    const agentRunColumns = this.db.prepare("PRAGMA table_info(agent_runs)").all() as Array<{
+      name: string;
+    }>;
+    if (agentRunColumns.length > 0) {
+      const hasContextLength = agentRunColumns.some((c) => c.name === "context_length");
+      if (!hasContextLength) {
+        this.db.exec("ALTER TABLE agent_runs ADD COLUMN context_length INTEGER");
+      }
+
+      // Best-effort: mark any "running" runs as failed on startup. Runs cannot survive daemon restarts.
+      const nowMs = Date.now();
+      this.db.prepare(`
+        UPDATE agent_runs
+        SET status = 'failed',
+            completed_at = CASE WHEN completed_at IS NULL THEN ? ELSE completed_at END,
+            error = CASE WHEN error IS NULL OR error = '' THEN 'daemon-stopped' ELSE error END
+        WHERE status = 'running'
+      `).run(nowMs);
     }
   }
 
@@ -992,13 +1015,13 @@ export class HiBossDatabase {
   /**
    * Complete an agent run with success.
    */
-  completeAgentRun(id: string, finalResponse: string): void {
+  completeAgentRun(id: string, finalResponse: string, contextLength: number | null): void {
     const stmt = this.db.prepare(`
       UPDATE agent_runs
-      SET status = 'completed', completed_at = ?, final_response = ?
+      SET status = 'completed', completed_at = ?, final_response = ?, context_length = ?
       WHERE id = ?
     `);
-    stmt.run(Date.now(), finalResponse, id);
+    stmt.run(Date.now(), finalResponse, contextLength, id);
   }
 
   /**
@@ -1007,10 +1030,56 @@ export class HiBossDatabase {
   failAgentRun(id: string, error: string): void {
     const stmt = this.db.prepare(`
       UPDATE agent_runs
-      SET status = 'failed', completed_at = ?, error = ?
+      SET status = 'failed', completed_at = ?, error = ?, context_length = NULL
       WHERE id = ?
     `);
     stmt.run(Date.now(), error, id);
+  }
+
+  /**
+   * Get the current running run for an agent (if any).
+   */
+  getCurrentRunningAgentRun(agentName: string): AgentRun | null {
+    const stmt = this.db.prepare(`
+      SELECT * FROM agent_runs
+      WHERE agent_name = ? AND status = 'running'
+      ORDER BY started_at DESC
+      LIMIT 1
+    `);
+    const row = stmt.get(agentName) as AgentRunRow | undefined;
+    return row ? this.rowToAgentRun(row) : null;
+  }
+
+  /**
+   * Get the most recent finished run for an agent (completed or failed).
+   */
+  getLastFinishedAgentRun(agentName: string): AgentRun | null {
+    const stmt = this.db.prepare(`
+      SELECT * FROM agent_runs
+      WHERE agent_name = ? AND status IN ('completed', 'failed')
+      ORDER BY started_at DESC
+      LIMIT 1
+    `);
+    const row = stmt.get(agentName) as AgentRunRow | undefined;
+    return row ? this.rowToAgentRun(row) : null;
+  }
+
+  /**
+   * Count due pending envelopes for an agent.
+   *
+   * "Due" means: status=pending and deliver_at is missing or <= now.
+   */
+  countDuePendingEnvelopesForAgent(agentName: string): number {
+    const address = `agent:${agentName}`;
+    const nowIso = new Date().toISOString();
+    const stmt = this.db.prepare(`
+      SELECT COUNT(*) AS n
+      FROM envelopes
+      WHERE "to" = ? AND status = 'pending'
+        AND (deliver_at IS NULL OR deliver_at <= ?)
+    `);
+    const row = stmt.get(address, nowIso) as { n: number } | undefined;
+    return row?.n ?? 0;
   }
 
   /**
@@ -1148,6 +1217,7 @@ export class HiBossDatabase {
       completedAt: row.completed_at ?? undefined,
       envelopeIds: row.envelope_ids ? JSON.parse(row.envelope_ids) : [],
       finalResponse: row.final_response ?? undefined,
+      contextLength: typeof row.context_length === "number" ? row.context_length : undefined,
       status: row.status as "running" | "completed" | "failed",
       error: row.error ?? undefined,
     };

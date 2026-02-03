@@ -173,6 +173,48 @@ export interface AgentSelfResult {
   };
 }
 
+export interface AgentStatusParams {
+  token: string;
+  agentName: string;
+}
+
+export interface AgentStatusResult {
+  agent: {
+    name: string;
+    description?: string;
+    workspace?: string;
+    provider?: "claude" | "codex";
+    model?: string;
+    reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
+    autoLevel?: "medium" | "high";
+    permissionLevel?: "restricted" | "standard" | "privileged" | "boss";
+  };
+  bindings: string[];
+  effective: {
+    workspace: string;
+    provider: "claude" | "codex";
+    autoLevel: "medium" | "high";
+    permissionLevel: "restricted" | "standard" | "privileged" | "boss";
+  };
+  status: {
+    agentState: "running" | "idle";
+    agentHealth: "ok" | "error" | "unknown";
+    pendingCount: number;
+    currentRun?: {
+      id: string;
+      startedAt: number;
+    };
+    lastRun?: {
+      id: string;
+      startedAt: number;
+      completedAt?: number;
+      status: "completed" | "failed";
+      error?: string;
+      contextLength?: number;
+    };
+  };
+}
+
 export interface AgentSessionPolicySetParams {
   token: string;
   agentName: string;

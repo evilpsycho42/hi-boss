@@ -1,6 +1,7 @@
 import { getDefaultConfig, getSocketPath } from "../../daemon/daemon.js";
 import { IpcClient } from "../ipc-client.js";
 import type { Agent } from "../../agent/types.js";
+import type { AgentStatusResult } from "../../daemon/ipc/types.js";
 import { formatUtcIsoAsLocalOffset } from "../../shared/time.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../shared/validation.js";
 import { resolveToken } from "../token.js";
@@ -78,6 +79,15 @@ export interface UnbindAgentOptions {
 export interface DeleteAgentOptions {
   token?: string;
   name: string;
+}
+
+export interface AgentStatusOptions {
+  token?: string;
+  name: string;
+}
+
+function formatMsAsLocalOffset(ms: number): string {
+  return formatUtcIsoAsLocalOffset(new Date(ms).toISOString());
 }
 
 export interface ListAgentsOptions {
@@ -306,20 +316,11 @@ export async function listAgents(options: ListAgentsOptions): Promise<void> {
       if (agent.workspace) {
         console.log(`workspace: ${agent.workspace}`);
       }
-      if (agent.provider) {
-        console.log(`provider: ${agent.provider}`);
-      }
       if (agent.model) {
         console.log(`model: ${agent.model}`);
       }
       if (agent.reasoningEffort) {
         console.log(`reasoning-effort: ${agent.reasoningEffort}`);
-      }
-      if (agent.autoLevel) {
-        console.log(`auto-level: ${agent.autoLevel}`);
-      }
-      if (agent.permissionLevel) {
-        console.log(`permission-level: ${agent.permissionLevel}`);
       }
       if (agent.sessionPolicy && typeof agent.sessionPolicy === "object") {
         if (typeof agent.sessionPolicy.dailyResetAt === "string") {
@@ -332,14 +333,72 @@ export async function listAgents(options: ListAgentsOptions): Promise<void> {
           console.log(`session-max-context-length: ${agent.sessionPolicy.maxContextLength}`);
         }
       }
-      if (agent.bindings && agent.bindings.length > 0) {
-        console.log(`bindings: ${agent.bindings.join(", ")}`);
-      }
       console.log(`created-at: ${formatUtcIsoAsLocalOffset(agent.createdAt)}`);
-      if (agent.lastSeenAt) {
-        console.log(`last-seen-at: ${formatUtcIsoAsLocalOffset(agent.lastSeenAt)}`);
-      }
       console.log();
+    }
+  } catch (err) {
+    console.error("error:", (err as Error).message);
+    process.exit(1);
+  }
+}
+
+/**
+ * Show runtime status for a single agent.
+ */
+export async function agentStatus(options: AgentStatusOptions): Promise<void> {
+  if (!isValidAgentName(options.name)) {
+    console.error("error:", AGENT_NAME_ERROR_MESSAGE);
+    process.exit(1);
+  }
+
+  const config = getDefaultConfig();
+  const client = new IpcClient(getSocketPath(config));
+
+  try {
+    const result = await client.call<AgentStatusResult>("agent.status", {
+      token: resolveToken(options.token),
+      agentName: options.name,
+    });
+
+    console.log(`name: ${result.agent.name}`);
+    console.log(`workspace: ${result.effective.workspace}`);
+    console.log(`provider: ${result.effective.provider}`);
+    console.log(`model: ${result.agent.model ?? "default"}`);
+    console.log(`reasoning-effort: ${result.agent.reasoningEffort ?? "default"}`);
+    console.log(`auto-level: ${result.effective.autoLevel}`);
+    console.log(`permission-level: ${result.effective.permissionLevel}`);
+    if (result.bindings.length > 0) {
+      console.log(`bindings: ${result.bindings.join(", ")}`);
+    }
+    console.log(`agent-state: ${result.status.agentState}`);
+    console.log(`agent-health: ${result.status.agentHealth}`);
+    console.log(`pending-count: ${result.status.pendingCount}`);
+
+    if (result.status.currentRun) {
+      console.log(`current-run-id: ${result.status.currentRun.id}`);
+      console.log(
+        `current-run-started-at: ${formatMsAsLocalOffset(result.status.currentRun.startedAt)}`
+      );
+    }
+
+    if (!result.status.lastRun) {
+      console.log("last-run-status: none");
+      return;
+    }
+
+    console.log(`last-run-id: ${result.status.lastRun.id}`);
+    console.log(`last-run-status: ${result.status.lastRun.status}`);
+    console.log(`last-run-started-at: ${formatMsAsLocalOffset(result.status.lastRun.startedAt)}`);
+    if (typeof result.status.lastRun.completedAt === "number") {
+      console.log(
+        `last-run-completed-at: ${formatMsAsLocalOffset(result.status.lastRun.completedAt)}`
+      );
+    }
+    if (typeof result.status.lastRun.contextLength === "number") {
+      console.log(`last-run-context-length: ${result.status.lastRun.contextLength}`);
+    }
+    if (result.status.lastRun.status === "failed" && result.status.lastRun.error) {
+      console.log(`last-run-error: ${result.status.lastRun.error}`);
     }
   } catch (err) {
     console.error("error:", (err as Error).message);

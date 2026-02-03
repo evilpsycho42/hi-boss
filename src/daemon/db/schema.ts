@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   completed_at INTEGER,
   envelope_ids TEXT,           -- JSON array of processed envelope IDs
   final_response TEXT,         -- stored for auditing
+  context_length INTEGER,      -- context length (tokens) when available
   status TEXT DEFAULT '${DEFAULT_AGENT_RUN_STATUS}', -- running, completed, failed
   error TEXT
 );
