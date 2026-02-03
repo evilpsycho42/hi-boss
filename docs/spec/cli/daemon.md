@@ -11,7 +11,17 @@ Log behavior:
 - A new empty `~/.hiboss/daemon.log` is created for the new daemon process.
 
 Flags:
-- (none)
+- `--debug`: Include debug-only fields in `daemon.log` (IDs + token usage).
+
+Debug-only fields:
+- `agent-run-id`
+- `envelope-id`
+- `trigger-envelope-id`
+- `input-tokens`
+- `output-tokens`
+- `cache-read-tokens`
+- `cache-write-tokens`
+- `total-tokens`
 
 Output (human-oriented):
 - `Daemon started successfully`

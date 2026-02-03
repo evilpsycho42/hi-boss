@@ -58,23 +58,12 @@ export class MessageRouter {
     const source = getEnvelopeSourceFromCreateInput(input);
     const fields: Record<string, unknown> = {
       "envelope-id": envelope.id,
-      source,
       from: envelope.from,
       to: envelope.to,
       "deliver-at": envelope.deliverAt ?? "none",
     };
 
     if (source === "channel") {
-      try {
-        const from = parseAddress(envelope.from);
-        if (from.type === "channel") {
-          fields["adapter-type"] = from.adapter;
-          fields["chat-id"] = from.chatId;
-        }
-      } catch {
-        // ignore
-      }
-
       const md = envelope.metadata;
       if (md && typeof md === "object") {
         const channelMessageId = (md as Record<string, unknown>).channelMessageId;

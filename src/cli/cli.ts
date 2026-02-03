@@ -42,8 +42,9 @@ daemon
   .command("start")
   .description("Start the daemon")
   .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .option("--debug", "Include debug fields in daemon.log")
   .action((options) => {
-    startDaemon({ token: options.token });
+    startDaemon({ token: options.token, debug: Boolean(options.debug) });
   });
 
 daemon

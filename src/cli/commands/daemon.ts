@@ -18,6 +18,7 @@ interface DaemonStatusResult {
 
 export interface StartDaemonOptions {
   token?: string;
+  debug?: boolean;
 }
 
 export interface StopDaemonOptions {
@@ -180,6 +181,9 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<voi
   const logFile = fs.openSync(logPath, "a");
 
   const env = { ...process.env };
+  if (options.debug) {
+    env.HIBOSS_DEBUG = "1";
+  }
 
   let child: ReturnType<typeof spawn>;
   try {

@@ -43,6 +43,10 @@ To clear via CLI, use the sentinel value `default`, for example:
 
 - Commands that call IPC (`envelope.*`, most `agent.*`) require the daemon to be running.
 
+### Daemon debug logging
+
+`hiboss daemon start --debug` enables more verbose `daemon.log` fields (IDs + token usage).
+
 ---
 
 ## Command Summary
