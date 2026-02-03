@@ -76,7 +76,7 @@ Note: unified-agent-sdk supports `autoLevel=low`, but Hi-Boss disallows it becau
 To validate that agents can actually use the Hi-Boss envelope system end-to-end (including `hiboss envelope send`) under **real** provider calls:
 
 1) Stop the daemon and delete `~/.hiboss`
-2) Run `hiboss setup default` using a known-good template (see `scripts/test-auto-level/`)
+2) Run `hiboss setup --config-file ...` using a known-good template (see `scripts/test-auto-level/`)
 3) Start the daemon with `--debug`
 4) Send a boss-marked envelope that instructs a `high` and a `medium` agent to send to a non-existent sink address (e.g., `agent:test-sink`)
 5) Verify the sink inbox contains the expected `pong` messages via `hiboss envelope list --address ...`

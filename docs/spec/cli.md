@@ -28,7 +28,7 @@ To clear via CLI, use the sentinel value `default`, for example:
 ### Output stability
 
 - Most operational commands print key-value lines like `key: value` with kebab-case keys (intended to be parseable).
-- `hiboss setup interactive` prints a wizard with human-friendly prose plus a final key-value summary.
+- `hiboss setup` (interactive) prints a wizard with human-friendly prose plus a final key-value summary.
 - Envelope instruction output keys and placement are specified in `docs/spec/definitions.md`.
 
 ### Provider config import
@@ -52,7 +52,7 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | Command | Purpose | Token required? | Default permission |
 |--------|---------|-----------------|--------------------|
 | `hiboss setup` | Initialize Hi-Boss (interactive wizard) | No (bootstrap) | n/a |
-| `hiboss setup default` | Initialize Hi-Boss (non-interactive) | No (bootstrap; requires `--config`) | n/a |
+| `hiboss setup --config-file <path>` | Initialize Hi-Boss (non-interactive) | No (bootstrap; requires config file) | n/a |
 | `hiboss daemon start` | Start the daemon | Yes (boss token) | boss |
 | `hiboss daemon stop` | Stop the daemon | Yes (boss token) | boss |
 | `hiboss daemon status` | Show daemon status | Yes (boss token) | boss |

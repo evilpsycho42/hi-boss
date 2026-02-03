@@ -368,27 +368,13 @@ memory
 
 registerAgentCommands(program);
 
-// Setup command
-const setup = program
+program
   .command("setup")
   .description("Initial system configuration")
-  .helpCommand(false);
-
-setup
-  .command("interactive", { isDefault: true })
-  .description("Run interactive setup wizard (default)")
-  .action(() => {
-    runSetup(false, {});
-  });
-
-setup
-  .command("default")
-  .description("Run setup from a JSON config file")
-  .requiredOption("--config <path>", "Path to setup config JSON file")
+  .allowExcessArguments(false)
+  .option("--config-file <path>", "Run non-interactive setup from a JSON config file")
   .action((options) => {
-    runSetup(true, {
-      config: options.config,
-    });
+    runSetup({ configFile: options.configFile });
   });
 
 // Helper to collect multiple values for an option
