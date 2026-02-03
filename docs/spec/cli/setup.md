@@ -4,9 +4,9 @@ This document specifies the `hiboss setup` command family.
 
 See also:
 - `docs/spec/configuration.md` (what setup persists and where)
-- `docs/spec/cli/agents.md` (agent fields used by `setup default`)
+- `docs/spec/cli/agents.md` (agent fields used by setup config files)
 
-## `hiboss setup` / `hiboss setup interactive`
+## `hiboss setup`
 
 Runs the interactive first-time setup wizard (default).
 
@@ -18,11 +18,14 @@ Behavior:
 - Prints `boss-token:` once
 - Configures and binds a Telegram adapter for the first agent
 
-## `hiboss setup default`
+## `hiboss setup --config-file <path>`
 
-Runs non-interactive setup from a JSON file:
+Runs non-interactive setup from a JSON file (no prompts; errors on invalid/missing fields):
 
-- `--config <path>` (required)
+- `--config-file <path>` (required)
+
+Usage:
+- `hiboss setup --config-file setup.json`
 
 Config file must include:
 - `version: 1`
@@ -72,5 +75,5 @@ Notes:
 
 Output:
 - Setup prints tokens once, plus a small block of stable key/value lines (keys are kebab-case and may be indented in the human UI).
-- `hiboss setup` / interactive prints: `agent-name:`, `agent-token:`, `boss-token:`, `memory-enabled:`, and (when applicable) `memory-model-path:`, `memory-model-dims:`, `memory-last-error:`.
-- `hiboss setup default` prints: `boss-name:`, `agent-name:`, `agent-token:`, `boss-token:`, `provider:`, `model:`, `memory-enabled:`.
+- `hiboss setup` (interactive) prints: `agent-name:`, `agent-token:`, `boss-token:`, `memory-enabled:`, and (when applicable) `memory-model-path:`, `memory-model-dims:`, `memory-last-error:`.
+- `hiboss setup --config-file ...` prints: `boss-name:`, `agent-name:`, `agent-token:`, `boss-token:`, `provider:`, `model:`, `memory-enabled:`.

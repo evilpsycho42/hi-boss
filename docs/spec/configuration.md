@@ -78,9 +78,9 @@ Specifications:
 - Reactions: `docs/spec/cli/reactions.md`
 - Memory: `docs/spec/cli/memory.md`
 
-### Setup persistence (`hiboss setup default`)
+### Setup persistence (`hiboss setup --config-file`)
 
-The `--config` JSON fields are persisted as:
+The setup config JSON fields are persisted as:
 - `boss-name` → `config.boss_name`
 - `boss-token` → hashed into `config.boss_token_hash`
 - `provider` → `config.default_provider`

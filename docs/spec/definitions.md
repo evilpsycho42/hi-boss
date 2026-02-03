@@ -187,8 +187,8 @@ Clearing nullable overrides:
 ### CLI Output Keys
 
 - `hiboss agent register` prints `token:` once (there is no “show token” command).
-- `hiboss setup` / `hiboss setup default` prints `agent-token:` once.
-- `hiboss setup` / `hiboss setup default` also prints `boss-token:` once.
+- `hiboss setup` (interactive or `--config-file`) prints `agent-token:` once.
+- `hiboss setup` (interactive or `--config-file`) also prints `boss-token:` once.
 - `hiboss agent delete` prints:
   - `success: true|false`
   - `agent-name:`

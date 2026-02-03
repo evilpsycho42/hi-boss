@@ -1,6 +1,6 @@
 # Auto-level envelope send test kit
 
-This folder contains stable `hiboss setup default` config templates + a repeatable manual test flow for verifying that agents can send envelopes at the supported `auto-level` settings (`medium` and `high`).
+This folder contains stable `hiboss setup --config-file ...` config templates + a repeatable manual test flow for verifying that agents can send envelopes at the supported `auto-level` settings (`medium` and `high`).
 
 Notes:
 - `auto-level: low` is no longer supported because it can block access to the local Hi-Boss IPC socket (`~/.hiboss/daemon.sock`), preventing agents from using `hiboss envelope send`.
@@ -30,9 +30,9 @@ rm -rf ~/.hiboss
 3) Run setup using one of the templates:
 
 ```bash
-hiboss setup default --config scripts/test-auto-level/setup-default.codex.gpt-5.2.json
+hiboss setup --config-file scripts/test-auto-level/setup-default.codex.gpt-5.2.json
 # or:
-hiboss setup default --config scripts/test-auto-level/setup-default.claude.sonnet.json
+hiboss setup --config-file scripts/test-auto-level/setup-default.claude.sonnet.json
 ```
 
 4) Start the daemon:
