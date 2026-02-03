@@ -1,5 +1,7 @@
 # user settings / profile used for testing, don't delete this block
 .profile
+default_setup.json
+note.md
 
 # macOS
 .DS_Store
