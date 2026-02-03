@@ -1,4 +1,10 @@
-import type { ChatAdapter, ChannelMessage, ChannelCommand, ChannelCommandHandler } from "../../adapters/types.js";
+import type {
+  ChatAdapter,
+  ChannelMessage,
+  ChannelCommand,
+  ChannelCommandHandler,
+  MessageContent,
+} from "../../adapters/types.js";
 import { formatChannelAddress, formatAgentAddress } from "../../adapters/types.js";
 import type { MessageRouter } from "../router/message-router.js";
 import type { HiBossDatabase } from "../db/database.js";
@@ -48,7 +54,7 @@ export class ChannelBridge {
     // Connect command handler if adapter supports it
     if (adapter.onCommand && this.commandHandler) {
       adapter.onCommand(async (command) => {
-        await this.handleCommand(adapter, adapterToken, command);
+        return await this.handleCommand(adapter, adapterToken, command);
       });
     }
   }
@@ -57,8 +63,12 @@ export class ChannelBridge {
     adapter: ChatAdapter,
     adapterToken: string,
     command: ChannelCommand
-  ): Promise<void> {
+  ): Promise<MessageContent | void> {
     const fromBoss = this.isBoss(adapter.platform, command.authorUsername);
+    if (!fromBoss) {
+      // Boss-only commands: do not reply to non-boss users.
+      return;
+    }
 
     // Find the agent bound to this adapter
     const binding = this.db.getBindingByAdapter(adapter.platform, adapterToken);
@@ -70,21 +80,7 @@ export class ChannelBridge {
         "from-boss": fromBoss,
       });
 
-      if (fromBoss) {
-        try {
-          await adapter.sendMessage(command.chatId, {
-            text: ChannelBridge.getUnboundAdapterText(adapter.platform),
-          });
-        } catch (err) {
-          logEvent("warn", "channel-send-failed", {
-            "message-kind": "command",
-            "adapter-type": adapter.platform,
-            "chat-id": command.chatId,
-            error: errorMessage(err),
-          });
-        }
-      }
-      return;
+      return { text: ChannelBridge.getUnboundAdapterText(adapter.platform) };
     }
 
     // Enrich command with agent name
@@ -94,7 +90,7 @@ export class ChannelBridge {
     };
 
     if (this.commandHandler) {
-      await this.commandHandler(enrichedCommand);
+      return await this.commandHandler(enrichedCommand);
     }
   }
 

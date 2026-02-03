@@ -93,8 +93,23 @@ See `docs/spec/components/scheduler.md` for the exact wake-up algorithm.
 
 ## `/new` Session Refresh (Telegram)
 
-1. User sends `/new` to the Telegram bot.
-2. `TelegramAdapter` emits a `ChannelCommand { command: "new", ... }` and replies `Session refresh requested.`
-3. `ChannelBridge` resolves which agent is bound to that bot token and enriches the command with `agentName`.
-4. `Daemon` receives the command and calls `AgentExecutor.requestSessionRefresh(agentName, "telegram:/new")`.
-5. The refresh is applied at the next safe point (before the next run, or after the current queue drains).
+1. Boss sends `/new` to the Telegram bot.
+2. `TelegramAdapter` emits a `ChannelCommand { command: "new", ... }`.
+3. `ChannelBridge` enforces boss-only behavior and resolves which agent is bound to that bot token:
+   - if unbound: returns a `not-configured:` + `fix:` message
+   - if bound: enriches the command with `agentName`
+4. `Daemon` receives the bound command, calls `AgentExecutor.requestSessionRefresh(agentName, "telegram:/new")`, and returns `Session refresh requested.`
+5. `TelegramAdapter` replies with the returned message.
+6. The refresh is applied at the next safe point (before the next run, or after the current queue drains).
+
+---
+
+## `/status` (Telegram)
+
+1. Boss sends `/status` to the Telegram bot.
+2. `TelegramAdapter` emits a `ChannelCommand { command: "status", ... }`.
+3. `ChannelBridge` enforces boss-only behavior and resolves which agent is bound to that bot token:
+   - if unbound: returns a `not-configured:` + `fix:` message
+   - if bound: enriches the command with `agentName`
+4. `Daemon` computes the status for the bound agent and returns the same key/value output as `hiboss agent status --name <agent-name>`.
+5. `TelegramAdapter` replies with the returned status text.

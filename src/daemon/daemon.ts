@@ -41,6 +41,7 @@ import {
   createAgentSetHandler,
   createAgentDeleteHandler,
 } from "./rpc/index.js";
+import { createChannelCommandHandler } from "./channel-commands.js";
 
 // Re-export for CLI and external use
 export { isDaemonRunning, isSocketAcceptingConnections };
@@ -298,13 +299,7 @@ export class Daemon {
    * Set up command handler for adapter commands.
    */
   private setupCommandHandler(): void {
-    this.bridge.setCommandHandler(async (command) => {
-      const enrichedCommand = command as typeof command & { agentName?: string };
-
-      if (command.command === "new" && enrichedCommand.agentName) {
-        this.executor.requestSessionRefresh(enrichedCommand.agentName, "telegram:/new");
-      }
-    });
+    this.bridge.setCommandHandler(createChannelCommandHandler({ db: this.db, executor: this.executor }));
   }
 
   /**

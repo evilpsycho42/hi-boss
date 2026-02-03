@@ -34,7 +34,7 @@ Sessions are refreshed (disposed and recreated) when:
 | `dailyResetAt` | Configured time of day (e.g., `"09:00"`) |
 | `idleTimeout` | No activity for configured duration (e.g., `"2h"`) |
 | `maxContextLength` | Context length exceeds threshold (evaluated after a successful run; uses `usage.context_length` when present; skipped when missing) |
-| Manual `/new` | User sends `/new` command via Telegram |
+| Manual `/new` | Boss sends `/new` command via Telegram |
 | Daemon restart | In-memory sessions are lost; Hi-Boss attempts to resume from persisted `sessionHandle` when possible |
 
 ### Disposal

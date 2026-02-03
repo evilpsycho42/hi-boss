@@ -218,7 +218,7 @@ Set/clear via `hiboss agent set` (see `docs/spec/cli/agents.md`):
 - `--clear-session-policy`
 
 Manual refresh:
-- Telegram `/new` requests a session refresh for the bound agent (applies at the next safe point).
+- Boss-only: Telegram `/new` requests a session refresh for the bound agent (applies at the next safe point).
 
 See `docs/spec/components/session.md` for lifecycle and evaluation details.
 

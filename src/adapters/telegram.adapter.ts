@@ -11,7 +11,13 @@ import { getDefaultMediaDir } from "../shared/defaults.js";
 import { parseTelegramMessageId } from "../shared/telegram-message-id.js";
 import { buildTelegramChannelMessage, type MessageContext } from "./telegram/incoming.js";
 import { sendTelegramMessage } from "./telegram/outgoing.js";
-import { computeBackoff, isGetUpdatesConflict, sleep } from "./telegram/shared.js";
+import {
+  computeBackoff,
+  isGetUpdatesConflict,
+  sleep,
+  splitTextForTelegram,
+  TELEGRAM_MAX_TEXT_CHARS,
+} from "./telegram/shared.js";
 
 /**
  * Telegram adapter for the chat bot.
@@ -37,25 +43,57 @@ export class TelegramAdapter implements ChatAdapter {
     this.setupListeners();
   }
 
-  private setupListeners(): void {
-    // Handle /new command
-    this.bot.command("new", async (ctx) => {
-      const chatId = String(ctx.chat?.id);
-      const username = ctx.from?.username;
+  private static extractCommandArgs(text: string, command: string): string {
+    const re = new RegExp(`^\\/${command}(?:@\\w+)?\\s*`, "i");
+    return text.replace(re, "");
+  }
 
-      const command: ChannelCommand = {
-        command: "new",
-        args: ctx.message.text.replace(/^\/new\s*/, ""),
-        chatId,
-        authorUsername: username,
-      };
+  private async dispatchCommand(ctx: any, commandName: string): Promise<void> {
+    const chatId = String(ctx.chat?.id ?? "");
+    if (!chatId) return;
 
-      for (const handler of this.commandHandlers) {
-        await handler(command);
+    const username = ctx.from?.username;
+    const rawText = typeof ctx.message?.text === "string" ? ctx.message.text : `/${commandName}`;
+
+    const command: ChannelCommand = {
+      command: commandName,
+      args: TelegramAdapter.extractCommandArgs(rawText, commandName),
+      chatId,
+      authorUsername: username,
+    };
+
+    let response: MessageContent | undefined;
+
+    for (const handler of this.commandHandlers) {
+      try {
+        const result = await handler(command);
+        if (result && (typeof result.text === "string" || (result.attachments?.length ?? 0) > 0)) {
+          response = result;
+          break;
+        }
+      } catch (err) {
+        console.error(`[${this.platform}] command handler error:`, err);
       }
+    }
 
-      // Acknowledge the command
-      await ctx.reply("Session refresh requested.");
+    if (!response?.text) {
+      // Boss-only commands: non-boss users get no reply.
+      return;
+    }
+
+    const chunks = splitTextForTelegram(response.text, TELEGRAM_MAX_TEXT_CHARS);
+    for (const chunk of chunks) {
+      await ctx.reply(chunk);
+    }
+  }
+
+  private setupListeners(): void {
+    this.bot.command("new", async (ctx) => {
+      await this.dispatchCommand(ctx, "new");
+    });
+
+    this.bot.command("status", async (ctx) => {
+      await this.dispatchCommand(ctx, "status");
     });
 
     this.bot.on("text", (ctx) => this.handleMessage(ctx as unknown as MessageContext));
@@ -151,4 +189,3 @@ export class TelegramAdapter implements ChatAdapter {
     console.log(`[${this.platform}] Bot stopped`);
   }
 }
-

@@ -114,9 +114,9 @@ export interface ChannelCommand {
   authorUsername?: string;   // Username of command issuer
 }
 
-export type ChannelCommandHandler = (command: ChannelCommand) => void | Promise<void>;
-
 export type MessageContent = ChannelMessage["content"];
+export type ChannelCommandHandler =
+  (command: ChannelCommand) => MessageContent | void | Promise<MessageContent | void>;
 
 export type OutgoingParseMode = "plain" | "markdownv2" | "html";
 
