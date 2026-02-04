@@ -4,9 +4,9 @@ import { getDefaultConfig } from "../../../daemon/daemon.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../../shared/validation.js";
 import { parseDailyResetAt, parseDurationToMs } from "../../../shared/session-policy.js";
 import {
-  DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_SETUP_AGENT_NAME,
   DEFAULT_SETUP_AUTO_LEVEL,
+  DEFAULT_SETUP_PERMISSION_LEVEL,
   DEFAULT_SETUP_MODEL_BY_PROVIDER,
   DEFAULT_SETUP_REASONING_EFFORT,
   SETUP_MODEL_CHOICES_BY_PROVIDER,
@@ -127,10 +127,12 @@ export async function runInteractiveSetup(): Promise<void> {
     })
   ).trim();
 
-  const agentDescription = await input({
-    message: "Agent description (shown to other agents):",
-    default: getDefaultSetupAgentDescription(agentName),
+  const defaultAgentDescription = getDefaultSetupAgentDescription(agentName);
+  const agentDescriptionInput = await input({
+    message: `Agent description: (Default: ${defaultAgentDescription})`,
   });
+  const agentDescription =
+    agentDescriptionInput.trim().length > 0 ? agentDescriptionInput.trim() : defaultAgentDescription;
 
   const workspace = await input({
     message: "Workspace directory:",
@@ -219,10 +221,10 @@ export async function runInteractiveSetup(): Promise<void> {
     message: "Agent permission level:",
     choices: [
       { value: "restricted", name: "Restricted" },
-      { value: "standard", name: "Standard (recommended)" },
-      { value: "privileged", name: "Privileged" },
+      { value: "standard", name: "Standard" },
+      { value: "privileged", name: "Privileged (recommended)" },
     ],
-    default: DEFAULT_AGENT_PERMISSION_LEVEL,
+    default: DEFAULT_SETUP_PERMISSION_LEVEL,
   });
 
   // Semantic memory model selection (downloads/validates best-effort; setup still completes if it fails).

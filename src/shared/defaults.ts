@@ -56,6 +56,7 @@ export const DEFAULT_SETUP_PROVIDER = DEFAULT_AGENT_PROVIDER;
 export const DEFAULT_SETUP_AGENT_NAME = "nex" as const;
 export const DEFAULT_SETUP_REASONING_EFFORT = DEFAULT_AGENT_REASONING_EFFORT;
 export const DEFAULT_SETUP_AUTO_LEVEL = DEFAULT_AGENT_AUTO_LEVEL;
+export const DEFAULT_SETUP_PERMISSION_LEVEL = "privileged" as const;
 export const DEFAULT_SETUP_BIND_TELEGRAM = true as const;
 
 export const DEFAULT_SETUP_MODEL_BY_PROVIDER = {
@@ -69,7 +70,8 @@ export const SETUP_MODEL_CHOICES_BY_PROVIDER = {
 } as const;
 
 export function getDefaultSetupAgentDescription(agentName: string): string {
-  return `${agentName} - AI assistant`;
+  void agentName; // reserved for future personalization
+  return "A reliable and collaborative professional who delivers results with clarity and respect for others, and consistently makes teamwork more effective and enjoyable.";
 }
 
 export function getDefaultSetupBossName(): string {

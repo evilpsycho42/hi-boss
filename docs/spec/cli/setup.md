@@ -59,12 +59,12 @@ Example (`setup.json`):
   },
   "agent": {
     "name": "nex",
-    "description": "nex - AI assistant",
+    "description": "A reliable and collaborative professional who delivers results with clarity and respect for others, and consistently makes teamwork more effective and enjoyable.",
     "workspace": "/absolute/path/to/workspace",
     "model": null,
     "reasoning-effort": null,
     "auto-level": "high",
-    "permission-level": "standard"
+    "permission-level": "privileged"
   },
   "telegram": {
     "adapter-token": "123456789:ABCdef...",

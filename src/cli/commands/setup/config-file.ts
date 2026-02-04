@@ -4,10 +4,10 @@ import { getDefaultConfig } from "../../../daemon/daemon.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../../shared/validation.js";
 import { parseDailyResetAt, parseDurationToMs } from "../../../shared/session-policy.js";
 import {
-  DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_SETUP_AGENT_NAME,
   DEFAULT_SETUP_AUTO_LEVEL,
   DEFAULT_SETUP_MODEL_BY_PROVIDER,
+  DEFAULT_SETUP_PERMISSION_LEVEL,
   DEFAULT_SETUP_PROVIDER,
   DEFAULT_SETUP_REASONING_EFFORT,
   getDefaultSetupAgentDescription,
@@ -193,7 +193,7 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
   const permissionLevel =
     permissionLevelRaw === "restricted" || permissionLevelRaw === "standard" || permissionLevelRaw === "privileged"
       ? permissionLevelRaw
-      : DEFAULT_AGENT_PERMISSION_LEVEL;
+      : DEFAULT_SETUP_PERMISSION_LEVEL;
 
   let sessionPolicy: SetupConfig["agent"]["sessionPolicy"] | undefined;
   const sessionPolicyRaw = agentRaw["session-policy"];
