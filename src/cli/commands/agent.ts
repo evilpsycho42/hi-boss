@@ -3,6 +3,7 @@ import { IpcClient } from "../ipc-client.js";
 import type { Agent } from "../../agent/types.js";
 import type { AgentStatusResult } from "../../daemon/ipc/types.js";
 import { formatUtcIsoAsLocalOffset } from "../../shared/time.js";
+import { formatShortId } from "../../shared/id-format.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../shared/validation.js";
 import { resolveToken } from "../token.js";
 import { DEFAULT_AGENT_PERMISSION_LEVEL } from "../../shared/defaults.js";
@@ -337,7 +338,7 @@ export async function agentStatus(options: AgentStatusOptions): Promise<void> {
     console.log(`pending-count: ${result.status.pendingCount}`);
 
     if (result.status.currentRun) {
-      console.log(`current-run-id: ${result.status.currentRun.id}`);
+      console.log(`current-run-id: ${formatShortId(result.status.currentRun.id)}`);
       console.log(
         `current-run-started-at: ${formatMsAsLocalOffset(result.status.currentRun.startedAt)}`
       );
@@ -348,7 +349,7 @@ export async function agentStatus(options: AgentStatusOptions): Promise<void> {
       return;
     }
 
-    console.log(`last-run-id: ${result.status.lastRun.id}`);
+    console.log(`last-run-id: ${formatShortId(result.status.lastRun.id)}`);
     console.log(`last-run-status: ${result.status.lastRun.status}`);
     console.log(`last-run-started-at: ${formatMsAsLocalOffset(result.status.lastRun.startedAt)}`);
     if (typeof result.status.lastRun.completedAt === "number") {

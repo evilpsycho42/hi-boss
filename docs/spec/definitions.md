@@ -8,6 +8,12 @@ Naming conventions:
 - CLI flags: kebab-case, lowercase
 - CLI output keys: kebab-case, lowercase
 
+Short IDs:
+- Many internal IDs are UUIDs.
+- The CLI renders UUID-backed ids as **short ids** by default:
+  - short id = first 8 lowercase hex characters of the UUID with hyphens removed.
+  - full UUIDs are still accepted as input where an `--id` flag exists.
+
 Canonical mapping (selected):
 - `envelope.deliverAt` → SQLite `deliver_at` → `--deliver-at` → `deliver-at:`
 - `envelope.createdAt` → SQLite `created_at` → `created-at:` (direct/agent messages only)
@@ -83,7 +89,7 @@ Command flags:
 - `attachments:` only shown if present
 
 `hiboss envelope send` prints:
-- `id: <envelope-id>`
+- `id: <envelope-id>` (short id; derived from the internal envelope UUID)
 
 Envelope instructions printed by `hiboss envelope list` do **not** include the internal envelope id.
 
@@ -92,13 +98,13 @@ Envelope instructions printed by `hiboss envelope list` do **not** include the i
 `hiboss cron list` prints parseable key-value output.
 
 **Common keys**
-- `cron-id:`
+- `cron-id:` (short id; derived from the internal cron schedule UUID)
 - `cron:`
 - `timezone:` (`local` when not set)
 - `enabled:` (`true|false`)
 - `to:`
 - `next-deliver-at:` (local timezone offset or `(none)`)
-- `pending-envelope-id:` (or `(none)`)
+- `pending-envelope-id:` (short id; or `(none)`)
 - `created-at:` (local timezone offset)
 - `updated-at:` (optional; local timezone offset)
 
@@ -113,11 +119,11 @@ Envelope instructions printed by `hiboss envelope list` do **not** include the i
 - `no-crons: true` when empty
 
 `hiboss cron create` prints:
-- `cron-id: <cron-id>`
+- `cron-id: <cron-id>` (short id; derived from the internal cron schedule UUID)
 
 `hiboss cron enable|disable|delete` print:
 - `success: true|false`
-- `cron-id: <cron-id>`
+- `cron-id: <cron-id>` (short id; derived from the internal cron schedule UUID)
 
 ### Example: Envelope instruction (group message)
 

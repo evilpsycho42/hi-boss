@@ -798,6 +798,28 @@ export class HiBossDatabase {
   }
 
   /**
+   * Find cron schedules for an agent by compact UUID prefix (UUID with hyphens removed).
+   */
+  findCronSchedulesByAgentIdPrefix(agentName: string, compactIdPrefix: string): CronSchedule[] {
+    const prefix = compactIdPrefix.trim().toLowerCase();
+    if (!prefix) return [];
+
+    const stmt = this.db.prepare(`
+      SELECT
+        s.*,
+        e.deliver_at AS pending_deliver_at,
+        e.status AS pending_status
+      FROM cron_schedules s
+      LEFT JOIN envelopes e ON e.id = s.pending_envelope_id
+      WHERE s.agent_name = ?
+        AND replace(lower(s.id), '-', '') LIKE ?
+      ORDER BY s.created_at DESC
+    `);
+    const rows = stmt.all(agentName, `${prefix}%`) as CronScheduleRow[];
+    return rows.map((row) => this.rowToCronSchedule(row));
+  }
+
+  /**
    * List all cron schedules (all agents).
    */
   listCronSchedules(): CronSchedule[] {

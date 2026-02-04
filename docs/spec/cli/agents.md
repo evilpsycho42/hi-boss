@@ -172,7 +172,7 @@ session-max-context-length: 180000
 agent-state: idle
 agent-health: ok
 pending-count: 0
-last-run-id: 2b7b6f0b-6f86-4f30-aeaa-3fbf9b2d8d2d
+last-run-id: 2b7b6f0b
 last-run-status: completed
 last-run-started-at: 2026-02-03T12:00:00-08:00
 last-run-completed-at: 2026-02-03T12:01:03-08:00
@@ -194,9 +194,9 @@ Output (parseable):
 - `agent-state:` (`running|idle`)
 - `agent-health:` (`ok|error|unknown`)
 - `pending-count: <n>`
-- `current-run-id:` (optional; when `agent-state=running` and a run record exists)
+- `current-run-id:` (optional; short id; when `agent-state=running` and a run record exists)
 - `current-run-started-at:` (optional; local timezone offset)
-- `last-run-id:` (optional)
+- `last-run-id:` (optional; short id)
 - `last-run-status:` (`completed|failed|none`)
 - `last-run-started-at:` (optional; local timezone offset)
 - `last-run-completed-at:` (optional; local timezone offset)

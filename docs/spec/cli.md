@@ -32,6 +32,20 @@ To clear via CLI, use the sentinel value `default`, for example:
 - Envelope instruction output keys and placement are specified in `docs/spec/definitions.md`.
 - Agent configuration fields are primarily reported by `hiboss agent status`; `hiboss agent list` is intentionally a lightweight inventory.
 
+### IDs
+
+Many Hi-Boss entities use internal UUIDs (SQLite primary keys, LanceDB row ids, etc.).
+
+For agent-friendly operation, the CLI **prints short IDs by default**:
+- A **short id** is the first 8 lowercase hex characters of the entity UUID with hyphens removed.
+- Commands that accept `--id` accept:
+  - the short id (8 chars), or
+  - any longer prefix (more chars), or
+  - the full UUID (hyphens optional).
+
+If a provided prefix matches multiple records, the CLI exits non-zero and prints an
+`error: ambiguous-id-prefix` block with `candidate-*` lines so the agent can pick a longer prefix.
+
 ### Provider config import
 
 - When an agent provider is set via CLI, Hi-Boss imports provider config files into the agent’s provider home.

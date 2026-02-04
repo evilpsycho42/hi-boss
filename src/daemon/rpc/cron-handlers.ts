@@ -15,6 +15,63 @@ import type { DaemonContext } from "./context.js";
 import { requireToken, rpcError } from "./context.js";
 import { parseAddress } from "../../adapters/types.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
+import {
+  DEFAULT_ID_PREFIX_LEN,
+  compactUuid,
+  computeUniqueCompactPrefixLength,
+  isHexLower,
+  normalizeIdPrefixInput,
+} from "../../shared/id-format.js";
+
+const MAX_AMBIGUOUS_ID_CANDIDATES = 20;
+
+function assertValidIdPrefix(prefix: string): void {
+  if (prefix.length < DEFAULT_ID_PREFIX_LEN) {
+    rpcError(
+      RPC_ERRORS.INVALID_PARAMS,
+      `Invalid id (expected at least ${DEFAULT_ID_PREFIX_LEN} hex chars)`
+    );
+  }
+  if (!isHexLower(prefix)) {
+    rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid id (expected hex UUID prefix)");
+  }
+}
+
+function buildAmbiguousCronIdPrefixData(params: {
+  idPrefix: string;
+  schedules: Array<{
+    id: string;
+    cron: string;
+    to: string;
+    enabled: boolean;
+    nextDeliverAt?: string;
+  }>;
+}): Record<string, unknown> {
+  const compactIds = params.schedules.map((s) => compactUuid(s.id));
+  const prefixLen = computeUniqueCompactPrefixLength(
+    compactIds,
+    Math.max(DEFAULT_ID_PREFIX_LEN, params.idPrefix.length)
+  );
+
+  const truncated = params.schedules.length > MAX_AMBIGUOUS_ID_CANDIDATES;
+  const shown = params.schedules.slice(0, MAX_AMBIGUOUS_ID_CANDIDATES).map((s) => ({
+    candidateId: compactUuid(s.id).slice(0, prefixLen),
+    candidateKind: "cron",
+    cron: s.cron,
+    to: s.to,
+    enabled: s.enabled,
+    nextDeliverAt: s.nextDeliverAt ?? null,
+  }));
+
+  return {
+    kind: "ambiguous-id-prefix",
+    idPrefix: params.idPrefix,
+    matchCount: params.schedules.length,
+    candidatesTruncated: truncated,
+    candidatesShown: shown.length,
+    candidates: shown,
+  };
+}
 
 /**
  * Create cron RPC handlers.
@@ -172,21 +229,46 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
     }
 
     const startedAtMs = Date.now();
+    const rawId = p.id.trim();
+
+    let resolvedId: string;
+    const existing = ctx.db.getCronScheduleById(rawId);
+    if (existing) {
+      if (existing.agentName !== principal.agent.name) {
+        rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+      }
+      resolvedId = existing.id;
+    } else {
+      const idPrefix = normalizeIdPrefixInput(rawId);
+      assertValidIdPrefix(idPrefix);
+      const matches = ctx.db.findCronSchedulesByAgentIdPrefix(principal.agent.name, idPrefix);
+      if (matches.length === 0) {
+        rpcError(RPC_ERRORS.NOT_FOUND, "Cron schedule not found");
+      }
+      if (matches.length > 1) {
+        rpcError(
+          RPC_ERRORS.INVALID_PARAMS,
+          "Ambiguous id prefix",
+          buildAmbiguousCronIdPrefixData({ idPrefix, schedules: matches })
+        );
+      }
+      resolvedId = matches[0].id;
+    }
 
     try {
-      cron.enableSchedule(principal.agent.name, p.id.trim());
+      cron.enableSchedule(principal.agent.name, resolvedId);
       logEvent("info", "cron-enable", {
         "agent-name": principal.agent.name,
-        "cron-id": p.id.trim(),
+        "cron-id": resolvedId,
         state: "success",
         "duration-ms": Date.now() - startedAtMs,
       });
-      return { success: true };
+      return { success: true, id: resolvedId };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logEvent("info", "cron-enable", {
         "agent-name": principal.agent.name,
-        "cron-id": p.id.trim(),
+        "cron-id": rawId,
         state: "failed",
         "duration-ms": Date.now() - startedAtMs,
         error: errorMessage(err),
@@ -225,21 +307,46 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
     }
 
     const startedAtMs = Date.now();
+    const rawId = p.id.trim();
+
+    let resolvedId: string;
+    const existing = ctx.db.getCronScheduleById(rawId);
+    if (existing) {
+      if (existing.agentName !== principal.agent.name) {
+        rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+      }
+      resolvedId = existing.id;
+    } else {
+      const idPrefix = normalizeIdPrefixInput(rawId);
+      assertValidIdPrefix(idPrefix);
+      const matches = ctx.db.findCronSchedulesByAgentIdPrefix(principal.agent.name, idPrefix);
+      if (matches.length === 0) {
+        rpcError(RPC_ERRORS.NOT_FOUND, "Cron schedule not found");
+      }
+      if (matches.length > 1) {
+        rpcError(
+          RPC_ERRORS.INVALID_PARAMS,
+          "Ambiguous id prefix",
+          buildAmbiguousCronIdPrefixData({ idPrefix, schedules: matches })
+        );
+      }
+      resolvedId = matches[0].id;
+    }
 
     try {
-      cron.disableSchedule(principal.agent.name, p.id.trim());
+      cron.disableSchedule(principal.agent.name, resolvedId);
       logEvent("info", "cron-disable", {
         "agent-name": principal.agent.name,
-        "cron-id": p.id.trim(),
+        "cron-id": resolvedId,
         state: "success",
         "duration-ms": Date.now() - startedAtMs,
       });
-      return { success: true };
+      return { success: true, id: resolvedId };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logEvent("info", "cron-disable", {
         "agent-name": principal.agent.name,
-        "cron-id": p.id.trim(),
+        "cron-id": rawId,
         state: "failed",
         "duration-ms": Date.now() - startedAtMs,
         error: errorMessage(err),
@@ -275,24 +382,49 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
     }
 
     const startedAtMs = Date.now();
+    const rawId = p.id.trim();
+
+    let resolvedId: string;
+    const existing = ctx.db.getCronScheduleById(rawId);
+    if (existing) {
+      if (existing.agentName !== principal.agent.name) {
+        rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+      }
+      resolvedId = existing.id;
+    } else {
+      const idPrefix = normalizeIdPrefixInput(rawId);
+      assertValidIdPrefix(idPrefix);
+      const matches = ctx.db.findCronSchedulesByAgentIdPrefix(principal.agent.name, idPrefix);
+      if (matches.length === 0) {
+        rpcError(RPC_ERRORS.NOT_FOUND, "Cron schedule not found");
+      }
+      if (matches.length > 1) {
+        rpcError(
+          RPC_ERRORS.INVALID_PARAMS,
+          "Ambiguous id prefix",
+          buildAmbiguousCronIdPrefixData({ idPrefix, schedules: matches })
+        );
+      }
+      resolvedId = matches[0].id;
+    }
 
     try {
-      const deleted = cron.deleteSchedule(principal.agent.name, p.id.trim());
+      const deleted = cron.deleteSchedule(principal.agent.name, resolvedId);
       if (!deleted) {
         rpcError(RPC_ERRORS.NOT_FOUND, "Cron schedule not found");
       }
       logEvent("info", "cron-delete", {
         "agent-name": principal.agent.name,
-        "cron-id": p.id.trim(),
+        "cron-id": resolvedId,
         state: "success",
         "duration-ms": Date.now() - startedAtMs,
       });
-      return { success: true };
+      return { success: true, id: resolvedId };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       logEvent("info", "cron-delete", {
         "agent-name": principal.agent.name,
-        "cron-id": p.id.trim(),
+        "cron-id": rawId,
         state: "failed",
         "duration-ms": Date.now() - startedAtMs,
         error: errorMessage(err),

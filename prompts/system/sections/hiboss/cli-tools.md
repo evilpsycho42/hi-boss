@@ -121,7 +121,7 @@ hiboss cron create --cron "0 9 * * *" --timezone "UTC" --to agent:{{ agent.name 
 Manage schedules:
 
 ```bash
-hiboss cron list  # prints full schedule details (includes cron-id)
+hiboss cron list  # prints schedule details (includes cron-id)
 hiboss cron disable --id <cron-id>  # cancels the pending instance
 hiboss cron enable --id <cron-id>   # schedules the next instance
 hiboss cron delete --id <cron-id>   # cancels the pending instance
@@ -131,6 +131,8 @@ Notes:
 - Cron expressions support 5-field or 6-field (with seconds), and `@daily` / `@hourly` presets.
 - If the daemon was down during a scheduled time, that run is skipped (no catch-up delivery).
 - Channel destinations require you to be bound to that adapter type (e.g., `telegram`).
+- IDs shown as `cron-id:` are short ids (8 lowercase hex chars). `--id` accepts a short id, longer prefix, or full UUID (hyphens optional).
+- If an `--id` prefix matches multiple schedules, `hiboss` prints an `error: ambiguous-id-prefix` block with `candidate-*` lines (includes `candidate-cron`, `candidate-to`, and `candidate-next-deliver-at`).
 
 #### Listing Messages
 

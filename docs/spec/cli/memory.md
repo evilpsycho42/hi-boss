@@ -14,7 +14,7 @@ Flags:
 - `--token <token>` (optional; defaults to `HIBOSS_TOKEN`; override by passing `--token`)
 
 Output (parseable):
-- `id: <memory-id>`
+- `id: <memory-id>` (short id)
 
 Default permission:
 - `restricted`
@@ -32,7 +32,7 @@ Flags:
 Output (parseable):
 - `count: <n>`
 - then repeated blocks with:
-  - `id:`
+  - `id:` (short id)
   - `category:`
   - `created-at:`
   - `similarity:` (optional)
@@ -76,12 +76,16 @@ Default permission:
 Gets a memory by id.
 
 Flags:
-- `--id <id>` (required)
+- `--id <id>` (required; short id, longer prefix, or full UUID)
 - `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
 
 Output (parseable):
 - `found: true|false`
 - If found, a memory block (same as `memory.list`).
+
+Errors:
+- If `--id` matches multiple memories, the command exits non-zero and prints the same
+  `error: ambiguous-id-prefix` candidate block shape as `hiboss memory delete`.
 
 Default permission:
 - `restricted`
@@ -91,11 +95,24 @@ Default permission:
 Deletes a memory by id.
 
 Flags:
-- `--id <id>` (required)
+- `--id <id>` (required; short id, longer prefix, or full UUID)
 - `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
 
 Output (parseable):
 - `ok: true`
+
+Errors:
+- If `--id` matches multiple memories, the command exits non-zero and prints:
+  - `error: ambiguous-id-prefix`
+  - `id-prefix: <prefix>`
+  - `match-count: <n>`
+  - then repeated candidate blocks:
+    - `candidate-id: <longer-prefix>`
+    - `candidate-kind: memory`
+    - `candidate-category: <category>`
+    - `candidate-created-at: <iso>`
+    - `candidate-text-json: <json-string>` (truncated preview)
+- If `--id` matches no memories, the command exits non-zero with `error: Memory not found`.
 
 Default permission:
 - `restricted`

@@ -27,6 +27,57 @@ import { RPC_ERRORS } from "../ipc/types.js";
 import type { DaemonContext, Principal } from "./context.js";
 import { requireToken, rpcError } from "./context.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
+import {
+  DEFAULT_ID_PREFIX_LEN,
+  compactUuid,
+  computeUniqueCompactPrefixLength,
+  isHexLower,
+  normalizeIdPrefixInput,
+  truncateForCli,
+} from "../../shared/id-format.js";
+
+const MAX_AMBIGUOUS_ID_CANDIDATES = 20;
+
+function assertValidIdPrefix(prefix: string): void {
+  if (prefix.length < DEFAULT_ID_PREFIX_LEN) {
+    rpcError(
+      RPC_ERRORS.INVALID_PARAMS,
+      `Invalid id (expected at least ${DEFAULT_ID_PREFIX_LEN} hex chars)`
+    );
+  }
+  if (!isHexLower(prefix)) {
+    rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid id (expected hex UUID prefix)");
+  }
+}
+
+function buildAmbiguousMemoryIdPrefixData(params: {
+  idPrefix: string;
+  memories: Array<{ id: string; category: string; createdAt: string; text: string }>;
+}): Record<string, unknown> {
+  const compactIds = params.memories.map((m) => compactUuid(m.id));
+  const prefixLen = computeUniqueCompactPrefixLength(
+    compactIds,
+    Math.max(DEFAULT_ID_PREFIX_LEN, params.idPrefix.length)
+  );
+
+  const truncated = params.memories.length > MAX_AMBIGUOUS_ID_CANDIDATES;
+  const shown = params.memories.slice(0, MAX_AMBIGUOUS_ID_CANDIDATES).map((m) => ({
+    candidateId: compactUuid(m.id).slice(0, prefixLen),
+    candidateKind: "memory",
+    category: m.category,
+    createdAt: m.createdAt,
+    textPreview: truncateForCli(m.text),
+  }));
+
+  return {
+    kind: "ambiguous-id-prefix",
+    idPrefix: params.idPrefix,
+    matchCount: params.memories.length,
+    candidatesTruncated: truncated,
+    candidatesShown: shown.length,
+    candidates: shown,
+  };
+}
 
 function requireAgentForMemory(
   ctx: DaemonContext,
@@ -208,7 +259,29 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
 
       const agentName = requireAgentForMemory(ctx, principal, params);
       const memory = await ctx.ensureMemoryStore();
-      const result: MemoryGetResult = { memory: await memory.get(agentName, p.id) };
+      const rawId = p.id.trim();
+      const exact = await memory.get(agentName, rawId);
+      if (exact) {
+        const result: MemoryGetResult = { memory: exact };
+        return result;
+      }
+
+      const idPrefix = normalizeIdPrefixInput(rawId);
+      assertValidIdPrefix(idPrefix);
+      const matches = await memory.findByIdPrefix(agentName, idPrefix);
+      if (matches.length === 0) {
+        const result: MemoryGetResult = { memory: null };
+        return result;
+      }
+      if (matches.length > 1) {
+        rpcError(
+          RPC_ERRORS.INVALID_PARAMS,
+          "Ambiguous id prefix",
+          buildAmbiguousMemoryIdPrefixData({ idPrefix, memories: matches })
+        );
+      }
+
+      const result: MemoryGetResult = { memory: matches[0] };
       return result;
     },
 
@@ -225,11 +298,33 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const agentName = requireAgentForMemory(ctx, principal, params);
       const memory = await ctx.ensureMemoryStore();
       const startedAtMs = Date.now();
+      const rawId = p.id.trim();
       try {
-        await memory.delete(agentName, p.id);
+        let resolvedId: string;
+        const exact = await memory.get(agentName, rawId);
+        if (exact) {
+          resolvedId = exact.id;
+        } else {
+          const idPrefix = normalizeIdPrefixInput(rawId);
+          assertValidIdPrefix(idPrefix);
+          const matches = await memory.findByIdPrefix(agentName, idPrefix);
+          if (matches.length === 0) {
+            rpcError(RPC_ERRORS.NOT_FOUND, "Memory not found");
+          }
+          if (matches.length > 1) {
+            rpcError(
+              RPC_ERRORS.INVALID_PARAMS,
+              "Ambiguous id prefix",
+              buildAmbiguousMemoryIdPrefixData({ idPrefix, memories: matches })
+            );
+          }
+          resolvedId = matches[0].id;
+        }
+
+        await memory.delete(agentName, resolvedId);
         logEvent("info", "memory-delete", {
           "agent-name": agentName,
-          "memory-id": p.id,
+          "memory-id": resolvedId,
           state: "success",
           "duration-ms": Date.now() - startedAtMs,
         });
@@ -238,7 +333,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
       } catch (err) {
         logEvent("info", "memory-delete", {
           "agent-name": agentName,
-          "memory-id": p.id,
+          "memory-id": rawId,
           state: "failed",
           "duration-ms": Date.now() - startedAtMs,
           error: errorMessage(err),

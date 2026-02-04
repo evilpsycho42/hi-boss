@@ -4,6 +4,8 @@ import { resolveToken } from "../token.js";
 import type { CronSchedule } from "../../cron/types.js";
 import { formatUtcIsoAsLocalOffset } from "../../shared/time.js";
 import { extractTelegramFileId, normalizeAttachmentSource, resolveText } from "./envelope-input.js";
+import { tryPrintAmbiguousIdPrefixError } from "../ambiguous-id.js";
+import { formatShortId } from "../../shared/id-format.js";
 
 interface CronCreateResult {
   id: string;
@@ -15,6 +17,7 @@ interface CronListResult {
 
 interface CronToggleResult {
   success: boolean;
+  id: string;
 }
 
 export interface CronCreateOptions {
@@ -44,15 +47,22 @@ function formatMaybeLocalIso(utcIso?: string): string {
   return formatUtcIsoAsLocalOffset(trimmed);
 }
 
+function formatMaybeShortId(uuid?: string): string {
+  if (!uuid) return "(none)";
+  const trimmed = uuid.trim();
+  if (!trimmed) return "(none)";
+  return formatShortId(trimmed);
+}
+
 function formatCronScheduleSummary(schedule: CronSchedule): string {
   const lines: string[] = [];
-  lines.push(`cron-id: ${schedule.id}`);
+  lines.push(`cron-id: ${formatShortId(schedule.id)}`);
   lines.push(`cron: ${schedule.cron}`);
   lines.push(`timezone: ${schedule.timezone ?? "local"}`);
   lines.push(`enabled: ${schedule.enabled ? "true" : "false"}`);
   lines.push(`to: ${schedule.to}`);
   lines.push(`next-deliver-at: ${formatMaybeLocalIso(schedule.nextDeliverAt)}`);
-  lines.push(`pending-envelope-id: ${schedule.pendingEnvelopeId ?? "(none)"}`);
+  lines.push(`pending-envelope-id: ${formatMaybeShortId(schedule.pendingEnvelopeId)}`);
   return lines.join("\n");
 }
 
@@ -114,7 +124,7 @@ export async function createCron(options: CronCreateOptions): Promise<void> {
       parseMode,
     });
 
-    console.log(`cron-id: ${result.id}`);
+    console.log(`cron-id: ${formatShortId(result.id)}`);
   } catch (err) {
     console.error("error:", (err as Error).message);
     process.exit(1);
@@ -152,8 +162,11 @@ export async function enableCron(options: CronIdOptions): Promise<void> {
     const token = resolveToken(options.token);
     const result = await client.call<CronToggleResult>("cron.enable", { token, id: options.id });
     console.log(`success: ${result.success ? "true" : "false"}`);
-    console.log(`cron-id: ${options.id}`);
+    console.log(`cron-id: ${formatShortId(result.id)}`);
   } catch (err) {
+    if (tryPrintAmbiguousIdPrefixError(err)) {
+      process.exit(1);
+    }
     console.error("error:", (err as Error).message);
     process.exit(1);
   }
@@ -167,8 +180,11 @@ export async function disableCron(options: CronIdOptions): Promise<void> {
     const token = resolveToken(options.token);
     const result = await client.call<CronToggleResult>("cron.disable", { token, id: options.id });
     console.log(`success: ${result.success ? "true" : "false"}`);
-    console.log(`cron-id: ${options.id}`);
+    console.log(`cron-id: ${formatShortId(result.id)}`);
   } catch (err) {
+    if (tryPrintAmbiguousIdPrefixError(err)) {
+      process.exit(1);
+    }
     console.error("error:", (err as Error).message);
     process.exit(1);
   }
@@ -182,8 +198,11 @@ export async function deleteCron(options: CronIdOptions): Promise<void> {
     const token = resolveToken(options.token);
     const result = await client.call<CronToggleResult>("cron.delete", { token, id: options.id });
     console.log(`success: ${result.success ? "true" : "false"}`);
-    console.log(`cron-id: ${options.id}`);
+    console.log(`cron-id: ${formatShortId(result.id)}`);
   } catch (err) {
+    if (tryPrintAmbiguousIdPrefixError(err)) {
+      process.exit(1);
+    }
     console.error("error:", (err as Error).message);
     process.exit(1);
   }

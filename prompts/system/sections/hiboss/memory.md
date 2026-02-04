@@ -10,10 +10,16 @@ Use the `hiboss` CLI to store and search semantic memories:
 - `hiboss memory search --query "..." -n 5` (optional: `--category <category>`)
 - `hiboss memory list -n 50` (newest-first by `created-at`; optional: `--category <category>`)
 - `hiboss memory categories`
-- `hiboss memory get --id <id>`
-- `hiboss memory delete --id <id>`
+- `hiboss memory get --id <id>` (accepts short id / longer prefix / full UUID; hyphens optional)
+- `hiboss memory delete --id <id>` (accepts short id / longer prefix / full UUID; hyphens optional)
 - `hiboss memory delete-category --category <category>`
 - `hiboss memory clear` (destructive; drops all memories for the agent)
+
+ID notes:
+- Hi-Boss prints UUID-backed ids as **short ids** (8 lowercase hex chars) by default.
+- If an `--id` prefix matches multiple memories, `hiboss` prints an `error: ambiguous-id-prefix` block with:
+  - `candidate-id: <longer-prefix>` plus `candidate-category`, `candidate-created-at`, and `candidate-text-json` (truncated)
+  - Re-run with the chosen longer prefix.
 
 Token usage:
 - These commands accept `--token <token>`. If omitted, `hiboss` uses the `HIBOSS_TOKEN` environment variable.

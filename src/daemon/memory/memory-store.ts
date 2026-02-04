@@ -3,6 +3,7 @@ import * as path from "node:path";
 import * as lancedb from "@lancedb/lancedb";
 
 import { assertValidAgentName } from "../../shared/validation.js";
+import { compactUuid } from "../../shared/id-format.js";
 import type { MemoryResult } from "./memory-service.js";
 
 function toSafeAgentTableSuffix(agentName: string): string {
@@ -91,6 +92,32 @@ export class MemoryStore {
     };
   }
 
+  async findByIdPrefix(agentName: string, compactIdPrefix: string): Promise<MemoryResult[]> {
+    const prefix = compactIdPrefix.trim().toLowerCase();
+    if (!prefix) return [];
+
+    const table = await this.getExistingTable(agentName);
+    if (!table) return [];
+
+    const rows = await table.query().select(["id", "text", "category", "createdAt"]).toArray();
+    const matches: MemoryResult[] = [];
+    for (const row of rows) {
+      const r = row as Record<string, unknown>;
+      const id = String(r.id ?? "");
+      if (!id) continue;
+      if (!compactUuid(id).startsWith(prefix)) continue;
+      matches.push({
+        id,
+        text: String(r.text ?? ""),
+        category: String(r.category ?? ""),
+        createdAt: String(r.createdAt ?? ""),
+      });
+    }
+
+    matches.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+    return matches;
+  }
+
   async categories(agentName: string): Promise<string[]> {
     const table = await this.getExistingTable(agentName);
     if (!table) return [];
@@ -147,4 +174,3 @@ export class MemoryStore {
     this.db.close();
   }
 }
-

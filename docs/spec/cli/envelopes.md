@@ -26,7 +26,7 @@ Notes:
 Output (parseable):
 
 ```
-id: <envelope-id>
+id: <envelope-id>  # short id
 ```
 
 Default permission:

@@ -4,6 +4,8 @@ import { getDefaultConfig, getSocketPath } from "../../daemon/daemon.js";
 import { IpcClient } from "../ipc-client.js";
 import { resolveToken } from "../token.js";
 import { resolveAndValidateMemoryModel } from "../memory-model.js";
+import { tryPrintAmbiguousIdPrefixError } from "../ambiguous-id.js";
+import { formatShortId } from "../../shared/id-format.js";
 
 interface MemoryAddResult {
   id: string;
@@ -108,7 +110,7 @@ function printMemoryItem(item: {
   text: string;
   similarity?: number;
 }): void {
-  console.log(`id: ${item.id}`);
+  console.log(`id: ${formatShortId(item.id)}`);
   console.log(`category: ${item.category}`);
   console.log(`created-at: ${item.createdAt}`);
   if (typeof item.similarity === "number") {
@@ -128,8 +130,11 @@ export async function memoryAdd(options: MemoryAddOptions): Promise<void> {
       text: options.text,
       category: options.category,
     });
-    console.log(`id: ${result.id}`);
+    console.log(`id: ${formatShortId(result.id)}`);
   } catch (err) {
+    if (tryPrintAmbiguousIdPrefixError(err)) {
+      process.exit(1);
+    }
     console.error("error:", (err as Error).message);
     process.exit(1);
   }
@@ -153,6 +158,9 @@ export async function memorySearch(options: MemorySearchOptions): Promise<void> 
       printMemoryItem(m);
     }
   } catch (err) {
+    if (tryPrintAmbiguousIdPrefixError(err)) {
+      process.exit(1);
+    }
     console.error("error:", (err as Error).message);
     process.exit(1);
   }

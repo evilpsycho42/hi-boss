@@ -4,6 +4,7 @@ import { resolveToken } from "../token.js";
 import type { Envelope } from "../../envelope/types.js";
 import { formatEnvelopeInstruction } from "../instructions/format-envelope.js";
 import { extractTelegramFileId, normalizeAttachmentSource, resolveText } from "./envelope-input.js";
+import { formatShortId } from "../../shared/id-format.js";
 
 interface SendEnvelopeResult {
   id: string;
@@ -62,7 +63,7 @@ export async function sendEnvelope(options: SendEnvelopeOptions): Promise<void> 
       replyToMessageId: options.replyTo,
     });
 
-    console.log(`id: ${result.id}`);
+    console.log(`id: ${formatShortId(result.id)}`);
   } catch (err) {
     const e = err as Error & { code?: number; data?: unknown };
     console.error("error:", e.message);
@@ -71,7 +72,7 @@ export async function sendEnvelope(options: SendEnvelopeOptions): Promise<void> 
     if (data && typeof data === "object") {
       const d = data as Record<string, unknown>;
       if (typeof d.envelopeId === "string" && d.envelopeId.trim()) {
-        console.error(`envelope-id: ${d.envelopeId.trim()}`);
+        console.error(`envelope-id: ${formatShortId(d.envelopeId.trim())}`);
       }
       if (typeof d.adapterType === "string") {
         console.error(`adapter-type: ${d.adapterType}`);
