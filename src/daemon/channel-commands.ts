@@ -6,7 +6,7 @@ import {
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
 } from "../shared/defaults.js";
-import { formatUnixMsAsLocalOffset } from "../shared/time.js";
+import { formatUnixMsAsTimeZoneOffset } from "../shared/time.js";
 
 type EnrichedChannelCommand = ChannelCommand & { agentName?: string };
 
@@ -16,6 +16,7 @@ function buildAgentStatusText(params: { db: HiBossDatabase; executor: AgentExecu
     return "error: Agent not found";
   }
 
+  const bossTz = params.db.getBossTimezone();
   const effectiveProvider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
   const effectiveAutoLevel = agent.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL;
   const effectivePermissionLevel = agent.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL;
@@ -49,7 +50,7 @@ function buildAgentStatusText(params: { db: HiBossDatabase; executor: AgentExecu
 
   if (currentRun) {
     lines.push(`current-run-id: ${currentRun.id}`);
-    lines.push(`current-run-started-at: ${formatUnixMsAsLocalOffset(currentRun.startedAt)}`);
+    lines.push(`current-run-started-at: ${formatUnixMsAsTimeZoneOffset(currentRun.startedAt, bossTz)}`);
   }
 
   if (!lastRun) {
@@ -59,9 +60,9 @@ function buildAgentStatusText(params: { db: HiBossDatabase; executor: AgentExecu
 
   lines.push(`last-run-id: ${lastRun.id}`);
   lines.push(`last-run-status: ${lastRun.status === "failed" ? "failed" : "completed"}`);
-  lines.push(`last-run-started-at: ${formatUnixMsAsLocalOffset(lastRun.startedAt)}`);
+  lines.push(`last-run-started-at: ${formatUnixMsAsTimeZoneOffset(lastRun.startedAt, bossTz)}`);
   if (typeof lastRun.completedAt === "number") {
-    lines.push(`last-run-completed-at: ${formatUnixMsAsLocalOffset(lastRun.completedAt)}`);
+    lines.push(`last-run-completed-at: ${formatUnixMsAsTimeZoneOffset(lastRun.completedAt, bossTz)}`);
   }
   if (typeof lastRun.contextLength === "number") {
     lines.push(`last-run-context-length: ${lastRun.contextLength}`);

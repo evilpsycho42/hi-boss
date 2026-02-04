@@ -7,6 +7,7 @@ export interface SetupConfig {
   provider: "claude" | "codex";
   providerSourceHome?: string;
   bossName: string;
+  bossTimezone: string; // IANA timezone (used for all displayed timestamps)
   agent: {
     name: string;
     description?: string;
@@ -31,4 +32,3 @@ export interface SetupConfig {
   memory?: ResolvedMemoryModelConfig;
   memorySelection?: { mode: MemoryModelMode; modelPath?: string };
 }
-

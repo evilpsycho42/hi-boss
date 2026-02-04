@@ -35,7 +35,7 @@ Output (parseable):
 - then repeated blocks with:
   - `id:` (short id)
   - `category:`
-  - `created-at:` (local timezone offset)
+  - `created-at:` (boss timezone offset)
   - `similarity:` (optional; `-1.000`..`1.000`, higher is more similar; printed with 3 decimal places)
   - `text-json:`
 - Blocks are separated by a blank line

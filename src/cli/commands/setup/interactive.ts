@@ -14,6 +14,7 @@ import {
   getDefaultSetupBossName,
   getDefaultSetupWorkspace,
 } from "../../../shared/defaults.js";
+import { getDaemonIanaTimeZone, isValidIanaTimeZone } from "../../../shared/timezone.js";
 import { resolveAndValidateMemoryModel, type MemoryModelMode, type ResolvedMemoryModelConfig } from "../../memory-model.js";
 import { checkSetupStatus, executeSetup } from "./core.js";
 import type { SetupConfig } from "./types.js";
@@ -90,6 +91,24 @@ export async function runInteractiveSetup(): Promise<void> {
       return true;
     },
   });
+
+  // Step 2b: Boss timezone
+  const daemonTimeZone = getDaemonIanaTimeZone();
+  console.log(`\n🕒 Detected daemon timezone: ${daemonTimeZone}\n`);
+  const bossTimezone = (
+    await input({
+      message: "Boss timezone (IANA) (used for all displayed timestamps):",
+      default: daemonTimeZone,
+      validate: (value) => {
+        const trimmed = value.trim();
+        if (!trimmed) return "Boss timezone is required";
+        if (!isValidIanaTimeZone(trimmed)) {
+          return "Invalid timezone (expected an IANA name like Asia/Shanghai, America/Los_Angeles, UTC)";
+        }
+        return true;
+      },
+    })
+  ).trim();
 
   // Step 3: Create first agent
   console.log("\n📦 Create your first agent\n");
@@ -396,6 +415,7 @@ export async function runInteractiveSetup(): Promise<void> {
     provider,
     providerSourceHome,
     bossName,
+    bossTimezone,
     agent: {
       name: agentName,
       description: agentDescription,
@@ -417,6 +437,8 @@ export async function runInteractiveSetup(): Promise<void> {
 
     console.log("✅ Setup complete!\n");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log(`   daemon-timezone: ${daemonTimeZone}`);
+    console.log(`   boss-timezone:  ${bossTimezone}`);
     console.log(`   agent-name:  ${agentName}`);
     console.log(`   agent-token: ${agentToken}`);
     console.log(`   boss-token:  ${bossToken}`);
@@ -437,4 +459,3 @@ export async function runInteractiveSetup(): Promise<void> {
     process.exit(1);
   }
 }
-

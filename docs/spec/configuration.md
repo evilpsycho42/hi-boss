@@ -82,6 +82,7 @@ Specifications:
 
 The setup config JSON fields are persisted as:
 - `boss-name` → `config.boss_name`
+- `boss-timezone` → `config.boss_timezone` (IANA; used for all displayed timestamps)
 - `boss-token` → hashed into `config.boss_token_hash`
 - `provider` → `config.default_provider`
 - `telegram.adapter-boss-id` → `config.adapter_boss_id_telegram` (stored without `@`)
@@ -102,6 +103,7 @@ Keys:
 
 - `setup_completed`: `"true"` after setup has run
 - `boss_name`: boss display name used in instructions/templates
+- `boss_timezone`: boss timezone (IANA) used for all displayed timestamps
 - `boss_token_hash`: hashed admin token (not currently surfaced via CLI commands beyond setup)
 - `default_provider`: `"claude"` or `"codex"` (used by setup as a default)
 - `permission_policy`: JSON permission policy mapping operations → required permission level
@@ -175,7 +177,7 @@ Cron schedules are stored per agent and materialize as normal envelopes (see `do
 | `id` | TEXT | — | Primary key |
 | `agent_name` | TEXT | — | Owner agent (also the sender of materialized envelopes) |
 | `cron` | TEXT | — | Cron expression |
-| `timezone` | TEXT | `NULL` | IANA timezone; `NULL` means daemon local timezone |
+| `timezone` | TEXT | `NULL` | IANA timezone; `NULL` means inherit `config.boss_timezone` |
 | `enabled` | INTEGER | `1` | `1` for enabled, `0` for disabled |
 | `to_address` | TEXT | — | Destination address (`agent:*` or `channel:*`) |
 | `content_text` | TEXT | `NULL` | Template message text |

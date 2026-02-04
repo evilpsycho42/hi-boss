@@ -6,7 +6,8 @@ import { resolveToken } from "../token.js";
 import { resolveAndValidateMemoryModel } from "../memory-model.js";
 import { tryPrintAmbiguousIdPrefixError } from "../ambiguous-id.js";
 import { formatShortId } from "../../shared/id-format.js";
-import { formatUnixMsAsLocalOffset } from "../../shared/time.js";
+import { formatUnixMsAsTimeZoneOffset } from "../../shared/time.js";
+import { getDaemonTimeContext } from "../time-context.js";
 
 interface MemoryAddResult {
   id: string;
@@ -110,10 +111,10 @@ function printMemoryItem(item: {
   createdAt: number;
   text: string;
   similarity?: number;
-}): void {
+}, bossTimezone: string): void {
   console.log(`id: ${formatShortId(item.id)}`);
   console.log(`category: ${item.category}`);
-  console.log(`created-at: ${formatUnixMsAsLocalOffset(item.createdAt)}`);
+  console.log(`created-at: ${formatUnixMsAsTimeZoneOffset(item.createdAt, bossTimezone)}`);
   if (typeof item.similarity === "number") {
     const s = Number.isFinite(item.similarity) ? item.similarity : 0;
     const normalized = Math.abs(s) < 0.0005 ? 0 : s;
@@ -149,6 +150,7 @@ export async function memorySearch(options: MemorySearchOptions): Promise<void> 
 
   try {
     const token = resolveToken(options.token);
+    const time = await getDaemonTimeContext({ client, token });
     const result = await client.call<MemorySearchResult>("memory.search", {
       token,
       query: options.query,
@@ -162,7 +164,7 @@ export async function memorySearch(options: MemorySearchOptions): Promise<void> 
     }
     for (let i = 0; i < result.memories.length; i++) {
       const m = result.memories[i]!;
-      printMemoryItem(m);
+      printMemoryItem(m, time.bossTimezone);
       if (i !== result.memories.length - 1) {
         console.log("");
       }
@@ -182,6 +184,7 @@ export async function memoryList(options: MemoryListOptions): Promise<void> {
 
   try {
     const token = resolveToken(options.token);
+    const time = await getDaemonTimeContext({ client, token });
     const result = await client.call<MemoryListResult>("memory.list", {
       token,
       category: options.category,
@@ -194,7 +197,7 @@ export async function memoryList(options: MemoryListOptions): Promise<void> {
     }
     for (let i = 0; i < result.memories.length; i++) {
       const m = result.memories[i]!;
-      printMemoryItem(m);
+      printMemoryItem(m, time.bossTimezone);
       if (i !== result.memories.length - 1) {
         console.log("");
       }
@@ -250,6 +253,7 @@ export async function memoryGet(options: MemoryGetOptions): Promise<void> {
 
   try {
     const token = resolveToken(options.token);
+    const time = await getDaemonTimeContext({ client, token });
     const result = await client.call<MemoryGetResult>("memory.get", {
       token,
       id: options.id,
@@ -261,7 +265,7 @@ export async function memoryGet(options: MemoryGetOptions): Promise<void> {
     }
 
     console.log("found: true");
-    printMemoryItem(result.memory);
+    printMemoryItem(result.memory, time.bossTimezone);
   } catch (err) {
     console.error("error:", (err as Error).message);
     process.exit(1);

@@ -5,9 +5,9 @@ sender: {{ envelope.senderLine }}
 {% if envelope.channelMessageId %}
 channel-message-id: {{ envelope.channelMessageId }}
 {% endif %}
-created-at: {{ envelope.createdAt.localIso }}
-{% if envelope.deliverAt.utcIso %}
-deliver-at: {{ envelope.deliverAt.localIso }}
+created-at: {{ envelope.createdAt.iso }}
+{% if envelope.deliverAt.present %}
+deliver-at: {{ envelope.deliverAt.iso }}
 {% endif %}
 {% if envelope.cronId %}
 cron-id: {{ envelope.cronId }}

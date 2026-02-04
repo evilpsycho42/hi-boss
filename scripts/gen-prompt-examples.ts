@@ -40,6 +40,7 @@ async function main(): Promise<void> {
     const bindings = db.getBindingsByAgentName("nex");
     const bossName = db.getBossName() ?? "";
     const bossTelegramId = db.getAdapterBossId("telegram") ?? "";
+    const bossTimezone = db.getBossTimezone();
 
     // =============================================================================
     // System prompt examples
@@ -59,6 +60,7 @@ async function main(): Promise<void> {
           agent: { ...agent, permissionLevel },
           agentToken: fixture.agentToken,
           bindings: adapterConfig.bindings,
+          time: { bossTimezone },
           boss: { name: bossName, adapterIds: { telegram: bossTelegramId } },
           hibossDir: fixture.hibossDir,
         });
@@ -110,6 +112,7 @@ async function main(): Promise<void> {
     const turnContext = buildTurnPromptContext({
       agentName: "nex",
       datetimeMs: Date.parse("2026-01-29T08:45:00.000Z"),
+      bossTimezone,
       envelopes,
     });
 

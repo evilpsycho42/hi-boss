@@ -3,11 +3,12 @@ import { IpcClient } from "../ipc-client.js";
 import type { Agent } from "../../agent/types.js";
 import type { AgentStatusResult } from "../../daemon/ipc/types.js";
 import { formatShortId } from "../../shared/id-format.js";
-import { formatUnixMsAsLocalOffset } from "../../shared/time.js";
+import { formatUnixMsAsTimeZoneOffset } from "../../shared/time.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../shared/validation.js";
 import { resolveToken } from "../token.js";
 import { DEFAULT_AGENT_PERMISSION_LEVEL } from "../../shared/defaults.js";
 import { normalizeDefaultSentinel, readMetadataInput, sanitizeAgentMetadata } from "./agent-shared.js";
+import { getDaemonTimeContext } from "../time-context.js";
 export { bindAgent, unbindAgent } from "./agent-bindings.js";
 export type { BindAgentOptions, UnbindAgentOptions } from "./agent-bindings.js";
 export { setAgentSessionPolicy } from "./agent-session-policy.js";
@@ -263,8 +264,10 @@ export async function listAgents(options: ListAgentsOptions): Promise<void> {
   const client = new IpcClient(getSocketPath(config));
 
   try {
+    const token = resolveToken(options.token);
+    const time = await getDaemonTimeContext({ client, token });
     const result = await client.call<ListAgentsResult>("agent.list", {
-      token: resolveToken(options.token),
+      token,
     });
 
     if (result.agents.length === 0) {
@@ -280,7 +283,7 @@ export async function listAgents(options: ListAgentsOptions): Promise<void> {
       if (agent.workspace) {
         console.log(`workspace: ${agent.workspace}`);
       }
-      console.log(`created-at: ${formatUnixMsAsLocalOffset(agent.createdAt)}`);
+      console.log(`created-at: ${formatUnixMsAsTimeZoneOffset(agent.createdAt, time.bossTimezone)}`);
       console.log();
     }
   } catch (err) {
@@ -302,8 +305,10 @@ export async function agentStatus(options: AgentStatusOptions): Promise<void> {
   const client = new IpcClient(getSocketPath(config));
 
   try {
+    const token = resolveToken(options.token);
+    const time = await getDaemonTimeContext({ client, token });
     const result = await client.call<AgentStatusResult>("agent.status", {
-      token: resolveToken(options.token),
+      token,
       agentName: options.name,
     });
 
@@ -336,7 +341,7 @@ export async function agentStatus(options: AgentStatusOptions): Promise<void> {
     if (result.status.currentRun) {
       console.log(`current-run-id: ${formatShortId(result.status.currentRun.id)}`);
       console.log(
-        `current-run-started-at: ${formatUnixMsAsLocalOffset(result.status.currentRun.startedAt)}`
+        `current-run-started-at: ${formatUnixMsAsTimeZoneOffset(result.status.currentRun.startedAt, time.bossTimezone)}`
       );
     }
 
@@ -347,10 +352,10 @@ export async function agentStatus(options: AgentStatusOptions): Promise<void> {
 
     console.log(`last-run-id: ${formatShortId(result.status.lastRun.id)}`);
     console.log(`last-run-status: ${result.status.lastRun.status}`);
-    console.log(`last-run-started-at: ${formatUnixMsAsLocalOffset(result.status.lastRun.startedAt)}`);
+    console.log(`last-run-started-at: ${formatUnixMsAsTimeZoneOffset(result.status.lastRun.startedAt, time.bossTimezone)}`);
     if (typeof result.status.lastRun.completedAt === "number") {
       console.log(
-        `last-run-completed-at: ${formatUnixMsAsLocalOffset(result.status.lastRun.completedAt)}`
+        `last-run-completed-at: ${formatUnixMsAsTimeZoneOffset(result.status.lastRun.completedAt, time.bossTimezone)}`
       );
     }
     if (typeof result.status.lastRun.contextLength === "number") {

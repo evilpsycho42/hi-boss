@@ -6,7 +6,8 @@ import { getDefaultConfig, isDaemonRunning, getSocketPath } from "../../daemon/d
 import { IpcClient } from "../ipc-client.js";
 import { authorizeCliOperation } from "../authz.js";
 import { resolveToken } from "../token.js";
-import { formatUnixMsAsLocalOffset } from "../../shared/time.js";
+import { formatUnixMsAsTimeZoneOffset } from "../../shared/time.js";
+import { getDaemonTimeContext } from "../time-context.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -302,11 +303,14 @@ export async function daemonStatus(options: DaemonStatusOptions = {}): Promise<v
   try {
     const client = new IpcClient(getSocketPath(config));
     const status = await client.call<DaemonStatusResult>("daemon.status", { token });
+    const time = await getDaemonTimeContext({ client, token });
 
     console.log(`running: ${status.running ? "true" : "false"}`);
     console.log(
       `start-time: ${
-        typeof status.startTimeMs === "number" ? formatUnixMsAsLocalOffset(status.startTimeMs) : "(none)"
+        typeof status.startTimeMs === "number"
+          ? formatUnixMsAsTimeZoneOffset(status.startTimeMs, time.bossTimezone)
+          : "(none)"
       }`
     );
     console.log(`adapters: ${status.adapters.join(", ") || "(none)"}`);

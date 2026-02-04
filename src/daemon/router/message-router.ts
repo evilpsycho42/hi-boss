@@ -3,7 +3,7 @@ import type { Envelope, CreateEnvelopeInput } from "../../envelope/types.js";
 import { getEnvelopeSourceFromCreateInput } from "../../envelope/source.js";
 import { parseAddress } from "../../adapters/types.js";
 import type { ChatAdapter } from "../../adapters/types.js";
-import { formatUnixMsAsLocalOffset, isDueUnixMs } from "../../shared/time.js";
+import { formatUnixMsAsTimeZoneOffset, isDueUnixMs } from "../../shared/time.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 import { RPC_ERRORS } from "../ipc/types.js";
 import type { OutgoingParseMode } from "../../adapters/types.js";
@@ -56,11 +56,12 @@ export class MessageRouter {
     const envelope = this.db.createEnvelope(input);
 
     const source = getEnvelopeSourceFromCreateInput(input);
+    const bossTz = this.db.getBossTimezone();
     const fields: Record<string, unknown> = {
       "envelope-id": envelope.id,
       from: envelope.from,
       to: envelope.to,
-      "deliver-at": envelope.deliverAt ? formatUnixMsAsLocalOffset(envelope.deliverAt) : "none",
+      "deliver-at": envelope.deliverAt ? formatUnixMsAsTimeZoneOffset(envelope.deliverAt, bossTz) : "none",
     };
 
     if (source === "channel") {

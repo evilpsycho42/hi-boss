@@ -22,6 +22,7 @@ import { isPlainObject } from "./utils.js";
 interface SetupConfigFileV1 {
   version: 1;
   "boss-name"?: string;
+  "boss-timezone"?: string;
   "boss-token": string;
   provider?: "claude" | "codex";
   "provider-source-home"?: string;
@@ -101,6 +102,18 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
     typeof bossNameRaw === "string" && bossNameRaw.trim()
       ? bossNameRaw.trim()
       : getDefaultSetupBossName();
+
+  const daemonTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const bossTimezoneRaw = (parsed as Record<string, unknown>)["boss-timezone"];
+  const bossTimezone =
+    typeof bossTimezoneRaw === "string" && bossTimezoneRaw.trim()
+      ? bossTimezoneRaw.trim()
+      : daemonTz;
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: bossTimezone }).format(new Date(0));
+  } catch {
+    throw new Error("Invalid setup config (boss-timezone must be a valid IANA timezone)");
+  }
 
   const agentRaw = parsed.agent;
   if (!isPlainObject(agentRaw)) {
@@ -256,6 +269,7 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
     provider,
     providerSourceHome,
     bossName,
+    bossTimezone,
     agent: {
       name: agentName,
       description: agentDescription,
@@ -342,6 +356,8 @@ export async function runConfigFileSetup(options: ConfigFileSetupOptions): Promi
 
     console.log("✅ Setup complete!\n");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log(`   daemon-timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`);
+    console.log(`   boss-timezone:   ${config.bossTimezone}`);
     console.log(`   boss-name:   ${config.bossName}`);
     console.log(`   agent-name:  ${config.agent.name}`);
     console.log(`   agent-token: ${agentToken}`);
@@ -362,4 +378,3 @@ export async function runConfigFileSetup(options: ConfigFileSetupOptions): Promi
     process.exit(1);
   }
 }
-

@@ -9,6 +9,7 @@ import { rpcError } from "./context.js";
 import { isValidAgentName, AGENT_NAME_ERROR_MESSAGE } from "../../shared/validation.js";
 import { parseDailyResetAt, parseDurationToMs } from "../../shared/session-policy.js";
 import { setupAgentHome } from "../../agent/home-setup.js";
+import { isValidIanaTimeZone, getDaemonIanaTimeZone } from "../../shared/timezone.js";
 
 /**
  * Create setup RPC handlers.
@@ -29,6 +30,14 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
 
       if (typeof p.bossName !== "string" || !p.bossName.trim()) {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid boss-name");
+      }
+
+      if (typeof p.bossTimezone !== "string" || !p.bossTimezone.trim()) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid boss-timezone");
+      }
+      const bossTimezone = p.bossTimezone.trim();
+      if (!isValidIanaTimeZone(bossTimezone)) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid boss-timezone (expected IANA timezone)");
       }
 
       if (typeof p.agent.name !== "string" || !isValidAgentName(p.agent.name)) {
@@ -203,6 +212,9 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
         createdAgentToken = ctx.db.runInTransaction(() => {
           // Set boss name
           ctx.db.setBossName(p.bossName);
+
+          // Set boss timezone (used for all displayed timestamps)
+          ctx.db.setConfig("boss_timezone", bossTimezone || getDaemonIanaTimeZone());
 
           // Set default provider
           ctx.db.setDefaultProvider(p.provider);

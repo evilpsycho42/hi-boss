@@ -1,4 +1,4 @@
-import { formatUnixMsAsLocalOffset } from "../shared/time.js";
+import { formatUnixMsAsLocalOffset, formatUnixMsAsTimeZoneOffset } from "../shared/time.js";
 
 type AmbiguousIdPrefixCandidate = Record<string, unknown> & {
   candidateId: string;
@@ -14,12 +14,18 @@ type AmbiguousIdPrefixErrorData = Record<string, unknown> & {
   candidates: AmbiguousIdPrefixCandidate[];
 };
 
-function formatMaybeLocalOffset(ms: unknown): string {
+function formatMaybeOffset(ms: unknown, displayTimeZone?: string): string {
   if (typeof ms !== "number" || !Number.isFinite(ms)) return "(none)";
+  if (displayTimeZone && displayTimeZone.trim()) {
+    return formatUnixMsAsTimeZoneOffset(ms, displayTimeZone.trim());
+  }
   return formatUnixMsAsLocalOffset(ms);
 }
 
-export function printAmbiguousIdPrefixError(data: AmbiguousIdPrefixErrorData): void {
+export function printAmbiguousIdPrefixError(
+  data: AmbiguousIdPrefixErrorData,
+  options?: { displayTimeZone?: string }
+): void {
   console.error("error: ambiguous-id-prefix");
   console.error(`id-prefix: ${data.idPrefix}`);
   console.error(`match-count: ${data.matchCount}`);
@@ -41,7 +47,7 @@ export function printAmbiguousIdPrefixError(data: AmbiguousIdPrefixErrorData): v
         console.error(`candidate-category: ${c.category}`);
       }
       if (typeof c.createdAt === "number") {
-        console.error(`candidate-created-at: ${formatUnixMsAsLocalOffset(c.createdAt)}`);
+        console.error(`candidate-created-at: ${formatMaybeOffset(c.createdAt, options?.displayTimeZone)}`);
       }
       if (typeof c.textPreview === "string") {
         console.error(`candidate-text-json: ${JSON.stringify(c.textPreview)}`);
@@ -56,7 +62,7 @@ export function printAmbiguousIdPrefixError(data: AmbiguousIdPrefixErrorData): v
       if (typeof c.enabled === "boolean") {
         console.error(`candidate-enabled: ${c.enabled ? "true" : "false"}`);
       }
-      console.error(`candidate-next-deliver-at: ${formatMaybeLocalOffset(c.nextDeliverAt)}`);
+      console.error(`candidate-next-deliver-at: ${formatMaybeOffset(c.nextDeliverAt, options?.displayTimeZone)}`);
     }
 
     if (i !== data.candidates.length - 1) {
@@ -67,7 +73,10 @@ export function printAmbiguousIdPrefixError(data: AmbiguousIdPrefixErrorData): v
   console.error("hint: re-run with a longer --id");
 }
 
-export function tryPrintAmbiguousIdPrefixError(err: unknown): boolean {
+export function tryPrintAmbiguousIdPrefixError(
+  err: unknown,
+  options?: { displayTimeZone?: string }
+): boolean {
   const e = err as Error & { data?: unknown };
   const data = e.data;
   if (!data || typeof data !== "object") return false;
@@ -77,6 +86,6 @@ export function tryPrintAmbiguousIdPrefixError(err: unknown): boolean {
   if (typeof d.matchCount !== "number" || !Number.isFinite(d.matchCount)) return false;
   if (!Array.isArray(d.candidates)) return false;
 
-  printAmbiguousIdPrefixError(d as AmbiguousIdPrefixErrorData);
+  printAmbiguousIdPrefixError(d as AmbiguousIdPrefixErrorData, options);
   return true;
 }

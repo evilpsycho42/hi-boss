@@ -15,7 +15,7 @@ Creates a cron schedule.
 Flags:
 - `--cron <expr>` (required; 5-field or 6-field with optional seconds; `@daily` etc supported)
 - `--to <address>` (required)
-- `--timezone <iana>` (optional; defaults to local; accepts `local`)
+- `--timezone <iana>` (optional; when omitted, the schedule inherits the current boss timezone)
 - `--text <text>` or `--text -` (stdin) or `--text-file <path>`
 - `--attachment <path>` (repeatable)
 - `--parse-mode <mode>` (optional; channel destinations only; `plain|markdownv2|html`)
@@ -71,7 +71,7 @@ Errors:
     - `candidate-cron: <expr>`
     - `candidate-to: <address>`
     - `candidate-enabled: true|false`
-    - `candidate-next-deliver-at: <local-iso>|(none)`
+    - `candidate-next-deliver-at: <boss-iso>|(none)`
 
 Default permission:
 - `restricted`

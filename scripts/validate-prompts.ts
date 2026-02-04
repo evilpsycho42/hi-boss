@@ -115,6 +115,7 @@ function validateTurnPrompt(): void {
     const ctx = buildTurnPromptContext({
       agentName: "nex",
       datetimeMs: Date.now(),
+      bossTimezone: "UTC",
       envelopes: [],
     });
     const out = renderPrompt({ surface: "turn", template: "turn/turn.md", context: ctx }).trimEnd();
@@ -131,6 +132,7 @@ function validateTurnPrompt(): void {
     const ctx = buildTurnPromptContext({
       agentName: "nex",
       datetimeMs: now,
+      bossTimezone: "UTC",
       envelopes: [{ ...makeMockEnvelopes()[0], deliverAt: now + 60_000 }, makeMockEnvelopes()[1]],
     });
     const out = renderPrompt({ surface: "turn", template: "turn/turn.md", context: ctx }).trimEnd();
@@ -187,6 +189,7 @@ function validateTurnPrompt(): void {
     const ctx = buildTurnPromptContext({
       agentName: "nex",
       datetimeMs: Date.now(),
+      bossTimezone: "UTC",
       envelopes: [group1, group2, agentEnvelope],
     });
     const out = renderPrompt({ surface: "turn", template: "turn/turn.md", context: ctx }).trimEnd();
@@ -220,7 +223,7 @@ function validateCliEnvelopePrompt(): void {
 
   // Without deliver-at
   {
-    const ctx = buildCliEnvelopePromptContext({ envelope: baseEnvelope });
+    const ctx = buildCliEnvelopePromptContext({ envelope: baseEnvelope, bossTimezone: "UTC" });
     const out = renderPrompt({
       surface: "cli-envelope",
       template: "envelope/instruction.md",
@@ -234,7 +237,7 @@ function validateCliEnvelopePrompt(): void {
   // With deliver-at
   {
     const withDeliverAt: Envelope = { ...baseEnvelope, deliverAt: Date.now() };
-    const ctx = buildCliEnvelopePromptContext({ envelope: withDeliverAt });
+    const ctx = buildCliEnvelopePromptContext({ envelope: withDeliverAt, bossTimezone: "UTC" });
     const out = renderPrompt({
       surface: "cli-envelope",
       template: "envelope/instruction.md",

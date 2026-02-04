@@ -74,7 +74,7 @@ export interface EnvelopeListParams {
 export interface CronCreateParams {
   token: string;
   cron: string;
-  timezone?: string; // IANA timezone; "local" or missing means local
+  timezone?: string; // IANA timezone (optional; missing means inherit boss timezone)
   to: string;
   text?: string;
   attachments?: Array<{ source: string; filename?: string; telegramFileId?: string }>;
@@ -276,6 +276,15 @@ export interface DaemonPingParams {
   token: string;
 }
 
+export interface DaemonTimeParams {
+  token: string;
+}
+
+export interface DaemonTimeResult {
+  bossTimezone: string;
+  daemonTimezone: string;
+}
+
 // ==================== Setup Parameters ====================
 
 export interface SetupCheckParams {
@@ -290,6 +299,7 @@ export interface SetupExecuteParams {
   provider: 'claude' | 'codex';
   providerSourceHome?: string;
   bossName: string;
+  bossTimezone: string;
   agent: {
     name: string;
     description?: string;

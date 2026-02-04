@@ -25,7 +25,7 @@ import {
   isAtLeastPermissionLevel,
   parsePermissionPolicyV1OrDefault,
 } from "../shared/permissions.js";
-import { errorMessage, logEvent } from "../shared/daemon-log.js";
+import { errorMessage, logEvent, setDaemonLogTimeZone } from "../shared/daemon-log.js";
 import { getEnvelopeSourceFromEnvelope } from "../envelope/source.js";
 import { PidLock, isDaemonRunning, isSocketAcceptingConnections } from "./pid-lock.js";
 import type { DaemonContext, Principal } from "./rpc/context.js";
@@ -277,6 +277,9 @@ export class Daemon {
       // Mark as running early so stop() can clean up partial startups.
       this.running = true;
       this.startTimeMs = Date.now();
+
+      // All displayed timestamps (including daemon logs) use the boss timezone.
+      setDaemonLogTimeZone(this.db.getBossTimezone());
 
       const daemonMode = (process.env.HIBOSS_DAEMON_MODE ?? "").trim().toLowerCase();
       const examplesMode = daemonMode === "examples";

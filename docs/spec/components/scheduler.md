@@ -18,7 +18,7 @@ Key files:
 
 - Relative: `+2h`, `+30m`, `+1Y2M3D`, `-15m` (units are case-sensitive: `Y/M/D/h/m/s`)
 - ISO 8601 with timezone: `2026-01-27T16:30:00+08:00` (or UTC `Z`)
-- ISO-like local datetime without timezone (interpreted as local time): `YYYY-MM-DDTHH:MM[:SS]` or `YYYY-MM-DD HH:MM[:SS]`
+- ISO-like datetime without timezone (interpreted in boss timezone): `YYYY-MM-DDTHH:MM[:SS]` or `YYYY-MM-DD HH:MM[:SS]`
 
 The daemon parses the input and stores `deliver-at` as **unix epoch milliseconds (UTC)** in the `envelopes.deliver_at` column.
 

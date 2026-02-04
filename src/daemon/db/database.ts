@@ -15,6 +15,7 @@ import {
 import { generateToken, hashToken, verifyToken } from "../../agent/auth.js";
 import { generateUUID } from "../../shared/uuid.js";
 import { assertValidAgentName } from "../../shared/validation.js";
+import { getDaemonIanaTimeZone } from "../../shared/timezone.js";
 
 /**
  * Database row types for SQLite mapping.
@@ -1345,6 +1346,16 @@ export class HiBossDatabase {
    */
   getBossName(): string | null {
     return this.getConfig("boss_name");
+  }
+
+  /**
+   * Get the boss timezone (IANA).
+   *
+   * Used for all displayed timestamps. Falls back to the daemon host timezone when missing.
+   */
+  getBossTimezone(): string {
+    const tz = (this.getConfig("boss_timezone") ?? "").trim();
+    return tz || getDaemonIanaTimeZone();
   }
 
   /**

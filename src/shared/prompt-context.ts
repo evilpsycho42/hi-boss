@@ -4,7 +4,8 @@ import type { Agent } from "../agent/types.js";
 import type { AgentBinding } from "../daemon/db/database.js";
 import type { Envelope, EnvelopeAttachment } from "../envelope/types.js";
 import { detectAttachmentType } from "../adapters/types.js";
-import { formatUnixMsAsLocalOffset, formatUnixMsAsUtcIso } from "./time.js";
+import { formatUnixMsAsTimeZoneOffset } from "./time.js";
+import { getDaemonIanaTimeZone } from "./timezone.js";
 import { HIBOSS_TOKEN_ENV } from "./env.js";
 import { getAgentDir, getHiBossDir } from "../agent/home-setup.js";
 import { DEFAULT_AGENT_PROVIDER } from "./defaults.js";
@@ -237,6 +238,9 @@ export function buildSystemPromptContext(params: {
   agent: Agent;
   agentToken: string;
   bindings: AgentBinding[];
+  time?: {
+    bossTimezone?: string;
+  };
   hibossDir?: string;
   boss?: {
     name?: string;
@@ -244,6 +248,8 @@ export function buildSystemPromptContext(params: {
   };
 }): Record<string, unknown> {
   const hibossDir = params.hibossDir ?? getHiBossDir();
+  const bossTimeZone = (params.time?.bossTimezone ?? "").trim() || getDaemonIanaTimeZone();
+  const daemonTimeZone = getDaemonIanaTimeZone();
 
   const workspaceDir =
     params.agent.workspace && params.agent.workspace.trim()
@@ -254,6 +260,10 @@ export function buildSystemPromptContext(params: {
   const agentFiles = readAgentCustomizationFiles({ hibossDir, agentName: params.agent.name });
 
   return {
+    environment: {
+      time: formatUnixMsAsTimeZoneOffset(Date.now(), bossTimeZone),
+      daemonTimezone: daemonTimeZone,
+    },
     hiboss: {
       dir: hibossDir,
       tokenEnvVar: HIBOSS_TOKEN_ENV,
@@ -285,10 +295,10 @@ export function buildSystemPromptContext(params: {
         idleTimeout: params.agent.sessionPolicy?.idleTimeout ?? "",
         maxContextLength: params.agent.sessionPolicy?.maxContextLength ?? 0,
       },
-      createdAt: formatUnixMsAsLocalOffset(params.agent.createdAt),
+      createdAt: formatUnixMsAsTimeZoneOffset(params.agent.createdAt, bossTimeZone),
       lastSeenAt:
         typeof params.agent.lastSeenAt === "number"
-          ? formatUnixMsAsLocalOffset(params.agent.lastSeenAt)
+          ? formatUnixMsAsTimeZoneOffset(params.agent.lastSeenAt, bossTimeZone)
           : "",
       metadata: params.agent.metadata ?? {},
       files: {
@@ -300,7 +310,7 @@ export function buildSystemPromptContext(params: {
     },
     bindings: (params.bindings ?? []).map((b) => ({
       adapterType: b.adapterType,
-      createdAt: formatUnixMsAsLocalOffset(b.createdAt),
+      createdAt: formatUnixMsAsTimeZoneOffset(b.createdAt, bossTimeZone),
     })),
     workspace: {
       dir: workspaceDir,
@@ -311,8 +321,10 @@ export function buildSystemPromptContext(params: {
 export function buildTurnPromptContext(params: {
   agentName: string;
   datetimeMs: number;
+  bossTimezone: string;
   envelopes: Envelope[];
 }): Record<string, unknown> {
+  const bossTimeZone = params.bossTimezone.trim() || getDaemonIanaTimeZone();
   const envelopes = (params.envelopes ?? []).map((env, idx) => {
     const semantic = buildSemanticFrom(env);
     const rawChannelMessageId = getChannelMessageId(env.metadata);
@@ -345,13 +357,13 @@ export function buildTurnPromptContext(params: {
       return cronScheduleId ? formatShortId(cronScheduleId) : "";
     })();
 
-    const deliverAt =
-      typeof env.deliverAt === "number"
-        ? {
-            utcIso: formatUnixMsAsUtcIso(env.deliverAt),
-            localIso: formatUnixMsAsLocalOffset(env.deliverAt),
-          }
-        : { utcIso: "", localIso: "" };
+    const deliverAtPresent = typeof env.deliverAt === "number";
+    const deliverAt = deliverAtPresent
+      ? {
+          present: true,
+          iso: formatUnixMsAsTimeZoneOffset(env.deliverAt as number, bossTimeZone),
+        }
+      : { present: false, iso: "" };
 
     return {
       index: idx + 1,
@@ -367,8 +379,7 @@ export function buildTurnPromptContext(params: {
       channelMessageId,
       inReplyTo,
       createdAt: {
-        utcIso: formatUnixMsAsUtcIso(env.createdAt),
-        localIso: formatUnixMsAsLocalOffset(env.createdAt),
+        iso: formatUnixMsAsTimeZoneOffset(env.createdAt, bossTimeZone),
       },
       deliverAt,
       cronId,
@@ -396,7 +407,7 @@ export function buildTurnPromptContext(params: {
 
   return {
     turn: {
-      datetimeIso: formatUnixMsAsLocalOffset(params.datetimeMs),
+      datetimeIso: formatUnixMsAsTimeZoneOffset(params.datetimeMs, bossTimeZone),
       agentName: params.agentName,
       envelopeCount: envelopes.length,
       envelopeBlockCount,
@@ -407,8 +418,10 @@ export function buildTurnPromptContext(params: {
 
 export function buildCliEnvelopePromptContext(params: {
   envelope: Envelope;
+  bossTimezone: string;
 }): Record<string, unknown> {
   const env = params.envelope;
+  const bossTimeZone = params.bossTimezone.trim() || getDaemonIanaTimeZone();
   const semantic = buildSemanticFrom(env);
   const rawChannelMessageId = getChannelMessageId(env.metadata);
   const channelMessageId =
@@ -427,13 +440,13 @@ export function buildCliEnvelopePromptContext(params: {
     };
   });
 
-  const deliverAt =
-    typeof env.deliverAt === "number"
-      ? {
-          utcIso: formatUnixMsAsUtcIso(env.deliverAt),
-          localIso: formatUnixMsAsLocalOffset(env.deliverAt),
-        }
-      : { utcIso: "", localIso: "" };
+  const deliverAtPresent = typeof env.deliverAt === "number";
+  const deliverAt = deliverAtPresent
+    ? {
+        present: true,
+        iso: formatUnixMsAsTimeZoneOffset(env.deliverAt as number, bossTimeZone),
+      }
+    : { present: false, iso: "" };
 
   const authorLine = semantic ? withBossMarkerSuffix(semantic.authorName, env.fromBoss) : "";
   const senderLine = (() => {
@@ -459,7 +472,7 @@ export function buildCliEnvelopePromptContext(params: {
 
     return {
       ...r,
-      at: formatUnixMsAsLocalOffset(atMs),
+      at: formatUnixMsAsTimeZoneOffset(atMs, bossTimeZone),
     };
   })();
 
@@ -479,8 +492,7 @@ export function buildCliEnvelopePromptContext(params: {
       channelMessageId,
       inReplyTo,
       createdAt: {
-        utcIso: formatUnixMsAsUtcIso(env.createdAt),
-        localIso: formatUnixMsAsLocalOffset(env.createdAt),
+        iso: formatUnixMsAsTimeZoneOffset(env.createdAt, bossTimeZone),
       },
       deliverAt,
       cronId,

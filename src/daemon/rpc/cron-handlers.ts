@@ -15,6 +15,7 @@ import type { DaemonContext } from "./context.js";
 import { requireToken, rpcError } from "./context.js";
 import { parseAddress } from "../../adapters/types.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
+import { isValidIanaTimeZone } from "../../shared/timezone.js";
 import {
   DEFAULT_ID_PREFIX_LEN,
   compactUuid,
@@ -146,7 +147,14 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
       if (typeof p.timezone !== "string") {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid timezone");
       }
-      timezone = p.timezone.trim();
+      const trimmed = p.timezone.trim();
+      if (!trimmed) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid timezone");
+      }
+      if (!isValidIanaTimeZone(trimmed)) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid timezone (expected IANA timezone)");
+      }
+      timezone = trimmed;
     }
 
     const finalMetadata = Object.keys(metadata).length > 0 ? metadata : undefined;

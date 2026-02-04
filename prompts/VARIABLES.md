@@ -49,7 +49,7 @@ Notes:
 
 | Variable | Type | Meaning |
 |---------|------|---------|
-| `turn.datetimeIso` | string | Current turn time formatted in local timezone offset (ISO 8601) |
+| `turn.datetimeIso` | string | Current turn time formatted in boss timezone offset (ISO 8601) |
 | `turn.agentName` | string | Agent name |
 | `envelopes` | array | Pending envelopes for this run |
 | `envelopes[].index` | number | 1-based index |
@@ -67,10 +67,9 @@ Notes:
 | `envelopes[].authorName` | string | Author display name without boss marker (or empty) |
 | `envelopes[].authorLine` | string | Author with `[boss]` suffix for group messages (or empty) |
 | `envelopes[].senderLine` | string | Sender line for channel messages (e.g. `Alice (@alice) in group "hiboss-test"` or `Alice (@alice) in private chat`) (or empty) |
-| `envelopes[].createdAt.utcIso` | string | Created-at (UTC ISO 8601) |
-| `envelopes[].createdAt.localIso` | string | Created-at formatted in local timezone offset |
-| `envelopes[].deliverAt.utcIso` | string | Deliver-at (UTC ISO 8601) or empty |
-| `envelopes[].deliverAt.localIso` | string | Deliver-at formatted in local timezone offset or empty |
+| `envelopes[].createdAt.iso` | string | Created-at formatted in boss timezone offset (ISO 8601) |
+| `envelopes[].deliverAt.present` | boolean | Whether deliver-at is present |
+| `envelopes[].deliverAt.iso` | string | Deliver-at formatted in boss timezone offset (ISO 8601) (or empty) |
 | `envelopes[].cronId` | string | Cron schedule id (short id) if this envelope was created by a cron schedule (or empty) |
 | `envelopes[].content.text` | string | Text content (or `(none)`) |
 | `envelopes[].content.attachments` | array | Attachment objects |
@@ -101,10 +100,9 @@ Notes:
 | `envelope.authorName` | string | Author display name without boss marker (or empty) |
 | `envelope.authorLine` | string | Author with `[boss]` suffix for group messages (or empty) |
 | `envelope.senderLine` | string | Sender line for channel messages (e.g. `Alice (@alice) in group "hiboss-test"` or `Alice (@alice) in private chat`) (or empty) |
-| `envelope.createdAt.utcIso` | string | Created-at (UTC ISO 8601) |
-| `envelope.createdAt.localIso` | string | Created-at formatted in local timezone offset |
-| `envelope.deliverAt.utcIso` | string | Deliver-at (UTC ISO 8601) or empty |
-| `envelope.deliverAt.localIso` | string | Deliver-at formatted in local timezone offset or empty |
+| `envelope.createdAt.iso` | string | Created-at formatted in boss timezone offset (ISO 8601) |
+| `envelope.deliverAt.present` | boolean | Whether deliver-at is present |
+| `envelope.deliverAt.iso` | string | Deliver-at formatted in boss timezone offset (ISO 8601) (or empty) |
 | `envelope.cronId` | string | Cron schedule id (short id) if this envelope was created by a cron schedule (or empty) |
 | `envelope.content.text` | string | Text content (or `(none)`) |
 | `envelope.content.attachments` | array | Attachment objects |

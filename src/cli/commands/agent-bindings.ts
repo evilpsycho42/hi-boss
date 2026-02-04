@@ -1,8 +1,9 @@
 import { getDefaultConfig, getSocketPath } from "../../daemon/daemon.js";
 import { IpcClient } from "../ipc-client.js";
-import { formatUnixMsAsLocalOffset } from "../../shared/time.js";
+import { formatUnixMsAsTimeZoneOffset } from "../../shared/time.js";
 import { resolveToken } from "../token.js";
 import { formatShortId } from "../../shared/id-format.js";
+import { getDaemonTimeContext } from "../time-context.js";
 
 interface BindAgentResult {
   binding: {
@@ -35,6 +36,7 @@ export async function bindAgent(options: BindAgentOptions): Promise<void> {
 
   try {
     const token = resolveToken(options.token);
+    const time = await getDaemonTimeContext({ client, token });
     const result = await client.call<BindAgentResult>("agent.bind", {
       token,
       agentName: options.name,
@@ -45,7 +47,7 @@ export async function bindAgent(options: BindAgentOptions): Promise<void> {
     console.log(`id: ${formatShortId(result.binding.id)}`);
     console.log(`agent-name: ${result.binding.agentName}`);
     console.log(`adapter-type: ${result.binding.adapterType}`);
-    console.log(`created-at: ${formatUnixMsAsLocalOffset(result.binding.createdAt)}`);
+    console.log(`created-at: ${formatUnixMsAsTimeZoneOffset(result.binding.createdAt, time.bossTimezone)}`);
   } catch (err) {
     console.error("error:", (err as Error).message);
     process.exit(1);

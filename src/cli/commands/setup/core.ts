@@ -59,6 +59,7 @@ export async function executeSetup(config: SetupConfig): Promise<string> {
       provider: config.provider,
       providerSourceHome: config.providerSourceHome,
       bossName: config.bossName,
+      bossTimezone: config.bossTimezone,
       agent: config.agent,
       bossToken: config.bossToken,
       adapter: config.adapter,
@@ -110,6 +111,9 @@ async function executeSetupDirect(config: SetupConfig): Promise<string> {
       // Set boss name
       db.setBossName(config.bossName);
 
+      // Set boss timezone
+      db.setConfig("boss_timezone", config.bossTimezone);
+
       // Set default provider
       db.setDefaultProvider(config.provider);
 
@@ -149,4 +153,3 @@ async function executeSetupDirect(config: SetupConfig): Promise<string> {
     db.close();
   }
 }
-

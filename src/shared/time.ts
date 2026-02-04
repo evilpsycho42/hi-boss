@@ -6,6 +6,15 @@ function isFiniteUnixMs(ms: number): boolean {
   return typeof ms === "number" && Number.isFinite(ms);
 }
 
+type DateTimeParts = {
+  year: number;
+  month: number; // 1-12
+  day: number; // 1-31
+  hour: number; // 0-23
+  minute: number; // 0-59
+  second: number; // 0-59
+};
+
 function daysInMonthLocal(year: number, monthIndex: number): number {
   return new Date(year, monthIndex + 1, 0).getDate();
 }
@@ -66,7 +75,153 @@ function addYearsClampedLocal(date: Date, deltaYears: number): Date {
   );
 }
 
-function parseRelativeTimeToUnixMs(input: string): number | null {
+function parseGmtOffsetToMinutes(text: string): number | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  if (trimmed === "UTC" || trimmed === "GMT") return 0;
+
+  const m = trimmed.match(/^GMT([+-])(\d{1,2})(?::?(\d{2}))?$/);
+  if (!m) return null;
+  const sign = m[1] === "-" ? -1 : 1;
+  const hh = Number(m[2]);
+  const mm = m[3] ? Number(m[3]) : 0;
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  if (hh > 23 || mm > 59) return null;
+  return sign * (hh * 60 + mm);
+}
+
+const dtfCache = new Map<string, Intl.DateTimeFormat>();
+
+function getDateTimeDtf(timeZone: string): Intl.DateTimeFormat {
+  const key = `dt:${timeZone}`;
+  const cached = dtfCache.get(key);
+  if (cached) return cached;
+
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  dtfCache.set(key, dtf);
+  return dtf;
+}
+
+function getOffsetDtf(timeZone: string): Intl.DateTimeFormat {
+  const key = `off:${timeZone}`;
+  const cached = dtfCache.get(key);
+  if (cached) return cached;
+
+  const dtf = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour12: false,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZoneName: "shortOffset",
+  });
+  dtfCache.set(key, dtf);
+  return dtf;
+}
+
+function getTimeZoneOffsetMinutesAtUtcMs(timeZone: string, utcMs: number): number {
+  const dtf = getOffsetDtf(timeZone);
+  const parts = dtf.formatToParts(new Date(utcMs));
+  const tz = parts.find((p) => p.type === "timeZoneName")?.value ?? "";
+  const parsed = parseGmtOffsetToMinutes(tz);
+  if (typeof parsed === "number") return parsed;
+  return 0;
+}
+
+function getDateTimePartsAtUtcMs(timeZone: string, utcMs: number): DateTimeParts {
+  const dtf = getDateTimeDtf(timeZone);
+  const parts = dtf.formatToParts(new Date(utcMs));
+  const lookup: Record<string, string> = {};
+  for (const p of parts) {
+    if (p.type === "year" || p.type === "month" || p.type === "day" || p.type === "hour" || p.type === "minute" || p.type === "second") {
+      lookup[p.type] = p.value;
+    }
+  }
+  return {
+    year: Number(lookup.year),
+    month: Number(lookup.month),
+    day: Number(lookup.day),
+    hour: Number(lookup.hour),
+    minute: Number(lookup.minute),
+    second: Number(lookup.second),
+  };
+}
+
+function zonedLocalPartsToUnixMs(params: DateTimeParts & { millisecond: number; timeZone: string }): number {
+  const baseUtcMs = Date.UTC(
+    params.year,
+    params.month - 1,
+    params.day,
+    params.hour,
+    params.minute,
+    params.second,
+    params.millisecond
+  );
+
+  // Iteratively refine using the timezone offset at the current guess.
+  let guess = baseUtcMs;
+  for (let i = 0; i < 4; i++) {
+    const offsetMinutes = getTimeZoneOffsetMinutesAtUtcMs(params.timeZone, guess);
+    const candidate = baseUtcMs - offsetMinutes * 60_000;
+    if (candidate === guess) return candidate;
+    guess = candidate;
+  }
+  return guess;
+}
+
+function addMonthsClampedParts(parts: DateTimeParts & { millisecond: number }, deltaMonths: number): DateTimeParts & { millisecond: number } {
+  if (!deltaMonths) return { ...parts };
+
+  const monthIndex = parts.month - 1;
+  const totalMonths = monthIndex + deltaMonths;
+  let { q: yearCarry, r: normalizedMonth } = divMod(totalMonths, 12);
+  if (normalizedMonth < 0) {
+    normalizedMonth += 12;
+    yearCarry -= 1;
+  }
+
+  const targetYear = parts.year + yearCarry;
+  const lastDay = daysInMonthLocal(targetYear, normalizedMonth);
+  const targetDay = Math.min(parts.day, lastDay);
+
+  return {
+    ...parts,
+    year: targetYear,
+    month: normalizedMonth + 1,
+    day: targetDay,
+  };
+}
+
+function addYearsClampedParts(parts: DateTimeParts & { millisecond: number }, deltaYears: number): DateTimeParts & { millisecond: number } {
+  if (!deltaYears) return { ...parts };
+
+  const targetYear = parts.year + deltaYears;
+  const monthIndex = parts.month - 1;
+  const lastDay = daysInMonthLocal(targetYear, monthIndex);
+  const targetDay = Math.min(parts.day, lastDay);
+
+  return {
+    ...parts,
+    year: targetYear,
+    day: targetDay,
+  };
+}
+
+function parseRelativeTimeToUnixMsInTimeZone(input: string, timeZone: string): number | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
 
@@ -98,69 +253,93 @@ function parseRelativeTimeToUnixMs(input: string): number | null {
     );
   }
 
-  let date = new Date();
+  // Interpret relative times in the provided timezone so calendar math (Y/M/D) matches displayed time.
+  const nowMs = Date.now();
+  const nowParts = getDateTimePartsAtUtcMs(timeZone, nowMs);
+  let parts: DateTimeParts & { millisecond: number } = {
+    ...nowParts,
+    millisecond: new Date(nowMs).getUTCMilliseconds(),
+  };
+
+  let addMs = 0;
   for (const seg of segments) {
     const delta = sign * seg.value;
     switch (seg.unit) {
       case "Y":
-        date = addYearsClampedLocal(date, delta);
+        parts = addYearsClampedParts(parts, delta);
         break;
       case "M":
-        date = addMonthsClampedLocal(date, delta);
+        parts = addMonthsClampedParts(parts, delta);
         break;
-      case "D":
-        date.setDate(date.getDate() + delta);
+      case "D": {
+        const base = Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0, 0);
+        const moved = new Date(base + delta * 86_400_000);
+        parts = {
+          ...parts,
+          year: moved.getUTCFullYear(),
+          month: moved.getUTCMonth() + 1,
+          day: moved.getUTCDate(),
+        };
         break;
+      }
       case "h":
-        date.setHours(date.getHours() + delta);
+        addMs += delta * 3_600_000;
         break;
       case "m":
-        date.setMinutes(date.getMinutes() + delta);
+        addMs += delta * 60_000;
         break;
       case "s":
-        date.setSeconds(date.getSeconds() + delta);
+        addMs += delta * 1_000;
         break;
       default:
-        throw new Error(
-          `Invalid deliver-at: ${input} (unknown unit '${seg.unit}')`
-        );
+        throw new Error(`Invalid deliver-at: ${input} (unknown unit '${seg.unit}')`);
     }
   }
 
-  if (Number.isNaN(date.getTime())) {
+  const baseUtc = zonedLocalPartsToUnixMs({ ...parts, timeZone });
+  const finalMs = baseUtc + addMs;
+  if (Number.isNaN(finalMs)) {
     throw new Error(`Invalid deliver-at: ${input}`);
   }
-
-  return date.getTime();
+  return finalMs;
 }
 
 /**
- * Format a unix epoch milliseconds timestamp as local time with offset (ISO 8601).
+ * Format a unix epoch milliseconds timestamp in the given IANA timezone as ISO 8601 with offset.
  *
  * Example output: 2026-01-27T16:30:00-08:00
  */
-export function formatUnixMsAsLocalOffset(ms: number): string {
+export function formatUnixMsAsTimeZoneOffset(ms: number, timeZone: string): string {
   if (!isFiniteUnixMs(ms)) return String(ms);
+  if (!timeZone || !timeZone.trim()) return String(ms);
 
   const date = new Date(ms);
-  if (Number.isNaN(date.getTime())) {
-    return String(ms);
-  }
+  if (Number.isNaN(date.getTime())) return String(ms);
 
-  const year = date.getFullYear();
-  const month = pad2(date.getMonth() + 1);
-  const day = pad2(date.getDate());
-  const hour = pad2(date.getHours());
-  const minute = pad2(date.getMinutes());
-  const second = pad2(date.getSeconds());
+  const dtParts = getDateTimePartsAtUtcMs(timeZone, ms);
+  const offsetMinutes = getTimeZoneOffsetMinutesAtUtcMs(timeZone, ms);
 
-  const offsetMinutes = -date.getTimezoneOffset();
   const sign = offsetMinutes >= 0 ? "+" : "-";
   const abs = Math.abs(offsetMinutes);
   const offsetHour = pad2(Math.floor(abs / 60));
   const offsetMinute = pad2(abs % 60);
 
+  const year = dtParts.year;
+  const month = pad2(dtParts.month);
+  const day = pad2(dtParts.day);
+  const hour = pad2(dtParts.hour);
+  const minute = pad2(dtParts.minute);
+  const second = pad2(dtParts.second);
+
   return `${year}-${month}-${day}T${hour}:${minute}:${second}${sign}${offsetHour}:${offsetMinute}`;
+}
+
+/**
+ * Backwards-compatible formatter that renders using the daemon host's local timezone offset.
+ * Prefer `formatUnixMsAsTimeZoneOffset(ms, bossTimezone)` for user/agent-visible output.
+ */
+export function formatUnixMsAsLocalOffset(ms: number): string {
+  return formatUnixMsAsTimeZoneOffset(ms, Intl.DateTimeFormat().resolvedOptions().timeZone);
 }
 
 /**
@@ -174,7 +353,8 @@ export function formatUnixMsAsUtcIso(ms: number): string {
 }
 
 /**
- * Parse a user-provided datetime string into a unix epoch milliseconds timestamp (UTC).
+ * Parse a user-provided datetime string into a unix epoch milliseconds timestamp (UTC),
+ * interpreting timezone-less datetimes in the provided IANA timezone.
  *
  * Accepts:
  * - Relative offsets from now:
@@ -182,17 +362,17 @@ export function formatUnixMsAsUtcIso(ms: number): string {
  *   - "+3h" (now + 3 hours)
  *   - "-15m" (now - 15 minutes)
  * - ISO 8601 with timezone (Z or ±HH:MM / ±HHMM)
- * - ISO-like local datetime without timezone (interpreted in local timezone)
+ * - ISO-like local datetime without timezone (interpreted in the provided timezone)
  *   - "YYYY-MM-DDTHH:MM[:SS[.mmm]]"
  *   - "YYYY-MM-DD HH:MM[:SS[.mmm]]"
  */
-export function parseDateTimeInputToUnixMs(input: string): number {
+export function parseDateTimeInputToUnixMsInTimeZone(input: string, timeZone: string): number {
   const trimmed = input.trim();
   if (!trimmed) {
     throw new Error("Invalid deliver-at: empty value");
   }
 
-  const relative = parseRelativeTimeToUnixMs(trimmed);
+  const relative = parseRelativeTimeToUnixMsInTimeZone(trimmed, timeZone);
   if (typeof relative === "number") return relative;
 
   const hasTimezoneSuffix = /([zZ]|[+-]\d{2}:\d{2}|[+-]\d{4})$/.test(trimmed);
@@ -216,21 +396,29 @@ export function parseDateTimeInputToUnixMs(input: string): number {
 
   const [, y, mo, d, h, mi, s, ms] = match;
   const millis = ms ? Number(ms.padEnd(3, "0")) : 0;
-  const date = new Date(
-    Number(y),
-    Number(mo) - 1,
-    Number(d),
-    Number(h),
-    Number(mi),
-    s ? Number(s) : 0,
-    millis
-  );
+  const utcMs = zonedLocalPartsToUnixMs({
+    year: Number(y),
+    month: Number(mo),
+    day: Number(d),
+    hour: Number(h),
+    minute: Number(mi),
+    second: s ? Number(s) : 0,
+    millisecond: millis,
+    timeZone,
+  });
 
-  if (Number.isNaN(date.getTime())) {
+  if (Number.isNaN(utcMs)) {
     throw new Error(`Invalid deliver-at: ${input}`);
   }
 
-  return date.getTime();
+  return utcMs;
+}
+
+/**
+ * Backwards-compatible parser that interprets timezone-less datetimes in the daemon host's local timezone.
+ */
+export function parseDateTimeInputToUnixMs(input: string): number {
+  return parseDateTimeInputToUnixMsInTimeZone(input, Intl.DateTimeFormat().resolvedOptions().timeZone);
 }
 
 /**

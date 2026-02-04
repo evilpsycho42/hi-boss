@@ -117,6 +117,7 @@ export const DEFAULT_PERMISSION_POLICY: PermissionPolicyV1 = {
     // Daemon read-only
     "daemon.status": "boss",
     "daemon.ping": "standard",
+    "daemon.time": "restricted",
 
     // Admin operations (boss-only by default; configurable via policy)
     "daemon.start": "boss",

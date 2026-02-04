@@ -11,7 +11,7 @@ import { RPC_ERRORS } from "../ipc/types.js";
 import type { DaemonContext } from "./context.js";
 import { requireToken, rpcError } from "./context.js";
 import { formatAgentAddress, parseAddress } from "../../adapters/types.js";
-import { parseDateTimeInputToUnixMs } from "../../shared/time.js";
+import { parseDateTimeInputToUnixMsInTimeZone } from "../../shared/time.js";
 
 /**
  * Create envelope RPC handlers.
@@ -107,7 +107,7 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
     let deliverAt: number | undefined;
     if (p.deliverAt) {
       try {
-        deliverAt = parseDateTimeInputToUnixMs(p.deliverAt);
+        deliverAt = parseDateTimeInputToUnixMsInTimeZone(p.deliverAt, ctx.db.getBossTimezone());
       } catch (err) {
         rpcError(
           RPC_ERRORS.INVALID_PARAMS,

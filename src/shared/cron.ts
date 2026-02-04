@@ -1,25 +1,21 @@
 import { CronExpressionParser } from "cron-parser";
 
-export function getLocalIanaTimeZone(): string {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone;
-}
-
 export function normalizeTimeZoneInput(timezone?: string): string | undefined {
   if (!timezone) return undefined;
   const trimmed = timezone.trim();
   if (!trimmed) return undefined;
-  if (trimmed.toLowerCase() === "local") return undefined;
   return trimmed;
 }
 
 export function computeNextCronUnixMs(params: {
   cron: string;
-  timezone?: string;
+  timezone?: string; // explicit schedule timezone (IANA); missing means "inherit bossTimezone"
+  bossTimezone: string;
   afterDate?: Date;
 }): number {
   const after = params.afterDate ?? new Date();
   const afterMs = after.getTime();
-  const tz = normalizeTimeZoneInput(params.timezone) ?? getLocalIanaTimeZone();
+  const tz = normalizeTimeZoneInput(params.timezone) ?? params.bossTimezone;
 
   const interval = CronExpressionParser.parse(params.cron, {
     currentDate: after,

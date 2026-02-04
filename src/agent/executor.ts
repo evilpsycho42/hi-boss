@@ -204,6 +204,7 @@ export class AgentExecutor {
         context: {
           datetimeMs: Date.now(),
           agentName: agent.name,
+          bossTimezone: db.getBossTimezone(),
         },
         envelopes,
       });
@@ -338,6 +339,7 @@ export class AgentExecutor {
           agent,
           agentToken: agentRecord.token,
           bindings,
+          bossTimezone: db.getBossTimezone(),
           hibossDir: this.hibossDir,
           boss,
         });

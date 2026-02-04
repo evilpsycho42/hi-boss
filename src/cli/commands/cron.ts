@@ -2,10 +2,11 @@ import { getDefaultConfig, getSocketPath } from "../../daemon/daemon.js";
 import { IpcClient } from "../ipc-client.js";
 import { resolveToken } from "../token.js";
 import type { CronSchedule } from "../../cron/types.js";
-import { formatUnixMsAsLocalOffset } from "../../shared/time.js";
+import { formatUnixMsAsTimeZoneOffset } from "../../shared/time.js";
 import { extractTelegramFileId, normalizeAttachmentSource, resolveText } from "./envelope-input.js";
 import { tryPrintAmbiguousIdPrefixError } from "../ambiguous-id.js";
 import { formatShortId } from "../../shared/id-format.js";
+import { getDaemonTimeContext } from "../time-context.js";
 
 interface CronCreateResult {
   id: string;
@@ -40,9 +41,9 @@ export interface CronIdOptions {
   id: string;
 }
 
-function formatMaybeLocalOffset(ms?: number): string {
+function formatMaybeOffset(ms: number | undefined, bossTimezone: string): string {
   if (typeof ms !== "number") return "(none)";
-  return formatUnixMsAsLocalOffset(ms);
+  return formatUnixMsAsTimeZoneOffset(ms, bossTimezone);
 }
 
 function formatMaybeShortId(uuid?: string): string {
@@ -52,24 +53,24 @@ function formatMaybeShortId(uuid?: string): string {
   return formatShortId(trimmed);
 }
 
-function formatCronScheduleSummary(schedule: CronSchedule): string {
+function formatCronScheduleSummary(schedule: CronSchedule, bossTimezone: string): string {
   const lines: string[] = [];
   lines.push(`cron-id: ${formatShortId(schedule.id)}`);
   lines.push(`cron: ${schedule.cron}`);
-  lines.push(`timezone: ${schedule.timezone ?? "local"}`);
+  lines.push(`timezone: ${schedule.timezone ?? "boss"}`);
   lines.push(`enabled: ${schedule.enabled ? "true" : "false"}`);
   lines.push(`to: ${schedule.to}`);
-  lines.push(`next-deliver-at: ${formatMaybeLocalOffset(schedule.nextDeliverAt)}`);
+  lines.push(`next-deliver-at: ${formatMaybeOffset(schedule.nextDeliverAt, bossTimezone)}`);
   lines.push(`pending-envelope-id: ${formatMaybeShortId(schedule.pendingEnvelopeId)}`);
   return lines.join("\n");
 }
 
-function formatCronScheduleDetail(schedule: CronSchedule): string {
+function formatCronScheduleDetail(schedule: CronSchedule, bossTimezone: string): string {
   const lines: string[] = [];
-  lines.push(formatCronScheduleSummary(schedule));
-  lines.push(`created-at: ${formatMaybeLocalOffset(schedule.createdAt)}`);
+  lines.push(formatCronScheduleSummary(schedule, bossTimezone));
+  lines.push(`created-at: ${formatMaybeOffset(schedule.createdAt, bossTimezone)}`);
   if (schedule.updatedAt) {
-    lines.push(`updated-at: ${formatMaybeLocalOffset(schedule.updatedAt)}`);
+    lines.push(`updated-at: ${formatMaybeOffset(schedule.updatedAt, bossTimezone)}`);
   }
 
   const md = schedule.metadata;
@@ -135,6 +136,7 @@ export async function listCrons(options: CronListOptions): Promise<void> {
 
   try {
     const token = resolveToken(options.token);
+    const time = await getDaemonTimeContext({ client, token });
     const result = await client.call<CronListResult>("cron.list", { token });
 
     if (result.schedules.length === 0) {
@@ -143,7 +145,7 @@ export async function listCrons(options: CronListOptions): Promise<void> {
     }
 
     for (const schedule of result.schedules) {
-      console.log(formatCronScheduleDetail(schedule));
+      console.log(formatCronScheduleDetail(schedule, time.bossTimezone));
       console.log();
     }
   } catch (err) {
@@ -156,13 +158,15 @@ export async function enableCron(options: CronIdOptions): Promise<void> {
   const config = getDefaultConfig();
   const client = new IpcClient(getSocketPath(config));
 
+  const token = resolveToken(options.token);
+  const time = await getDaemonTimeContext({ client, token }).catch(() => null);
+
   try {
-    const token = resolveToken(options.token);
     const result = await client.call<CronToggleResult>("cron.enable", { token, id: options.id });
     console.log(`success: ${result.success ? "true" : "false"}`);
     console.log(`cron-id: ${formatShortId(result.id)}`);
   } catch (err) {
-    if (tryPrintAmbiguousIdPrefixError(err)) {
+    if (tryPrintAmbiguousIdPrefixError(err, { displayTimeZone: time?.bossTimezone })) {
       process.exit(1);
     }
     console.error("error:", (err as Error).message);
@@ -174,13 +178,15 @@ export async function disableCron(options: CronIdOptions): Promise<void> {
   const config = getDefaultConfig();
   const client = new IpcClient(getSocketPath(config));
 
+  const token = resolveToken(options.token);
+  const time = await getDaemonTimeContext({ client, token }).catch(() => null);
+
   try {
-    const token = resolveToken(options.token);
     const result = await client.call<CronToggleResult>("cron.disable", { token, id: options.id });
     console.log(`success: ${result.success ? "true" : "false"}`);
     console.log(`cron-id: ${formatShortId(result.id)}`);
   } catch (err) {
-    if (tryPrintAmbiguousIdPrefixError(err)) {
+    if (tryPrintAmbiguousIdPrefixError(err, { displayTimeZone: time?.bossTimezone })) {
       process.exit(1);
     }
     console.error("error:", (err as Error).message);
@@ -192,13 +198,15 @@ export async function deleteCron(options: CronIdOptions): Promise<void> {
   const config = getDefaultConfig();
   const client = new IpcClient(getSocketPath(config));
 
+  const token = resolveToken(options.token);
+  const time = await getDaemonTimeContext({ client, token }).catch(() => null);
+
   try {
-    const token = resolveToken(options.token);
     const result = await client.call<CronToggleResult>("cron.delete", { token, id: options.id });
     console.log(`success: ${result.success ? "true" : "false"}`);
     console.log(`cron-id: ${formatShortId(result.id)}`);
   } catch (err) {
-    if (tryPrintAmbiguousIdPrefixError(err)) {
+    if (tryPrintAmbiguousIdPrefixError(err, { displayTimeZone: time?.bossTimezone })) {
       process.exit(1);
     }
     console.error("error:", (err as Error).message);

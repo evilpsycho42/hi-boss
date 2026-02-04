@@ -83,6 +83,7 @@ Daemon:
 
 - `daemon.status`
 - `daemon.ping`
+- `daemon.time`
 
 Setup:
 

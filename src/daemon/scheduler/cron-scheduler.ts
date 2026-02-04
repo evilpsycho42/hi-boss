@@ -4,7 +4,7 @@ import type { Envelope } from "../../envelope/types.js";
 import { computeNextCronUnixMs, normalizeTimeZoneInput } from "../../shared/cron.js";
 import { formatAgentAddress, parseAddress } from "../../adapters/types.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
-import { formatUnixMsAsLocalOffset } from "../../shared/time.js";
+import { formatUnixMsAsTimeZoneOffset } from "../../shared/time.js";
 import type { EnvelopeScheduler } from "./envelope-scheduler.js";
 
 function getCronScheduleIdFromEnvelopeMetadata(metadata: unknown): string | null {
@@ -49,6 +49,7 @@ export class CronScheduler {
     const deliverAt = computeNextCronUnixMs({
       cron: schedule.cron,
       timezone: schedule.timezone,
+      bossTimezone: this.db.getBossTimezone(),
       afterDate,
     });
 
@@ -62,6 +63,7 @@ export class CronScheduler {
     });
 
     this.db.updateCronSchedulePendingEnvelopeId(schedule.id, envelope.id);
+    const bossTz = this.db.getBossTimezone();
     logEvent("info", "envelope-created", {
       "envelope-id": envelope.id,
       source: "cron",
@@ -69,7 +71,7 @@ export class CronScheduler {
       "agent-name": schedule.agentName,
       from: envelope.from,
       to: envelope.to,
-      "deliver-at": envelope.deliverAt ? formatUnixMsAsLocalOffset(envelope.deliverAt) : "none",
+      "deliver-at": envelope.deliverAt ? formatUnixMsAsTimeZoneOffset(envelope.deliverAt, bossTz) : "none",
     });
     return envelope;
   }
@@ -86,6 +88,7 @@ export class CronScheduler {
     computeNextCronUnixMs({
       cron: normalizedInput.cron,
       timezone: normalizedInput.timezone,
+      bossTimezone: this.db.getBossTimezone(),
     });
 
     let createdSchedule!: CronSchedule;

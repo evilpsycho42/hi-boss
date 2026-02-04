@@ -1,10 +1,11 @@
-import { formatUnixMsAsLocalOffset } from "./time.js";
+import { formatUnixMsAsTimeZoneOffset } from "./time.js";
 
 export type DaemonLogLevel = "info" | "warn" | "error";
 
 const SAFE_VALUE = /^[A-Za-z0-9._:@/+-]+$/;
 
 let debugEnabled = false;
+let displayTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
 const DEBUG_ONLY_KEYS = new Set([
   "agent-run-id",
@@ -19,6 +20,12 @@ const DEBUG_ONLY_KEYS = new Set([
 
 export function setDaemonDebugEnabled(enabled: boolean): void {
   debugEnabled = enabled;
+}
+
+export function setDaemonLogTimeZone(timeZone: string): void {
+  const trimmed = timeZone.trim();
+  if (!trimmed) return;
+  displayTimeZone = trimmed;
 }
 
 function formatValue(value: unknown): string | null {
@@ -59,7 +66,7 @@ function normalizeField(
 
 export function logEvent(level: DaemonLogLevel, event: string, fields?: Record<string, unknown>): void {
   const debug = debugEnabled;
-  const parts: string[] = [`ts=${formatUnixMsAsLocalOffset(Date.now())}`, `level=${level}`, `event=${event}`];
+  const parts: string[] = [`ts=${formatUnixMsAsTimeZoneOffset(Date.now(), displayTimeZone)}`, `level=${level}`, `event=${event}`];
   const seenKeys = new Set(parts.map((p) => p.split("=")[0]));
 
   for (const [key, value] of Object.entries(fields ?? {})) {

@@ -18,7 +18,7 @@ Hi-Boss supplies fields as template variables (see `prompts/VARIABLES.md`).
 | `from` | Always | Raw address for routing (use with `--to` when replying) |
 | `sender` | Only for channel messages | Sender and chat context (e.g. `Alice (@alice) in group "hiboss-test"` or `Alice (@alice) in private chat`) |
 | `channel-message-id` | Only for channel messages | Platform message id (Telegram uses compact base36, no prefix; use with `hiboss envelope send --reply-to ...` and `hiboss reaction set --channel-message-id ...`) |
-| `created-at` | Always | Timestamp (local timezone offset) |
+| `created-at` | Always | Timestamp (boss timezone offset) |
 | `deliver-at` | Only for scheduled messages | Requested delivery time |
 | `cron-id` | Only for cron messages | Cron schedule id (short id) |
 

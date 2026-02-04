@@ -23,6 +23,7 @@ export interface InstructionContext {
   bindings?: AgentBinding[];
   additionalContext?: string;
   hibossDir?: string;
+  bossTimezone?: string;
   boss?: {
     name?: string;
     adapterIds?: Record<string, string>;
@@ -53,6 +54,7 @@ export function generateSystemInstructions(ctx: InstructionContext): string {
     agent,
     agentToken,
     bindings: bindings ?? [],
+    time: { bossTimezone: ctx.bossTimezone },
     hibossDir: ctx.hibossDir,
     boss,
   });

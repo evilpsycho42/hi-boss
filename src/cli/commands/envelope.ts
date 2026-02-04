@@ -5,6 +5,7 @@ import type { Envelope } from "../../envelope/types.js";
 import { formatEnvelopeInstruction } from "../instructions/format-envelope.js";
 import { extractTelegramFileId, normalizeAttachmentSource, resolveText } from "./envelope-input.js";
 import { formatShortId } from "../../shared/id-format.js";
+import { getDaemonTimeContext } from "../time-context.js";
 
 interface SendEnvelopeResult {
   id: string;
@@ -121,6 +122,7 @@ export async function listEnvelopes(options: ListEnvelopesOptions): Promise<void
 
   try {
     const token = resolveToken(options.token);
+    const time = await getDaemonTimeContext({ client, token });
     const hasTo = typeof options.to === "string" && options.to.trim();
     const hasFrom = typeof options.from === "string" && options.from.trim();
     if ((hasTo && hasFrom) || (!hasTo && !hasFrom)) {
@@ -145,7 +147,7 @@ export async function listEnvelopes(options: ListEnvelopesOptions): Promise<void
     }
 
     for (const env of result.envelopes) {
-      console.log(formatEnvelopeInstruction(env));
+      console.log(formatEnvelopeInstruction(env, time.bossTimezone));
       console.log();
     }
   } catch (err) {

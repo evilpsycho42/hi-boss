@@ -153,6 +153,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
   upsertConfig.run("setup_completed", "true", cfgTime);
   upsertConfig.run("boss_token_hash", hashToken(bossToken), cfgTime);
   upsertConfig.run("boss_name", "Kevin", cfgTime);
+  upsertConfig.run("boss_timezone", "Asia/Shanghai", cfgTime);
   upsertConfig.run("adapter_boss_id_telegram", "@kky1024", cfgTime);
   upsertConfig.run("memory_enabled", "true", cfgTime);
   upsertConfig.run("memory_model_source", "local", cfgTime);

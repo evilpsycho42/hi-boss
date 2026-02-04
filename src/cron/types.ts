@@ -5,7 +5,7 @@ export interface CronSchedule {
   id: string;
   agentName: string; // owner/sender agent
   cron: string;
-  timezone?: string; // IANA timezone; missing means local
+  timezone?: string; // IANA timezone; missing means inherit boss timezone
   enabled: boolean;
   to: Address;
   content: {

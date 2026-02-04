@@ -2,9 +2,10 @@
  * Daemon status and ping RPC handlers.
  */
 
-import type { RpcMethodRegistry } from "../ipc/types.js";
+import type { RpcMethodRegistry, DaemonTimeResult } from "../ipc/types.js";
 import type { DaemonContext } from "./context.js";
 import { requireToken } from "./context.js";
+import { getDaemonIanaTimeZone } from "../../shared/timezone.js";
 
 /**
  * Create daemon RPC handlers.
@@ -37,6 +38,19 @@ export function createDaemonHandlers(ctx: DaemonContext): RpcMethodRegistry {
       ctx.assertOperationAllowed("daemon.ping", principal);
 
       return { pong: true, timestampMs: Date.now() };
+    },
+
+    "daemon.time": async (params) => {
+      const p = params as unknown as { token: string };
+      const token = requireToken(p.token);
+      const principal = ctx.resolvePrincipal(token);
+      ctx.assertOperationAllowed("daemon.time", principal);
+
+      const daemonTimezone = getDaemonIanaTimeZone();
+      const bossTimezone = ctx.db.getBossTimezone();
+
+      const result: DaemonTimeResult = { daemonTimezone, bossTimezone };
+      return result;
     },
   };
 }

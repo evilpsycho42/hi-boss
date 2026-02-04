@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS cron_schedules (
   id TEXT PRIMARY KEY,
   agent_name TEXT NOT NULL,   -- owner agent (sender)
   cron TEXT NOT NULL,         -- cron expression
-  timezone TEXT,              -- IANA timezone (null means local)
+  timezone TEXT,              -- IANA timezone (null means inherit boss timezone)
   enabled INTEGER DEFAULT 1,
   to_address TEXT NOT NULL,
   content_text TEXT,

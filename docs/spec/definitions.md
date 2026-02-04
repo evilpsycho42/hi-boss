@@ -18,6 +18,10 @@ Canonical mapping (selected):
 - `envelope.deliverAt` → SQLite `deliver_at` → `--deliver-at` → `deliver-at:`
 - `envelope.createdAt` → SQLite `created_at` → `created-at:`
 - `envelope.fromBoss` → SQLite `from_boss` → `[boss]` suffix in rendered sender lines
+- `config.bossTimezone` → SQLite `config.boss_timezone` → setup `boss-timezone` → `boss-timezone:`
+
+Derived (not stored):
+- `daemon-timezone:` is computed from the daemon host (`Intl.DateTimeFormat().resolvedOptions().timeZone`) and printed by setup for operator clarity.
 
 ---
 
@@ -65,8 +69,8 @@ Command flags:
 - `from:` (always; raw address)
 - `sender:` (only for channel messages; `Author [boss] in group "<name>"` or `Author [boss] in private chat`)
 - `channel-message-id:` (only for channel messages; platform message id. For Telegram, rendered in compact base36 (no prefix); accepted by `--reply-to` and `hiboss reaction set --channel-message-id` using the displayed value. Raw decimal can be passed as `dec:<id>`.)
-- `created-at:` (always; local timezone offset)
-- `deliver-at:` (optional; shown when present, in local timezone offset)
+- `created-at:` (always; boss timezone offset)
+- `deliver-at:` (optional; shown when present, in boss timezone offset)
 - `cron-id:` (optional; shown when present; short id derived from the internal cron schedule UUID)
 
 **Reply/quote keys** (only when the incoming channel message is a reply)
@@ -76,7 +80,7 @@ Command flags:
   - Note: adapters may truncate `in-reply-to-text` for safety/size. The Telegram adapter truncates at 1200 characters and appends `\n\n[...truncated...]\n`.
 
 **Delivery error keys** (only when a channel delivery attempt failed)
-- `last-delivery-error-at:` (local timezone offset)
+- `last-delivery-error-at:` (boss timezone offset)
 - `last-delivery-error-kind:`
 - `last-delivery-error-message:`
 
@@ -96,13 +100,13 @@ Envelope instructions printed by `hiboss envelope list` do **not** include the i
 **Common keys**
 - `cron-id:` (short id; derived from the internal cron schedule UUID)
 - `cron:`
-- `timezone:` (`local` when not set)
+- `timezone:` (`boss` when not set; means inherit boss timezone)
 - `enabled:` (`true|false`)
 - `to:`
-- `next-deliver-at:` (local timezone offset or `(none)`)
+- `next-deliver-at:` (boss timezone offset or `(none)`)
 - `pending-envelope-id:` (short id; or `(none)`)
-- `created-at:` (local timezone offset)
-- `updated-at:` (optional; local timezone offset)
+- `created-at:` (boss timezone offset)
+- `updated-at:` (optional; boss timezone offset)
 
 **Template keys** (only when present)
 - `parse-mode:`
@@ -197,12 +201,15 @@ Clearing nullable overrides:
 ### CLI Output Keys
 
 - `hiboss agent register` prints `token:` once (there is no “show token” command).
+- `hiboss setup` prints:
+  - `daemon-timezone: <iana>`
+  - `boss-timezone: <iana>`
 - `hiboss setup` (interactive or `--config-file`) prints `agent-token:` once.
 - `hiboss setup` (interactive or `--config-file`) also prints `boss-token:` once.
 - `hiboss agent delete` prints:
   - `success: true|false`
   - `agent-name:`
-- `hiboss agent list` prints fields like `created-at:` (timestamps are shown in local timezone offset).
+- `hiboss agent list` prints fields like `created-at:` (timestamps are shown in boss timezone offset).
 - `hiboss agent status` prints:
   - `agent-state:` (`running|idle`)
   - `agent-health:` (`ok|error|unknown`)
@@ -274,7 +281,7 @@ Command flags:
 
 `hiboss daemon status` prints:
 - `running:`
-- `start-time:` (local timezone offset or `(none)`)
+- `start-time:` (boss timezone offset or `(none)`)
 - `adapters:`
 - `data-dir:`
 

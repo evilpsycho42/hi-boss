@@ -129,7 +129,7 @@ Output (parseable, one block per agent):
 - `name:`
 - `description:` (optional)
 - `workspace:` (optional)
-- `created-at:` (local timezone offset)
+- `created-at:` (boss timezone offset)
 
 Default permission:
 - `restricted`
@@ -195,10 +195,10 @@ Output (parseable):
 - `agent-health:` (`ok|error|unknown`)
 - `pending-count: <n>`
 - `current-run-id:` (optional; short id; when `agent-state=running` and a run record exists)
-- `current-run-started-at:` (optional; local timezone offset)
+- `current-run-started-at:` (optional; boss timezone offset)
 - `last-run-id:` (optional; short id)
 - `last-run-status:` (`completed|failed|none`)
-- `last-run-started-at:` (optional; local timezone offset)
-- `last-run-completed-at:` (optional; local timezone offset)
+- `last-run-started-at:` (optional; boss timezone offset)
+- `last-run-completed-at:` (optional; boss timezone offset)
 - `last-run-context-length:` (optional; integer, when available)
 - `last-run-error:` (optional; only when `last-run-status=failed`)

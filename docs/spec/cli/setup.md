@@ -16,6 +16,7 @@ Behavior:
 - Imports provider config files for the chosen provider into the agent’s provider home
 - Creates the first agent and prints `agent-token:` once (no “show token” command)
 - Prints `boss-token:` once
+- Prompts for `boss-timezone` (IANA) used for all displayed timestamps; defaults to the daemon host timezone
 - Configures and binds a Telegram adapter for the first agent
 
 ## `hiboss setup --config-file <path>`
@@ -30,6 +31,7 @@ Usage:
 Config file must include:
 - `version: 1`
 - `boss-token: <token>`
+- `boss-timezone: <iana>` (optional; defaults to daemon host timezone)
 - `agent: { ... }`
 - `telegram: { adapter-token, adapter-boss-id }`
 
@@ -45,6 +47,7 @@ Example (`setup.json`):
 {
   "version": 1,
   "boss-name": "your-name",
+  "boss-timezone": "Asia/Shanghai",
   "boss-token": "your-boss-token",
   "provider": "claude",
   "provider-source-home": "~/.claude",
@@ -75,5 +78,5 @@ Notes:
 
 Output:
 - Setup prints tokens once, plus a small block of stable key/value lines (keys are kebab-case and may be indented in the human UI).
-- `hiboss setup` (interactive) prints: `agent-name:`, `agent-token:`, `boss-token:`, `memory-enabled:`, and (when applicable) `memory-model-path:`, `memory-model-dims:`, `memory-last-error:`.
-- `hiboss setup --config-file ...` prints: `boss-name:`, `agent-name:`, `agent-token:`, `boss-token:`, `provider:`, `model:`, `memory-enabled:`.
+- `hiboss setup` (interactive) prints: `daemon-timezone:`, `boss-timezone:`, `agent-name:`, `agent-token:`, `boss-token:`, `memory-enabled:`, and (when applicable) `memory-model-path:`, `memory-model-dims:`, `memory-last-error:`.
+- `hiboss setup --config-file ...` prints: `daemon-timezone:`, `boss-timezone:`, `boss-name:`, `agent-name:`, `agent-token:`, `boss-token:`, `provider:`, `model:`, `memory-enabled:`.

@@ -7,6 +7,7 @@
 import type { Envelope } from "../envelope/types.js";
 import { renderPrompt } from "../shared/prompt-renderer.js";
 import { buildTurnPromptContext } from "../shared/prompt-context.js";
+import { getDaemonIanaTimeZone } from "../shared/timezone.js";
 
 /**
  * Context for the current turn.
@@ -14,6 +15,7 @@ import { buildTurnPromptContext } from "../shared/prompt-context.js";
 export interface TurnContext {
   datetimeMs: number; // unix epoch ms (UTC)
   agentName: string;
+  bossTimezone: string; // IANA timezone used for displayed timestamps
 }
 
 /**
@@ -65,6 +67,7 @@ export function buildTurnInput(turnInput: TurnInput): string {
   const promptContext = buildTurnPromptContext({
     agentName: context.agentName,
     datetimeMs: context.datetimeMs,
+    bossTimezone: context.bossTimezone,
     envelopes,
   });
 
@@ -83,7 +86,7 @@ export function buildTurnInput(turnInput: TurnInput): string {
  */
 export function formatEnvelopeAsPrompt(envelope: Envelope): string {
   return buildTurnInput({
-    context: { datetimeMs: Date.now(), agentName: "(single-envelope)" },
+    context: { datetimeMs: Date.now(), agentName: "(single-envelope)", bossTimezone: getDaemonIanaTimeZone() },
     envelopes: [envelope],
   });
 }
