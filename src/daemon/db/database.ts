@@ -566,7 +566,12 @@ export class HiBossDatabase {
   private rowToAgent(row: AgentRow): Agent {
     // Parse permission level
     let permissionLevel: AgentPermissionLevel | undefined;
-    if (row.permission_level === "restricted" || row.permission_level === "standard" || row.permission_level === "privileged") {
+    if (
+      row.permission_level === "restricted" ||
+      row.permission_level === "standard" ||
+      row.permission_level === "privileged" ||
+      row.permission_level === "boss"
+    ) {
       permissionLevel = row.permission_level;
     }
 

@@ -169,7 +169,7 @@ cron
     "--to <address>",
     "Destination address (agent:<name> or channel:<adapter>:<chat-id>)"
   )
-  .option("--timezone <iana>", "IANA timezone (defaults to local; accepts 'local')")
+  .option("--timezone <iana>", "IANA timezone (defaults to boss timezone)")
   .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .option("--text <text>", "Envelope text (use - to read from stdin)")
   .option("--text-file <path>", "Read envelope text from file")

@@ -20,7 +20,7 @@ hiboss envelope send --to agent:<agent-name> --token <agent-token> --text "month
 hiboss cron create --cron "0 9 * * *" --to agent:<agent-name> --token <agent-token> --text "daily reminder"
 ```
 
-Optional timezone (IANA; defaults to local):
+Optional timezone (IANA; defaults to boss timezone):
 
 ```bash
 hiboss cron create --cron "0 9 * * *" --timezone "Asia/Tokyo" --to agent:<agent-name> --token <agent-token> --text "daily reminder"

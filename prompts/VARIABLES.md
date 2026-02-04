@@ -21,7 +21,7 @@ Notes:
 | `internalSpace.noteFence` | string | Markdown code fence delimiter for `internalSpace.note` (e.g., ``` or ````) |
 | `internalSpace.error` | string | Internal space snapshot error message (or empty) |
 | `boss.name` | string | Boss name (how agent should address the user, or empty) |
-| `boss.adapterIds` | object | Boss identity per adapter type (e.g. `{ telegram: "@kevin" }`, or `{}`) |
+| `boss.adapterIds` | object | Boss identity per adapter type (e.g. `{ telegram: "kevin" }`, or `{}`) |
 | `agent.name` | string | Agent name |
 | `agent.description` | string | Agent description (or empty) |
 | `agent.workspace` | string | Agent workspace directory (resolved; falls back to `process.cwd()`) |
@@ -29,7 +29,7 @@ Notes:
 | `agent.model` | string | Model id/alias (or empty) |
 | `agent.reasoningEffort` | string | `none|low|medium|high|xhigh` (or empty) |
 | `agent.autoLevel` | string | `medium|high` (or empty) |
-| `agent.permissionLevel` | string | `restricted|standard|privileged` (or empty) |
+| `agent.permissionLevel` | string | `restricted|standard|privileged|boss` (or empty) |
 | `agent.sessionPolicy.dailyResetAt` | string | Daily reset time in `HH:MM` format (or empty) |
 | `agent.sessionPolicy.idleTimeout` | string | Idle timeout duration like `2h`, `30m` (or empty) |
 | `agent.sessionPolicy.maxContextLength` | number | Max context length before session refresh (or `0`) |

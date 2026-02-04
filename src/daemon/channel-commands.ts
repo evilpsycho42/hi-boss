@@ -7,6 +7,7 @@ import {
   DEFAULT_AGENT_PROVIDER,
 } from "../shared/defaults.js";
 import { formatUnixMsAsTimeZoneOffset } from "../shared/time.js";
+import { formatShortId } from "../shared/id-format.js";
 
 type EnrichedChannelCommand = ChannelCommand & { agentName?: string };
 
@@ -41,6 +42,19 @@ function buildAgentStatusText(params: { db: HiBossDatabase; executor: AgentExecu
     lines.push(`bindings: ${bindings.join(", ")}`);
   }
 
+  if (agent.sessionPolicy) {
+    const sp = agent.sessionPolicy;
+    if (typeof sp.dailyResetAt === "string" && sp.dailyResetAt) {
+      lines.push(`session-daily-reset-at: ${sp.dailyResetAt}`);
+    }
+    if (typeof sp.idleTimeout === "string" && sp.idleTimeout) {
+      lines.push(`session-idle-timeout: ${sp.idleTimeout}`);
+    }
+    if (typeof sp.maxContextLength === "number") {
+      lines.push(`session-max-context-length: ${sp.maxContextLength}`);
+    }
+  }
+
   const agentState = isBusy ? "running" : "idle";
   const agentHealth = !lastRun ? "unknown" : lastRun.status === "failed" ? "error" : "ok";
 
@@ -49,7 +63,7 @@ function buildAgentStatusText(params: { db: HiBossDatabase; executor: AgentExecu
   lines.push(`pending-count: ${pendingCount}`);
 
   if (currentRun) {
-    lines.push(`current-run-id: ${currentRun.id}`);
+    lines.push(`current-run-id: ${formatShortId(currentRun.id)}`);
     lines.push(`current-run-started-at: ${formatUnixMsAsTimeZoneOffset(currentRun.startedAt, bossTz)}`);
   }
 
@@ -58,7 +72,7 @@ function buildAgentStatusText(params: { db: HiBossDatabase; executor: AgentExecu
     return lines.join("\n");
   }
 
-  lines.push(`last-run-id: ${lastRun.id}`);
+  lines.push(`last-run-id: ${formatShortId(lastRun.id)}`);
   lines.push(`last-run-status: ${lastRun.status === "failed" ? "failed" : "completed"}`);
   lines.push(`last-run-started-at: ${formatUnixMsAsTimeZoneOffset(lastRun.startedAt, bossTz)}`);
   if (typeof lastRun.completedAt === "number") {
