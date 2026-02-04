@@ -118,11 +118,11 @@ export class MemoryStore {
         id,
         text: String(r.text ?? ""),
         category: String(r.category ?? ""),
-        createdAt: String(r.createdAt ?? ""),
+        createdAt: parseUnixMs(r.createdAt),
       });
     }
 
-    matches.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+    matches.sort((a, b) => b.createdAt - a.createdAt);
     return matches;
   }
 

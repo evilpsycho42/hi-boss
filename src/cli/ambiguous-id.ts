@@ -1,4 +1,4 @@
-import { formatUtcIsoAsLocalOffset } from "../shared/time.js";
+import { formatUnixMsAsLocalOffset } from "../shared/time.js";
 
 type AmbiguousIdPrefixCandidate = Record<string, unknown> & {
   candidateId: string;
@@ -14,11 +14,9 @@ type AmbiguousIdPrefixErrorData = Record<string, unknown> & {
   candidates: AmbiguousIdPrefixCandidate[];
 };
 
-function formatMaybeLocalIso(utcIso: unknown): string {
-  if (typeof utcIso !== "string") return "(none)";
-  const trimmed = utcIso.trim();
-  if (!trimmed) return "(none)";
-  return formatUtcIsoAsLocalOffset(trimmed);
+function formatMaybeLocalOffset(ms: unknown): string {
+  if (typeof ms !== "number" || !Number.isFinite(ms)) return "(none)";
+  return formatUnixMsAsLocalOffset(ms);
 }
 
 export function printAmbiguousIdPrefixError(data: AmbiguousIdPrefixErrorData): void {
@@ -42,8 +40,8 @@ export function printAmbiguousIdPrefixError(data: AmbiguousIdPrefixErrorData): v
       if (typeof c.category === "string") {
         console.error(`candidate-category: ${c.category}`);
       }
-      if (typeof c.createdAt === "string") {
-        console.error(`candidate-created-at: ${c.createdAt}`);
+      if (typeof c.createdAt === "number") {
+        console.error(`candidate-created-at: ${formatUnixMsAsLocalOffset(c.createdAt)}`);
       }
       if (typeof c.textPreview === "string") {
         console.error(`candidate-text-json: ${JSON.stringify(c.textPreview)}`);
@@ -58,7 +56,7 @@ export function printAmbiguousIdPrefixError(data: AmbiguousIdPrefixErrorData): v
       if (typeof c.enabled === "boolean") {
         console.error(`candidate-enabled: ${c.enabled ? "true" : "false"}`);
       }
-      console.error(`candidate-next-deliver-at: ${formatMaybeLocalIso(c.nextDeliverAt)}`);
+      console.error(`candidate-next-deliver-at: ${formatMaybeLocalOffset(c.nextDeliverAt)}`);
     }
 
     if (i !== data.candidates.length - 1) {
@@ -82,4 +80,3 @@ export function tryPrintAmbiguousIdPrefixError(err: unknown): boolean {
   printAmbiguousIdPrefixError(d as AmbiguousIdPrefixErrorData);
   return true;
 }
-

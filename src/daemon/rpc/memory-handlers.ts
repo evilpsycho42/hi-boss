@@ -52,7 +52,7 @@ function assertValidIdPrefix(prefix: string): void {
 
 function buildAmbiguousMemoryIdPrefixData(params: {
   idPrefix: string;
-  memories: Array<{ id: string; category: string; createdAt: string; text: string }>;
+  memories: Array<{ id: string; category: string; createdAt: number; text: string }>;
 }): Record<string, unknown> {
   const compactIds = params.memories.map((m) => compactUuid(m.id));
   const prefixLen = computeUniqueCompactPrefixLength(

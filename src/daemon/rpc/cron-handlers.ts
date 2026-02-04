@@ -44,7 +44,7 @@ function buildAmbiguousCronIdPrefixData(params: {
     cron: string;
     to: string;
     enabled: boolean;
-    nextDeliverAt?: string;
+    nextDeliverAt?: number;
   }>;
 }): Record<string, unknown> {
   const compactIds = params.schedules.map((s) => compactUuid(s.id));
