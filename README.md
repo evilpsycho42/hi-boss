@@ -1,11 +1,11 @@
 # Hi-Boss
 
-在 Telegram 上指挥基于 Codex / Claude Code 的 agents——它们不止会帮你做事，也会彼此协作。
+Orchestrate Codex / Claude Code agents from Telegram — they don’t just work for you; they can collaborate with each other.
 
 Highlights:
-- 基于底层 provider（Codex / Claude Code）执行 → 追求最好可用的真实执行效果
-- agent↔human、agent↔agent 的“收发件箱”式通信（Telegram 等 adapters ↔ 本地 daemon ↔ agents）
-- 支持延时投递与 cron 调度任务（durable、可追溯）
+- Run on top of real providers (Codex / Claude Code) for best-in-class execution quality
+- Durable “inbox/outbox” communication: agent↔human and agent↔agent (Telegram adapters ↔ local daemon ↔ agents)
+- Scheduled delivery and cron jobs (durable, auditable)
 
 ## Providers: Claude Code + Codex
 
