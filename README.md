@@ -28,10 +28,17 @@ Via npm:
 npm i -g hiboss
 ```
 
-Upgrade tip: stop the daemon before upgrading:
+Upgrade:
 
 ```bash
 hiboss daemon stop --token <boss-token>
+npm i -g hiboss@latest
+```
+
+Tip: restart the daemon after upgrading:
+
+```bash
+hiboss daemon start --token <boss-token>
 ```
 
 Dev/from source: see `docs/index.md`.
@@ -62,7 +69,9 @@ State directory:
 hiboss daemon start --token <boss-token>
 ```
 
-Stop the daemon:
+Next: open Telegram and talk with your agent by messaging the bot (see the Telegram section below).
+
+To stop the Hi-Boss service:
 
 ```bash
 hiboss daemon stop --token <boss-token>
@@ -88,7 +97,9 @@ Boss-only Telegram commands:
 - `/status` — show `hiboss agent status` for the bound agent
 - `/new` — request a session refresh for the bound agent
 
-## Agents (create / set / remove)
+## Agent
+
+Manage agents via the CLI (create / update / remove), and optionally delegate admin to a trusted agent via `permission-level`.
 
 Create/register a new agent:
 
@@ -96,7 +107,7 @@ Create/register a new agent:
 hiboss agent register --token <boss-token> --name nex --description "AI assistant" --workspace "$PWD"
 ```
 
-Update an agent:
+Update an agent (manual configuration):
 
 ```bash
 hiboss agent set --token <boss-token> --name nex --provider codex --auto-level medium --permission-level privileged
@@ -115,17 +126,29 @@ hiboss agent list --token <boss-token>
 hiboss agent status --token <boss-token> --name nex
 ```
 
-## Boss permission level (let an agent administer Hi-Boss)
+### Permission levels
 
 Hi-Boss separates:
-- **Boss-marked messages** (`fromBoss` / `[boss]` in prompts) — this is adapter identity (e.g., your Telegram username), and
+- **Boss-marked messages** (`fromBoss` / `[boss]` in prompts) — adapter identity (e.g., your Telegram username), and
 - **Authorization** (`permission-level`) — what a token is allowed to do via CLI/RPC.
 
-If you want an agent to be able to do all Hi-Boss admin operations just by chatting with it (register agents, rebind adapters, etc.), you can grant it `permission-level: boss`:
+Available levels: `restricted`, `standard`, `privileged`, `boss`.
+
+Set permission level:
+
+```bash
+hiboss agent set --token <boss-token> --name <agent-name> --permission-level <level>
+```
+
+### Boss-level agent (delegate admin)
+
+If you want an agent to be able to do Hi-Boss admin operations just by chatting with it (register agents, remove agents, rebind adapters, etc.), grant it `permission-level: boss`:
 
 ```bash
 hiboss agent set --token <boss-token> --name <agent-name> --permission-level boss
 ```
+
+Then, as the boss/user, go to Telegram and ask that agent to perform admin tasks for you (e.g., “add an agent”, “remove an agent”, “update bindings”). If you prefer, you can always do the same operations manually with `hiboss agent register|set|delete`.
 
 This is powerful: a boss-level agent token can perform any boss-privileged CLI operations. Only do this for an agent you fully trust.
 
