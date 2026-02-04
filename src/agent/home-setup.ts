@@ -131,12 +131,25 @@ export async function setupAgentHome(
   options: SetupAgentHomeOptions = {}
 ): Promise<void> {
   const baseDir = hibossDir ?? getHiBossDir();
+  const agentDir = getAgentDir(agentName, hibossDir);
   const codexHome = getCodexHomePath(agentName, hibossDir);
   const claudeHome = getClaudeHomePath(agentName, hibossDir);
 
   // Create directories
   fs.mkdirSync(codexHome, { recursive: true });
   fs.mkdirSync(claudeHome, { recursive: true });
+  fs.mkdirSync(path.join(codexHome, "skills"), { recursive: true });
+  fs.mkdirSync(path.join(claudeHome, "skills"), { recursive: true });
+
+  // Optional customization placeholders (created empty once; never overwritten).
+  try {
+    const soulPath = path.join(agentDir, "SOUL.md");
+    if (!fs.existsSync(soulPath)) {
+      fs.writeFileSync(soulPath, "", "utf8");
+    }
+  } catch {
+    // Best-effort; do not fail setup on customization file issues.
+  }
 
   // Ensure agent internal space exists (best-effort).
   const ensuredSpace = ensureAgentInternalSpaceLayout({ hibossDir: baseDir, agentName });

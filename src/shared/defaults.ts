@@ -32,7 +32,7 @@ export const DEFAULT_MEMORY_SHORTTERM_MAX_CHARS = 8_000 as const;
 export const DEFAULT_MEMORY_SHORTTERM_PER_DAY_MAX_CHARS = 4_000 as const;
 export const DEFAULT_MEMORY_SHORTTERM_DAYS = 2 as const;
 
-export const DEFAULT_INTERNAL_SPACE_NOTE_MAX_CHARS = 12_000 as const;
+export const DEFAULT_INTERNAL_SPACE_MEMORY_MAX_CHARS = 36_000 as const;
 
 export const DEFAULT_MEMORY_MODEL_URL =
   "https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/resolve/main/Qwen3-Embedding-0.6B-Q8_0.gguf?download=true" as const;

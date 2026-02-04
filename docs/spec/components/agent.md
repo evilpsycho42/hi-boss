@@ -92,14 +92,16 @@ Each agent has provider-specific home directories for configuration and state.
 
 ```
 ~/.hiboss/agents/<agent-name>/
-├── SOUL.md              # Optional per-agent persona (injected; truncated)
+├── SOUL.md              # Persona placeholder (created empty; not rendered in minimal system prompt)
 ├── internal_space/      # Agent's private space, automatically added into additional directories
-│   └── Note.md          # Agent notebook (injected into system prompt; truncated)
+│   └── MEMORY.md        # Agent long-term memory (auto-injected into system prompt; truncated; default max 36,000 chars)
 ├── codex_home/
+│   ├── skills/          # Optional provider-home skills
 │   ├── config.toml      # Imported from provider source home (default: ~/.codex/config.toml)
 │   ├── auth.json        # Imported from provider source home (default: ~/.codex/auth.json)
 │   └── AGENTS.md        # Generated system instructions
 └── claude_home/
+    ├── skills/          # Optional provider-home skills
     ├── settings.json    # Imported from provider source home (default: ~/.claude/settings.json)
     ├── .claude.json     # Imported from provider source home (default: ~/.claude/.claude.json)
     └── CLAUDE.md        # Generated system instructions
@@ -122,10 +124,8 @@ Located in `src/agent/home-setup.ts`:
 System instructions define the agent's behavior and context. Instruction files are regenerated each time a new session is created (see [Session Management](session.md#creation)).
 
 On each new session, Hi-Boss injects:
-- a truncated snapshot of the agent notebook (`internal_space/Note.md`)
-- optional customization files:
-  - `~/.hiboss/BOSS.md` (global boss profile)
-  - `~/.hiboss/agents/<agent-name>/SOUL.md` (agent persona)
+- a truncated snapshot of the agent long-term memory file (`internal_space/MEMORY.md`; default max 36,000 chars)
+It intentionally does not inject additional persona/profile files (the system prompt is designed to be minimal).
 
 ### Files
 

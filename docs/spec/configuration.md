@@ -33,12 +33,12 @@ Contents (common):
 - `~/.hiboss/daemon.pid` — daemon PID file (informational; not used for locking)
 - `~/.hiboss/daemon.log` — daemon stdout/stderr log (when started via `hiboss daemon start`; rotated on each start)
 - `~/.hiboss/log_history/` — archived `daemon.log` files from prior starts (timestamped)
-- `~/.hiboss/BOSS.md` — global boss profile injected into system instructions (optional)
+- `~/.hiboss/BOSS.md` — boss profile placeholder (created empty by setup; not rendered in the minimal system prompt)
 - `~/.hiboss/media/` — Telegram downloads (attachments are saved here for agents to read)
-- `~/.hiboss/agents/<agent-name>/SOUL.md` — per-agent persona injected into system instructions (optional)
-- `~/.hiboss/agents/<agent-name>/internal_space/Note.md` — per-agent notebook injected into system instructions (may be truncated)
-- `~/.hiboss/agents/<agent-name>/codex_home/` — provider home for Codex (used as `CODEX_HOME`)
-- `~/.hiboss/agents/<agent-name>/claude_home/` — provider home for Claude Code (used as `CLAUDE_CONFIG_DIR`)
+- `~/.hiboss/agents/<agent-name>/SOUL.md` — persona placeholder (created empty by setup/registration; not rendered in the minimal system prompt)
+- `~/.hiboss/agents/<agent-name>/internal_space/MEMORY.md` — per-agent long-term memory auto-injected into system instructions (may be truncated; default max 36,000 chars)
+- `~/.hiboss/agents/<agent-name>/codex_home/` — provider home for Codex (used as `CODEX_HOME`; includes `skills/`)
+- `~/.hiboss/agents/<agent-name>/claude_home/` — provider home for Claude Code (used as `CLAUDE_CONFIG_DIR`; includes `skills/`)
 
 Note: the CLI currently always uses the default location (there is no `--data-dir` flag).
 

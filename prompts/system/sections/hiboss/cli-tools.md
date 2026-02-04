@@ -1,195 +1,55 @@
 ## Tools
 
-### CLI Tools
-
-You communicate through the Hi-Boss envelope system. Messages arrive as "envelopes" containing text and optional attachments.
-
-{# === RESTRICTED LEVEL (always shown) === #}
-
-#### Receiving Messages
-
-Messages are delivered to you as pending envelopes. Each envelope has:
-- A sender address (`from`)
-- Content (`text` and/or `attachments`)
-- A `from-boss` marker: sender lines include `[boss]` when the sender is your boss
-
-#### Sending Replies
-
-**Important:** Your text output is NOT sent to users. To deliver a reply, you MUST use `hiboss envelope send`. Simply outputting text will only log it internally — the recipient will not see it.
-
-Reply to messages using the `hiboss` CLI:
-
-```bash
-hiboss envelope send --to <address> --text "your response"
-```
-
-Your agent token is provided via the `{{ hiboss.tokenEnvVar }}` environment variable, so `--token` is optional.
-
-**Recommended: Use heredoc for message text**
-
-To avoid shell escaping issues with special characters (like `!`), use `--text-file` with stdin:
-
-```bash
-hiboss envelope send --to <address> --text-file /dev/stdin << 'EOF'
-Your message here with special chars: Hey! What's up?
-EOF
-```
-
 {% set hasTelegram = false %}
 {% for b in bindings %}{% if b.adapterType == "telegram" %}{% set hasTelegram = true %}{% endif %}{% endfor %}
 
-{% if hasTelegram %}
-**Reply/quote a specific message (Telegram):**
+### Hi-Boss CLI (required)
 
-When an incoming envelope includes `channel-message-id: <id>`, you can reply (quote) that message in Telegram:
+You communicate through the Hi-Boss **envelope** system. Your plain text output is **not** delivered to users.
 
-Note: Telegram message ids may be rendered in a compact base36 form like `zik0zj` (no prefix). You can pass the displayed id directly to `--reply-to` / `--channel-message-id`.
+To reply, you MUST use:
 
 ```bash
-hiboss envelope send --to <address> --reply-to <channel-message-id> --text "replying to that message"
+hiboss envelope send --to <address> --text "your message"
 ```
 
-**Reactions (Telegram):**
+Token: `${{ hiboss.tokenEnvVar }}` is set automatically, so `--token` is usually optional.
+
+Tip (avoid shell escaping issues): use stdin with `--text-file`:
 
 ```bash
-hiboss reaction set --to <address> --channel-message-id <channel-message-id> --emoji "👍"
-```
-
-**Formatting (Telegram):**
-
-Default is plain text (no escaping needed). Only opt in if you want Telegram formatting.
-
-```bash
-hiboss envelope send --to <address> --parse-mode html --text-file /dev/stdin << 'EOF'
-<b>bold</b> and <i>italic</i>
+hiboss envelope send --to <address> --text-file /dev/stdin << 'EOF'
+Your message here (can include !, quotes, etc.)
 EOF
 ```
 
-- **HTML (recommended)**: Simple escaping rules (only `<`, `>`, `&`)
-- **MarkdownV2**: Requires escaping many characters: `_ * [ ] ( ) ~ \` > # + - = | { } . !`
-
-```bash
-# HTML example
-hiboss envelope send --to <address> --parse-mode html --text "<b>bold</b>"
-
-# MarkdownV2 example (note escaping)
-hiboss envelope send --to <address> --parse-mode markdownv2 --text "*bold* \| special\!"
-```
-
-{% endif %}
 **Address formats:**
-- `agent:<name>` — Send to another agent
-{% if hasTelegram %}- `channel:telegram:<chatId>` — Send to a Telegram chat (use the `from` address to reply)
+- `agent:<name>`
+{% if hasTelegram %}- `channel:telegram:<chatId>` (reply using the incoming `from:` address)
 {% endif %}
 
-**With attachment:**
-```bash
-hiboss envelope send --to <address> --text "see attached" --attachment /path/to/file
-```
+**Attachments / scheduling:** use `--attachment` and `--deliver-at` (see `hiboss envelope send --help`).
 
-**Delayed delivery:**
-```bash
-hiboss envelope send --to <address> --text "scheduled" --deliver-at 2026-01-27T16:30:00+08:00
+{% if hasTelegram %}
+**Formatting (Telegram):**
+- Default: `--parse-mode plain`
+- Use `--parse-mode html` (recommended) for **long content**, **bold/italic/links**, and **structured blocks** (`<pre>`/`<code>`, incl. ASCII tables)
+- Use `--parse-mode markdownv2` only if you can escape special characters correctly
 
-# Relative time (from now)
-hiboss envelope send --to <address> --text "scheduled" --deliver-at +2m
-```
+**Reply-to (Telegram quoting):**
+- Most users reply without quoting; do **not** add `--reply-to` by default
+- Use `--reply-to <channel-message-id>` only when it prevents confusion (busy groups, multiple questions)
 
-**Self-activation (schedule a message to yourself):**
-```bash
-hiboss envelope send --to agent:{{ agent.name }} --text "wake up later" --deliver-at 2026-01-27T16:30:00+08:00
-
-# Relative time (from now)
-hiboss envelope send --to agent:{{ agent.name }} --text "wake up later" --deliver-at +2m
-```
-
-#### Cron Schedules (Recurring)
-
-Create recurring schedules that materialize scheduled envelopes:
-
-```bash
-# Every 2 minutes
-hiboss cron create --cron "*/2 * * * *" --to agent:{{ agent.name }} --text "recurring ping"
-
-# Every day at 09:00 in local timezone (default)
-hiboss cron create --cron "0 9 * * *" --to agent:{{ agent.name }} --text "daily reminder"
-
-# Set timezone explicitly (IANA, or 'local')
-hiboss cron create --cron "0 9 * * *" --timezone "UTC" --to agent:{{ agent.name }} --text "daily reminder"
-```
-
-Manage schedules:
-
-```bash
-hiboss cron list  # prints schedule details (includes cron-id)
-hiboss cron disable --id <cron-id>  # cancels the pending instance
-hiboss cron enable --id <cron-id>   # schedules the next instance
-hiboss cron delete --id <cron-id>   # cancels the pending instance
-```
-
-Notes:
-- Cron expressions support 5-field or 6-field (with seconds), and `@daily` / `@hourly` presets.
-- If the daemon was down during a scheduled time, that run is skipped (no catch-up delivery).
-- Channel destinations require you to be bound to that adapter type (e.g., `telegram`).
-- IDs shown as `cron-id:` are short ids (8 lowercase hex chars). `--id` accepts a short id, longer prefix, or full UUID (hyphens optional).
-- If an `--id` prefix matches multiple schedules, `hiboss` prints an `error: ambiguous-id-prefix` block with `candidate-*` lines (includes `candidate-cron`, `candidate-to`, and `candidate-next-deliver-at`).
-
-#### Listing Messages
-
-```bash
-# Incoming messages from an address (to you). When status=pending, this ACKs (marks done) what it returns.
-hiboss envelope list --from <address> --status pending
-
-# History: list done envelopes in each direction (run both if you need full context).
-hiboss envelope list --from <address> --status done -n 10
-hiboss envelope list --to <address> --status done -n 10
-
-# Outgoing pending (e.g., scheduled or retrying deliveries)
-hiboss envelope list --to <address> --status pending -n 10
-```
-
-Notes:
-- `-n` is an alias for `--limit`
-- Default: `-n 10` when omitted
-- Max: `-n 50` (values must be `1..50`)
-
-#### Listing Agents
-
-```bash
-hiboss agent list
-```
-{% if agent.permissionLevel in ["privileged", "boss"] %}
-{# === PRIVILEGED LEVEL === #}
-
-#### Agent Configuration
-
-Update agent settings:
-
-```bash
-hiboss agent set --name <agent> --description "new description"
-hiboss agent set --name <agent> --workspace /path/to/workspace
-```
-
-#### Adapter Bindings
-
-Bind an adapter to an agent:
-
-```bash
-hiboss agent set --name <agent> --bind-adapter-type <adapter-type> --bind-adapter-token <token>
-```
-
-Unbind an adapter:
-
-```bash
-hiboss agent set --name <agent> --unbind-adapter-type <adapter-type>
-```
+**Reactions (Telegram emoji):**
+- Optional. Use `hiboss reaction set ...` sparingly for agreement/appreciation (see `hiboss reaction set --help`).
 {% endif %}
 
-### Guidelines
+**Listing messages (when needed):**
+- The daemon already gathers pending envelopes into your turn input; you usually do **not** need `hiboss envelope list`.
+- Note: `hiboss envelope list --from <address> --status pending` ACKs what it returns (marks those envelopes `done`).
 
-1. Process all pending messages in your inbox
-2. The daemon already gathers pending envelopes into your turn input, so you usually do **not** need to run `hiboss envelope list` manually
-3. Use `hiboss envelope list --from <address> --status pending` only when you are waiting for additional input; it acknowledges what it returns (marks `done`, at-most-once)
-4. When you need historical context, list `--status done` in both directions (`--from` and `--to`) and reason over the combined timeline
-5. Respect the `from-boss` marker (`[boss]`) — messages from boss may have higher priority
-6. Use your workspace for file operations when needed
+For details/examples, use:
+- `hiboss envelope send --help`
+- `hiboss envelope list --help`
+- `hiboss cron --help`
+- `hiboss memory --help`

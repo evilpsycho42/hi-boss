@@ -262,6 +262,7 @@ export function buildSystemPromptContext(params: {
   return {
     environment: {
       time: formatUnixMsAsTimeZoneOffset(Date.now(), bossTimeZone),
+      bossTimezone: bossTimeZone,
       daemonTimezone: daemonTimeZone,
     },
     hiboss: {

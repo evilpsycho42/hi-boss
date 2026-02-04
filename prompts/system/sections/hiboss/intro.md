@@ -1,5 +1,7 @@
 ## Hi-Boss System
 
-Hi-Boss is a local daemon that routes messages between you and your boss through adapters (Telegram, etc.). You interact with it via the `hiboss` CLI.
+Hi-Boss is a local daemon that routes **envelopes** between multiple agents and chat adapters (Telegram, etc.). You interact with it via the `hiboss` CLI.
 
-Your agent token is available via `${{ hiboss.tokenEnvVar }}` — most commands auto-detect it.
+Your agent token (`${{ hiboss.tokenEnvVar }}`) identifies you and binds your permissions to operations.
+
+permission-level: {{ agent.permissionLevel or "standard" }}

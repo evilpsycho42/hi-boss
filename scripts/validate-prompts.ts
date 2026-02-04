@@ -80,14 +80,31 @@ function makeMockEnvelopes(): Envelope[] {
   ];
 }
 
+function replaceFencedCodeBlocks(text: string): string {
+  const lines = text.split("\n");
+  let inCodeBlock = false;
+  const out: string[] = [];
+  for (const line of lines) {
+    if (/^```+/.test(line.trim())) {
+      const starting = !inCodeBlock;
+      inCodeBlock = !inCodeBlock;
+      if (starting) out.push("<code-block>");
+      continue;
+    }
+    if (!inCodeBlock) out.push(line);
+  }
+  return out.join("\n");
+}
+
 function validateSystemPrompt(): void {
   const hibossDir = mkTmpDir("hiboss-state-");
   const workspaceDir = mkTmpDir("hiboss-workspace-");
 
   const agentName = "nex";
   fs.mkdirSync(path.join(hibossDir, "agents", agentName), { recursive: true });
-  writeFile(path.join(hibossDir, "agents", agentName, "SOUL.md"), "# SOUL.md\n\nBe concise.\n");
-  writeFile(path.join(hibossDir, "BOSS.md"), "# BOSS.md\n\n- Name: Kevin\n");
+  // Even if present, these legacy customization files should not be rendered in the minimal system prompt.
+  writeFile(path.join(hibossDir, "agents", agentName, "SOUL.md"), "# Soul\n\nBe concise.\n");
+  writeFile(path.join(hibossDir, "BOSS.md"), "# Boss\n\n- Name: Kevin\n");
 
   const agent = makeMockAgent(workspaceDir);
   const ctx = buildSystemPromptContext({
@@ -98,15 +115,37 @@ function validateSystemPrompt(): void {
   });
   (ctx.hiboss as Record<string, unknown>).additionalContext = "Extra line.";
 
-  const out = renderPrompt({ surface: "system", template: "system/base.md", context: ctx });
-  assert.ok(out.includes("## Your Identity"), "system prompt should include identity section");
-  assert.ok(out.includes("- Name: nex"), "system prompt should include agent name");
-  assert.ok(out.includes("You are a personal assistant"), "system prompt should include identity line");
-  assert.ok(out.includes("### CLI Tools"), "system prompt should include tools section");
-  assert.ok(out.includes("### Memory"), "system prompt should include memory section");
-  assert.ok(out.includes("Be concise."), "system prompt should include SOUL.md content");
-  assert.ok(out.includes("- Name: Kevin"), "system prompt should include BOSS.md content");
-  assert.ok(out.includes("## Additional Context"), "system prompt should include additional context section");
+  const renderWithMemorySnapshot = (note: string): string => {
+    (ctx.internalSpace as Record<string, unknown>).note = note;
+    return renderPrompt({ surface: "system", template: "system/base.md", context: ctx });
+  };
+
+  // Exercise both empty and non-empty MEMORY.md snapshot rendering.
+  const outputs = [
+    renderWithMemorySnapshot("high-signal: true\nno-headings: true\n"),
+    renderWithMemorySnapshot(""),
+  ];
+
+  for (const out of outputs) {
+    assert.ok(out.includes("You are nex."), "system prompt should include a minimal identity line");
+    assert.ok(out.includes("## Hi-Boss System"), "system prompt should include hiboss intro section");
+    assert.ok(out.includes("## Quick Start"), "system prompt should include quick start section");
+    assert.ok(out.includes("## Tools"), "system prompt should include tools section");
+    assert.ok(out.includes("## Memory"), "system prompt should include memory section");
+    assert.ok(out.includes("## Environment"), "system prompt should include environment section");
+    assert.ok(out.includes("## Operating Rules"), "system prompt should include operating rules section");
+    assert.ok(!out.includes("## Your Identity"), "system prompt should not include legacy identity section");
+    assert.ok(!out.includes("## Boss Profile"), "system prompt should not include legacy boss profile section");
+    assert.ok(!out.includes("### Session Management"), "system prompt should not include session policy section");
+    assert.ok(!out.includes("### Permission Level"), "system prompt should not include permission section");
+    assert.ok(!out.includes("### Agent Settings"), "system prompt should not include agent settings section");
+    assert.ok(!out.includes("Be concise."), "system prompt should not include SOUL.md content");
+    assert.ok(!out.includes("- Name: Kevin"), "system prompt should not include BOSS.md content");
+    const withoutCode = replaceFencedCodeBlocks(out);
+    assert.ok(!/\n{3,}/.test(withoutCode), "system prompt should not include duplicated empty lines");
+    assert.ok(!/^####/m.test(withoutCode), "system prompt should not include headings deeper than ###");
+    assert.ok(out.includes("## Additional Context"), "system prompt should include additional context section");
+  }
 }
 
 function validateTurnPrompt(): void {

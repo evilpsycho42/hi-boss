@@ -17,8 +17,8 @@ hiboss daemon start --token <boss-token>
 # Send a message to an agent (use the agent token printed by setup/register)
 hiboss envelope send --to agent:<agent-name> --token <agent-token> --text "hello"
 
-# List pending inbox messages for an agent
-hiboss envelope list --token <agent-token> --box inbox --status pending -n 10
+# List pending messages from an address (ACKs what it returns)
+hiboss envelope list --token <agent-token> --from <address> --status pending -n 10
 ```
 
 ## Memory
@@ -44,7 +44,7 @@ Each agent has a private working directory that is added to the agent’s worksp
 - `~/.hiboss/agents/<agent-name>/internal_space/`
 
 Special file:
-- `Note.md` — injected into the system prompt on new sessions (truncated).
+- `MEMORY.md` — auto-injected long-term memory file (truncated).
 
 ## Docs
 

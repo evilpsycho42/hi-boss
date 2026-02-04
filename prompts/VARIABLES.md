@@ -16,10 +16,13 @@ Notes:
 | `hiboss.dir` | string | Hi-Boss state directory (default `~/.hiboss`) |
 | `hiboss.tokenEnvVar` | string | Environment variable name for the agent token (`HIBOSS_TOKEN`) |
 | `hiboss.additionalContext` | string | Optional extra context appended by code (usually empty) |
-| `hiboss.files.boss` | string | Contents of `{{hiboss.dir}}/BOSS.md` (or empty) |
-| `internalSpace.note` | string | Snapshot of `{{hiboss.dir}}/agents/{{agent.name}}/internal_space/Note.md` (or empty) |
+| `hiboss.files.boss` | string | Contents of `{{hiboss.dir}}/BOSS.md` (or empty; legacy, not rendered in minimal system prompt) |
+| `internalSpace.note` | string | Snapshot of `{{hiboss.dir}}/agents/{{agent.name}}/internal_space/MEMORY.md` (or empty) |
 | `internalSpace.noteFence` | string | Markdown code fence delimiter for `internalSpace.note` (e.g., ``` or ````) |
 | `internalSpace.error` | string | Internal space snapshot error message (or empty) |
+| `environment.time` | string | Current time formatted in boss timezone offset (ISO 8601) |
+| `environment.bossTimezone` | string | Boss timezone (IANA) used for displayed timestamps |
+| `environment.daemonTimezone` | string | Daemon host timezone (IANA) used by shell commands |
 | `boss.name` | string | Boss name (how agent should address the user, or empty) |
 | `boss.adapterIds` | object | Boss identity per adapter type (e.g. `{ telegram: "kevin" }`, or `{}`) |
 | `agent.name` | string | Agent name |
@@ -36,7 +39,7 @@ Notes:
 | `agent.createdAt` | string | ISO 8601 |
 | `agent.lastSeenAt` | string | ISO 8601 (or empty) |
 | `agent.metadata` | object | Agent metadata JSON blob (or `{}`) |
-| `agent.files.soul` | string | Contents of `{{hiboss.dir}}/agents/{{agent.name}}/SOUL.md` (or empty) |
+| `agent.files.soul` | string | Contents of `{{hiboss.dir}}/agents/{{agent.name}}/SOUL.md` (or empty; legacy, not rendered in minimal system prompt) |
 | `auth.agentToken` | string | Agent token (sensitive; avoid printing) |
 | `bindings` | array | Adapter bindings (no secrets) |
 | `bindings[].adapterType` | string | Adapter type (e.g. `telegram`) |

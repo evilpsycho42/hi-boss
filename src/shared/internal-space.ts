@@ -1,10 +1,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { DEFAULT_INTERNAL_SPACE_NOTE_MAX_CHARS } from "./defaults.js";
+import { DEFAULT_INTERNAL_SPACE_MEMORY_MAX_CHARS } from "./defaults.js";
 import { assertValidAgentName } from "./validation.js";
 
-const NOTE_FILENAME = "Note.md";
+const MEMORY_FILENAME = "MEMORY.md";
+const LEGACY_NOTE_FILENAME = "Note.md";
 
 function getErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -15,8 +16,8 @@ function getAgentInternalSpaceDir(hibossDir: string, agentName: string): string 
   return path.join(hibossDir, "agents", agentName, "internal_space");
 }
 
-function getAgentNotePath(hibossDir: string, agentName: string): string {
-  return path.join(getAgentInternalSpaceDir(hibossDir, agentName), NOTE_FILENAME);
+function getAgentMemoryPath(hibossDir: string, agentName: string): string {
+  return path.join(getAgentInternalSpaceDir(hibossDir, agentName), MEMORY_FILENAME);
 }
 
 function truncateWithMarker(input: string, maxChars: number, marker: string): string {
@@ -33,16 +34,30 @@ export function ensureAgentInternalSpaceLayout(params: {
     assertValidAgentName(params.agentName);
 
     const dir = getAgentInternalSpaceDir(params.hibossDir, params.agentName);
-    const notePath = getAgentNotePath(params.hibossDir, params.agentName);
+    const memoryPath = getAgentMemoryPath(params.hibossDir, params.agentName);
+    const legacyNotePath = path.join(dir, LEGACY_NOTE_FILENAME);
 
     fs.mkdirSync(dir, { recursive: true });
 
-    if (!fs.existsSync(notePath)) {
-      fs.writeFileSync(notePath, "", "utf8");
+    if (!fs.existsSync(memoryPath)) {
+      // Best-effort migration from legacy Note.md -> MEMORY.md
+      if (fs.existsSync(legacyNotePath)) {
+        try {
+          const stat = fs.statSync(legacyNotePath);
+          if (stat.isFile()) {
+            fs.renameSync(legacyNotePath, memoryPath);
+          }
+        } catch {
+          // Fall back to creating an empty file.
+        }
+      }
+      if (!fs.existsSync(memoryPath)) {
+        fs.writeFileSync(memoryPath, "", "utf8");
+      }
     } else {
-      const stat = fs.statSync(notePath);
+      const stat = fs.statSync(memoryPath);
       if (!stat.isFile()) {
-        return { ok: false, error: `Expected file at ${notePath}` };
+        return { ok: false, error: `Expected file at ${memoryPath}` };
       }
     }
 
@@ -52,7 +67,7 @@ export function ensureAgentInternalSpaceLayout(params: {
   }
 }
 
-export function readAgentInternalNoteSnapshot(params: {
+export function readAgentInternalMemorySnapshot(params: {
   hibossDir: string;
   agentName: string;
 }):
@@ -61,20 +76,20 @@ export function readAgentInternalNoteSnapshot(params: {
   try {
     assertValidAgentName(params.agentName);
 
-    const notePath = getAgentNotePath(params.hibossDir, params.agentName);
+    const memoryPath = getAgentMemoryPath(params.hibossDir, params.agentName);
 
     let raw = "";
-    if (fs.existsSync(notePath)) {
-      const stat = fs.statSync(notePath);
+    if (fs.existsSync(memoryPath)) {
+      const stat = fs.statSync(memoryPath);
       if (stat.isFile()) {
-        raw = fs.readFileSync(notePath, "utf8");
+        raw = fs.readFileSync(memoryPath, "utf8");
       }
     }
 
     const note = truncateWithMarker(
       raw.trim(),
-      DEFAULT_INTERNAL_SPACE_NOTE_MAX_CHARS,
-      `<<truncated due to internal-space-note-max-chars=${DEFAULT_INTERNAL_SPACE_NOTE_MAX_CHARS}>>`
+      DEFAULT_INTERNAL_SPACE_MEMORY_MAX_CHARS,
+      `<<truncated due to internal-space-memory-max-chars=${DEFAULT_INTERNAL_SPACE_MEMORY_MAX_CHARS}>>`
     );
 
     return { ok: true, note };
@@ -82,4 +97,3 @@ export function readAgentInternalNoteSnapshot(params: {
     return { ok: false, error: getErrorMessage(err) };
   }
 }
-

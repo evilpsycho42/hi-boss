@@ -101,9 +101,10 @@ See `prompts/VARIABLES.md` for the authoritative variable catalog per surface.
 
 ## Customization (Hi-Boss Files)
 
-System instructions can include optional files from Hi-Boss’s state directory (default `~/.hiboss`):
+Hi-Boss stores optional agent files under its state directory (default `~/.hiboss`):
 
-- `~/.hiboss/BOSS.md` — boss profile (shared across agents)
-- `~/.hiboss/agents/<agent-name>/SOUL.md` — persona / tone / boundaries (per-agent)
+- `~/.hiboss/BOSS.md` — boss profile placeholder (created empty by setup; not rendered in the minimal system prompt)
+- `~/.hiboss/agents/<agent-name>/SOUL.md` — persona placeholder (created empty; not rendered in the minimal system prompt)
+- `~/.hiboss/agents/<agent-name>/internal_space/MEMORY.md` — auto-injected long-term memory (truncated; default max 36,000 chars; rendered as fenced text when non-empty)
 
-These files are injected into `prompts/system/base.md`.
+Note: the system prompt is intentionally minimal; most guidance should live in CLI `--help` output and semantic memory.

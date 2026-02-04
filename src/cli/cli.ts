@@ -80,14 +80,25 @@ envelope
   .option("--text <text>", "Envelope text (use - to read from stdin)")
   .option("--text-file <path>", "Read envelope text from file")
   .option("--attachment <path>", "Attachment path (can be used multiple times)", collect, [])
-  .option("--parse-mode <mode>", "Telegram parse mode: plain, markdownv2, html")
+  .option("--parse-mode <mode>", "Parse mode (Telegram): plain (default), html (recommended), markdownv2")
   .option(
     "--reply-to <channel-message-id>",
-    "Reply to a channel message by channel-message-id (Telegram: use the base36 id shown as channel-message-id)"
+    "Reply/quote a channel message (optional; Telegram: use the base36 id shown as channel-message-id)"
   )
   .option(
     "--deliver-at <time>",
     "Schedule delivery time (ISO 8601 or relative: +2h, +30m, +1Y2M, -15m; units: Y/M/D/h/m/s)"
+  )
+  .addHelpText(
+    "after",
+    [
+      "",
+      "Notes:",
+      "  - Default is plain text. Use --parse-mode html for long or formatted messages (bold/italic/links; structured blocks via <pre>/<code>, incl. ASCII tables).",
+      "  - Use --parse-mode markdownv2 only if you can escape special characters correctly.",
+      "  - Most Telegram users reply without quoting; only use --reply-to when it prevents confusion (busy groups, multiple questions).",
+      "",
+    ].join("\n")
   )
   .action((options) => {
     sendEnvelope({
@@ -118,6 +129,16 @@ reaction
   )
   .requiredOption("--emoji <emoji>", "Reaction emoji (e.g., 👍)")
   .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .addHelpText(
+    "after",
+    [
+      "",
+      "Notes:",
+      "  - Reactions are Telegram emoji reactions (not a text reply).",
+      "  - Use sparingly: agreement, appreciation, or to keep the vibe friendly.",
+      "",
+    ].join("\n")
+  )
   .action((options) => {
     setReaction({
       token: options.token,
@@ -174,7 +195,11 @@ cron
   .option("--text <text>", "Envelope text (use - to read from stdin)")
   .option("--text-file <path>", "Read envelope text from file")
   .option("--attachment <path>", "Attachment path (can be used multiple times)", collect, [])
-  .option("--parse-mode <mode>", "Telegram parse mode: plain, markdownv2, html")
+  .option("--parse-mode <mode>", "Parse mode (Telegram): plain (default), html (recommended), markdownv2")
+  .addHelpText(
+    "after",
+    ["", "Notes:", "  - For formatting guidance, see: hiboss envelope send --help", ""].join("\n")
+  )
   .action((options) => {
     createCron({
       cron: options.cron,

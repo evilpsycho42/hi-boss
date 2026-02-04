@@ -114,17 +114,25 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
   const bossToken = "boss_example_token_for_docs";
   const agentToken = "agt_example_token_for_docs";
 
-  // Customization files (used by prompt examples)
-  fs.writeFileSync(
-    path.join(hibossDir, "BOSS.md"),
-    ["# Boss", "", "Preferred communication style: concise, direct.", ""].join("\n"),
-    "utf-8"
-  );
+  // Customization file placeholders (created empty by setup; not rendered in the minimal system prompt).
+  fs.writeFileSync(path.join(hibossDir, "BOSS.md"), "", "utf-8");
   const agentHome = path.join(hibossDir, "agents", "nex");
   fs.mkdirSync(agentHome, { recursive: true });
+  fs.writeFileSync(path.join(agentHome, "SOUL.md"), "", "utf-8");
+  const internalSpaceDir = path.join(agentHome, "internal_space");
+  fs.mkdirSync(internalSpaceDir, { recursive: true });
+  // Keep this high-signal + plain text: the system prompt auto-injects this snapshot (may be truncated).
   fs.writeFileSync(
-    path.join(agentHome, "SOUL.md"),
-    ["# Soul", "", "You are Nex. You are helpful and pragmatic.", ""].join("\n"),
+    path.join(internalSpaceDir, "MEMORY.md"),
+    [
+      "boss-preference:",
+      "- concise, pragmatic replies",
+      "- default to plain text; use --parse-mode html for long/structured messages",
+      "",
+      "boss-constraint:",
+      "- never leak tokens/keys or sensitive boss info to non-boss users",
+      "- do not modify files outside workspace/internal workspace",
+    ].join("\n") + "\n",
     "utf-8"
   );
 

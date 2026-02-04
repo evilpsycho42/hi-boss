@@ -2,6 +2,9 @@
  * Setup and boss verification RPC handlers.
  */
 
+import * as fs from "node:fs";
+import * as path from "node:path";
+
 import type { RpcMethodRegistry, SetupExecuteParams, BossVerifyParams } from "../ipc/types.js";
 import { RPC_ERRORS } from "../ipc/types.js";
 import type { DaemonContext } from "./context.js";
@@ -10,6 +13,23 @@ import { isValidAgentName, AGENT_NAME_ERROR_MESSAGE } from "../../shared/validat
 import { parseDailyResetAt, parseDurationToMs } from "../../shared/session-policy.js";
 import { setupAgentHome } from "../../agent/home-setup.js";
 import { isValidIanaTimeZone, getDaemonIanaTimeZone } from "../../shared/timezone.js";
+
+function ensureBossProfileFile(hibossDir: string): void {
+  try {
+    const bossMdPath = path.join(hibossDir, "BOSS.md");
+    if (!fs.existsSync(bossMdPath)) {
+      fs.writeFileSync(bossMdPath, "", "utf8");
+      return;
+    }
+    const stat = fs.statSync(bossMdPath);
+    if (!stat.isFile()) {
+      // Best-effort; don't fail setup on customization file issues.
+      return;
+    }
+  } catch {
+    // Best-effort; don't fail setup on customization file issues.
+  }
+}
 
 /**
  * Create setup RPC handlers.
@@ -176,6 +196,7 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
           provider: p.provider,
           providerSourceHome,
         });
+        ensureBossProfileFile(ctx.config.dataDir);
       } catch (err) {
         const message = (err as Error).message || String(err);
         if (message.includes("provider-source-home")) {

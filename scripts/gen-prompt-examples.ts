@@ -3,15 +3,19 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { HiBossDatabase } from "../src/daemon/db/database.js";
-import { buildSystemPromptContext, buildTurnPromptContext } from "../src/shared/prompt-context.js";
+import { buildCliEnvelopePromptContext, buildSystemPromptContext, buildTurnPromptContext } from "../src/shared/prompt-context.js";
 import { renderPrompt } from "../src/shared/prompt-renderer.js";
+import { ensureAgentInternalSpaceLayout, readAgentInternalMemorySnapshot } from "../src/shared/internal-space.js";
 
 import { createExampleFixture } from "./examples/fixtures.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const OUTPUT_DIR = path.resolve(__dirname, "../examples/prompts");
+const OUTPUT_DIRS = [
+  path.resolve(__dirname, "../examples/prompts"),
+  path.resolve(__dirname, "../prompts/examples"),
+] as const;
 
 function ensureOutputDir(dir: string): void {
   fs.mkdirSync(dir, { recursive: true });
@@ -26,9 +30,27 @@ function clearOldExampleDocs(dir: string): void {
   }
 }
 
+function writeExampleDoc(params: { dir: string; filename: string; contents: string }): void {
+  fs.writeFileSync(
+    path.join(params.dir, params.filename),
+    params.contents.trim() + "\n",
+    "utf-8"
+  );
+}
+
+function chooseFence(text: string): string {
+  let fence = "```";
+  while (text.includes(fence)) {
+    fence += "`";
+  }
+  return fence;
+}
+
 async function main(): Promise<void> {
-  ensureOutputDir(OUTPUT_DIR);
-  clearOldExampleDocs(OUTPUT_DIR);
+  for (const dir of OUTPUT_DIRS) {
+    ensureOutputDir(dir);
+    clearOldExampleDocs(dir);
+  }
 
   const fixture = await createExampleFixture();
   const db = new HiBossDatabase(path.join(fixture.hibossDir, "hiboss.db"));
@@ -65,6 +87,26 @@ async function main(): Promise<void> {
           hibossDir: fixture.hibossDir,
         });
 
+        // Mirror real session behavior: best-effort inject a snapshot of internal_space/MEMORY.md.
+        const spaceContext = promptContext.internalSpace as Record<string, unknown>;
+        const ensured = ensureAgentInternalSpaceLayout({ hibossDir: fixture.hibossDir, agentName: agent.name });
+        if (!ensured.ok) {
+          spaceContext.note = "";
+          spaceContext.noteFence = "```";
+          spaceContext.error = ensured.error;
+        } else {
+          const snapshot = readAgentInternalMemorySnapshot({ hibossDir: fixture.hibossDir, agentName: agent.name });
+          if (snapshot.ok) {
+            spaceContext.note = snapshot.note;
+            spaceContext.noteFence = chooseFence(snapshot.note);
+            spaceContext.error = "";
+          } else {
+            spaceContext.note = "";
+            spaceContext.noteFence = "```";
+            spaceContext.error = snapshot.error;
+          }
+        }
+
         const rendered = renderPrompt({
           surface: "system",
           template: "system/base.md",
@@ -72,7 +114,9 @@ async function main(): Promise<void> {
         });
 
         const filename = `system_example_${permissionLevel}_${adapterConfig.name}.DOC.md`;
-        fs.writeFileSync(path.join(OUTPUT_DIR, filename), rendered.trim() + "\n", "utf-8");
+        for (const dir of OUTPUT_DIRS) {
+          writeExampleDoc({ dir, filename, contents: rendered });
+        }
         console.log(`  ${filename}`);
       }
     }
@@ -122,12 +166,45 @@ async function main(): Promise<void> {
       context: turnContext,
     });
 
-    fs.writeFileSync(path.join(OUTPUT_DIR, "turn_example.DOC.md"), turnRendered.trim() + "\n", "utf-8");
+    for (const dir of OUTPUT_DIRS) {
+      writeExampleDoc({ dir, filename: "turn_example.DOC.md", contents: turnRendered });
+    }
     console.log("  turn_example.DOC.md");
+
+    // =============================================================================
+    // CLI envelope instruction examples
+    // =============================================================================
+
+    console.log("\nGenerating envelope instruction examples (e2e fixture)...");
+
+    const envelopeExamples = [
+      { id: "env_direct_001", filename: "envelope_example_direct.DOC.md" },
+      { id: "env_group_001", filename: "envelope_example_group.DOC.md" },
+      { id: "env_agent_001", filename: "envelope_example_agent.DOC.md" },
+      { id: "9a0b1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d", filename: "envelope_example_cron.DOC.md" },
+    ] as const;
+
+    for (const ex of envelopeExamples) {
+      const env = db.getEnvelopeById(ex.id);
+      if (!env) throw new Error(`Missing fixture envelope for envelope example: ${ex.id}`);
+
+      const ctx = buildCliEnvelopePromptContext({ envelope: env, bossTimezone });
+      const rendered = renderPrompt({
+        surface: "cli-envelope",
+        template: "envelope/instruction.md",
+        context: ctx,
+      });
+
+      for (const dir of OUTPUT_DIRS) {
+        writeExampleDoc({ dir, filename: ex.filename, contents: rendered });
+      }
+      console.log(`  ${ex.filename}`);
+    }
 
     console.log("\n---");
     console.log(`Generated ${permissionLevels.length * adapterConfigs.length} system prompt examples`);
     console.log("Generated 1 turn prompt example");
+    console.log(`Generated ${envelopeExamples.length} envelope instruction examples`);
   } finally {
     db.close();
     fixture.cleanup();

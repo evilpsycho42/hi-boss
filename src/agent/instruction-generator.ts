@@ -12,7 +12,7 @@ import { renderPrompt } from "../shared/prompt-renderer.js";
 import { buildSystemPromptContext } from "../shared/prompt-context.js";
 import { formatAgentAddress } from "../adapters/types.js";
 import { getCodexHomePath, getClaudeHomePath } from "./home-setup.js";
-import { ensureAgentInternalSpaceLayout, readAgentInternalNoteSnapshot } from "../shared/internal-space.js";
+import { ensureAgentInternalSpaceLayout, readAgentInternalMemorySnapshot } from "../shared/internal-space.js";
 
 /**
  * Context for generating system instructions.
@@ -59,7 +59,7 @@ export function generateSystemInstructions(ctx: InstructionContext): string {
     boss,
   });
 
-  // Inject internal space Note.md snapshot for this agent (best-effort; never prints token).
+  // Inject internal space MEMORY.md snapshot for this agent (best-effort; never prints token).
   const hibossDir = ctx.hibossDir ?? (promptContext.hiboss as Record<string, unknown>).dir as string;
   const spaceContext = promptContext.internalSpace as Record<string, unknown>;
   const ensured = ensureAgentInternalSpaceLayout({ hibossDir, agentName: agent.name });
@@ -68,7 +68,7 @@ export function generateSystemInstructions(ctx: InstructionContext): string {
     spaceContext.noteFence = "```";
     spaceContext.error = ensured.error;
   } else {
-    const snapshot = readAgentInternalNoteSnapshot({ hibossDir, agentName: agent.name });
+    const snapshot = readAgentInternalMemorySnapshot({ hibossDir, agentName: agent.name });
     if (snapshot.ok) {
       spaceContext.note = snapshot.note;
       spaceContext.noteFence = chooseFence(snapshot.note);
