@@ -2,14 +2,27 @@
   "name": "hiboss",
   "version": "2026.2.4",
   "type": "module",
+  "description": "Local-first daemon + CLI for routing durable envelopes between agents and chat channels (e.g., Telegram).",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
   "bin": {
     "hiboss": "./dist/bin/hiboss.js"
   },
+  "files": [
+    "dist/",
+    "prompts/",
+    "default_setup.json",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "tsx watch src/daemon-entry.ts",
     "start": "tsx src/daemon-entry.ts",
     "build": "tsc",
     "postbuild": "chmod +x dist/bin/hiboss.js",
+    "prepack": "npm run build",
     "typecheck": "tsc --noEmit",
     "hiboss": "tsx bin/hiboss.ts",
     "examples:cli": "tsx scripts/gen-cli-examples.ts",

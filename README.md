@@ -9,26 +9,32 @@ Highlights:
 
 ## Providers: Claude Code + Codex
 
-Hi-Boss runs agent turns through the unified agent SDK with either:
+Hi-Boss runs agent turns through the Unified Agent SDK runtime with either provider:
 
-- **Claude Code (Anthropic)** via `@anthropic-ai/claude-agent-sdk`
-- **Codex (OpenAI)** via `@openai/codex-sdk`
+- **Claude Code** (`--provider claude`)
+- **Codex** (`--provider codex`)
 
 When you run `hiboss setup` / `hiboss agent register`, Hi-Boss imports your provider auth/settings from `~/.claude/` or `~/.codex/`.
 
 You can also override the import source home:
-- Setup: via the interactive wizard, or `hiboss setup --config-file <path>` (`provider-source-home`)
+- Setup: via the interactive wizard, or `hiboss setup --config-file <path>`
 - Agents: `hiboss agent register|set --provider-source-home <path>`
 
 ## Install
 
-Via npm (coming soon):
+Via npm:
 
 ```bash
 npm i -g hiboss
 ```
 
-Dev/from source: see `docs/index.md` and `docs/guide/quickstart.md`.
+Upgrade tip: stop the daemon before upgrading:
+
+```bash
+hiboss daemon stop --token <boss-token>
+```
+
+Dev/from source: see `docs/index.md`.
 
 ## Setup
 
@@ -44,6 +50,11 @@ Setup:
 - creates your first agent
 - configures a Telegram bot + boss Telegram username for that first agent
 - prints `boss-token:` and `agent-token:` **once** (save them somewhere safe)
+
+State directory:
+- default: `~/hiboss/`
+- internal daemon files: `~/hiboss/.daemon/` (db/socket/log/pid)
+- override the root with `HIBOSS_DIR`
 
 2) Start the daemon:
 
@@ -127,5 +138,7 @@ Each agent has a long-term memory file at:
 ## Docs
 
 - `docs/index.md` — docs hub (specs + user guides)
-- `docs/guide/quickstart.md` — step-by-step getting started
+- `docs/guide/install.md` — install + upgrade notes
 - `docs/guide/telegram.md` — Telegram setup and usage
+- `docs/guide/overview.md` — features overview (cron, deliver-at, etc.)
+- `docs/guide/recipes.md` — cron/scheduling recipes
