@@ -120,26 +120,29 @@ function validateTurnPrompt(): void {
     const out = renderPrompt({ surface: "turn", template: "turn/turn.md", context: ctx }).trimEnd();
     assert.ok(out.includes("## Turn Context"), "turn prompt should include context");
     assert.ok(/^now: \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$/m.test(out), "turn prompt should include local now");
+    assert.ok(/^pending-envelopes: 0$/m.test(out), "turn prompt should include pending-envelopes count");
     assert.ok(!/^agent:/m.test(out), "turn prompt should not include agent key");
-    assert.ok(out.includes("## Pending Envelopes (0)"), "turn prompt should show 0 envelopes");
+    assert.ok(!out.includes("## Pending Envelopes"), "turn prompt should not include pending envelopes header");
   }
 
   // N envelopes
   {
+    const now = Date.now();
     const ctx = buildTurnPromptContext({
       agentName: "nex",
-      datetimeMs: Date.now(),
-      envelopes: makeMockEnvelopes(),
+      datetimeMs: now,
+      envelopes: [{ ...makeMockEnvelopes()[0], deliverAt: now + 60_000 }, makeMockEnvelopes()[1]],
     });
     const out = renderPrompt({ surface: "turn", template: "turn/turn.md", context: ctx }).trimEnd();
-    assert.ok(out.includes("### Envelope 1"), "turn prompt should render envelope 1");
-    assert.ok(out.includes("from-name:"), "turn prompt should include from-name for channel messages");
-    assert.ok(out.includes("group \"hiboss-test\""), "turn prompt should show group name for group messages");
+    assert.ok(!out.includes("### Envelope "), "turn prompt should not include envelope headers");
+    assert.ok(out.includes("sender:"), "turn prompt should include sender for channel messages");
+    assert.ok(out.includes("in group \"hiboss-test\""), "turn prompt should show group name in sender line");
     assert.ok(out.includes("Alice (@alice)"), "turn prompt should show author for group messages");
     assert.ok(out.includes("channel-message-id: zik0zj"), "turn prompt should show compact telegram channel-message-id");
+    assert.ok(out.includes("deliver-at:"), "turn prompt should include deliver-at when present");
   }
 
-  // Batched group messages (same chat) should repeat header once
+  // Group messages (same chat) should not be batched
   {
     const group1: Envelope = {
       id: "env-g1",
@@ -189,13 +192,12 @@ function validateTurnPrompt(): void {
     const out = renderPrompt({ surface: "turn", template: "turn/turn.md", context: ctx }).trimEnd();
 
     const groupFromMatches = out.match(/from: channel:telegram:123/g) ?? [];
-    assert.equal(groupFromMatches.length, 1, "batched group should print from once");
-    const groupNameMatches = out.match(/from-name: group \"hiboss-test\"/g) ?? [];
-    assert.equal(groupNameMatches.length, 1, "batched group should print from-name once");
-    assert.ok(out.includes("Alice (@alice)"), "batched group should include first author");
-    assert.ok(out.includes("Kevin (@kky1024) [boss]"), "batched group should include boss marker");
-    assert.ok(out.includes("### Envelope 1"), "turn prompt should include first envelope header");
-    assert.ok(out.includes("### Envelope 2"), "turn prompt should include next envelope header");
+    assert.equal(groupFromMatches.length, 2, "group messages should print from per envelope");
+    const senderMatches = out.match(/sender: .* in group \"hiboss-test\"/g) ?? [];
+    assert.equal(senderMatches.length, 2, "group messages should print sender per envelope");
+    assert.ok(out.includes("Alice (@alice)"), "group messages should include first author");
+    assert.ok(out.includes("Kevin (@kky1024) [boss]"), "group messages should include boss marker");
+    assert.ok(!out.includes("### Envelope "), "turn prompt should not include envelope headers");
   }
 }
 
@@ -225,7 +227,7 @@ function validateCliEnvelopePrompt(): void {
       context: ctx,
     }).trimEnd();
     assert.ok(out.includes("from:"), "cli envelope should include from");
-    assert.ok(out.includes("from-name:"), "cli envelope should include from-name");
+    assert.ok(out.includes("sender:"), "cli envelope should include sender");
     assert.ok(!out.includes("deliver-at:"), "cli envelope should omit deliver-at when missing");
   }
 

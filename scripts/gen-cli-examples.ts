@@ -22,7 +22,7 @@ function clearOldExampleDocs(dir: string): void {
   }
 }
 
-function writeDoc(params: { filename: string; title: string; command: string; output: string }): void {
+function writeDoc(params: { filename: string; title: string; command: string; output: string; note?: string }): void {
   const outPath = path.join(OUTPUT_DIR, params.filename);
   const doc = [
     `# ${params.title}`,
@@ -30,6 +30,7 @@ function writeDoc(params: { filename: string; title: string; command: string; ou
     "```bash",
     `$ ${params.command}`,
     "```",
+    ...(params.note ? ["", params.note] : []),
     "",
     "```text",
     params.output.trimEnd(),
@@ -37,6 +38,12 @@ function writeDoc(params: { filename: string; title: string; command: string; ou
     "",
   ].join("\n");
   fs.writeFileSync(outPath, doc, "utf-8");
+  console.log(`  ${params.filename}`);
+}
+
+function writeRawDoc(params: { filename: string; contents: string }): void {
+  const outPath = path.join(OUTPUT_DIR, params.filename);
+  fs.writeFileSync(outPath, params.contents, "utf-8");
   console.log(`  ${params.filename}`);
 }
 
@@ -67,16 +74,46 @@ async function main(): Promise<void> {
       output: await runOrThrow({ homeDir: fixture.homeDir, token: fixture.agentToken, args: ["agent", "list"] }),
     });
 
-    writeDoc({
-      filename: "envelope_list.DOC.md",
-      title: "hiboss envelope list",
-      command: "hiboss envelope list --from channel:telegram:-100123456789 --status pending",
-      output: await runOrThrow({
-        homeDir: fixture.homeDir,
-        token: fixture.agentToken,
-        args: ["envelope", "list", "--from", "channel:telegram:-100123456789", "--status", "pending"],
-      }),
-    });
+    {
+      const sections: Array<{ title: string; cmd: string; args: string[] }> = [
+        {
+          title: "Example: private chat (channel)",
+          cmd: "hiboss envelope list --from channel:telegram:789012 --status pending",
+          args: ["envelope", "list", "--from", "channel:telegram:789012", "--status", "pending"],
+        },
+        {
+          title: "Example: agent normal",
+          cmd: "hiboss envelope list --from agent:scheduler --status pending",
+          args: ["envelope", "list", "--from", "agent:scheduler", "--status", "pending"],
+        },
+        {
+          title: "Example: agent scheduled + cron",
+          cmd: "hiboss envelope list --from agent:nex --status pending",
+          args: ["envelope", "list", "--from", "agent:nex", "--status", "pending"],
+        },
+        {
+          title: "Example: group chat (channel)",
+          cmd: "hiboss envelope list --from channel:telegram:-100123456789 --status pending",
+          args: ["envelope", "list", "--from", "channel:telegram:-100123456789", "--status", "pending"],
+        },
+      ];
+
+      const parts: string[] = [];
+      parts.push("# hiboss envelope list", "");
+      parts.push(
+        "Note: `--status pending` with `--from` is treated as a work-queue read; returned envelopes are immediately acknowledged (at-most-once).",
+        ""
+      );
+
+      for (const s of sections) {
+        const output = await runOrThrow({ homeDir: fixture.homeDir, token: fixture.agentToken, args: s.args });
+        parts.push(`## ${s.title}`, "");
+        parts.push("```bash", `$ ${s.cmd}`, "```", "");
+        parts.push("```text", output.trimEnd(), "```", "");
+      }
+
+      writeRawDoc({ filename: "envelope_list.DOC.md", contents: parts.join("\n") });
+    }
 
     writeDoc({
       filename: "cron_list.DOC.md",

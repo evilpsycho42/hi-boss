@@ -10,7 +10,7 @@ Hi-Boss uses **Nunjucks** (Jinja-like) templates under `prompts/` to generate th
 2. **Turn input** (what the agent SDK receives each run)
 3. **CLI envelope instructions** (what `hiboss envelope list` prints for agents to read)
 
-All agent-facing **keys** in rendered text must remain **kebab-case, lowercase** (e.g. `from-name:`).
+All agent-facing **keys** in rendered text must remain **kebab-case, lowercase** (e.g. `sender:`).
 
 ---
 
@@ -22,11 +22,11 @@ Templates are optimized for:
 
 2. **Dual readability** — Output should be easy to parse for both LLM agents and human developers debugging logs.
 
-3. **Consistent naming** — All output keys use kebab-case lowercase (`from-name:`, `created-at:`). No mixing of camelCase or snake_case in rendered output.
+3. **Consistent naming** — All output keys use kebab-case lowercase (`sender:`, `created-at:`). No mixing of camelCase or snake_case in rendered output.
 
 4. **Necessary information only** — Include what agents need to act; exclude internal details (e.g., envelope IDs are omitted since agents reply via `from:` address).
 
-5. **Well organized** — Group related fields together. Header first, then content. Use clear section markers (`text:`, `attachments:`).
+5. **Well organized** — Group related fields together. Header first, then content. Use clear section markers (`attachments:` when present).
 
 ---
 
@@ -83,7 +83,7 @@ flowchart TD
 
 - Variables: `{{ agent.name }}`
 - Conditionals:
-  - `{% if envelope.fromName %}...{% endif %}`
+  - `{% if envelope.senderLine %}...{% endif %}`
 - Loops:
   - `{% for env in envelopes %}...{% endfor %}`
 - Includes:

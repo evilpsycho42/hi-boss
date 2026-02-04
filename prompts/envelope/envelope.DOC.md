@@ -16,19 +16,15 @@ Hi-Boss supplies fields as template variables (see `prompts/VARIABLES.md`).
 | Field | Shown | Description |
 |-------|-------|-------------|
 | `from` | Always | Raw address for routing (use with `--to` when replying) |
-| `status` | Always | Envelope status (`pending` or `done`) |
-| `from-name` | Only for channel messages | Group name or author name (for direct messages) |
+| `sender` | Only for channel messages | Sender and chat context (e.g. `Alice (@alice) in group "hiboss-test"` or `Alice (@alice) in private chat`) |
 | `channel-message-id` | Only for channel messages | Platform message id (Telegram uses compact base36, no prefix; use with `hiboss envelope send --reply-to ...` and `hiboss reaction set --channel-message-id ...`) |
-| `created-at` | Only for direct/agent messages | Timestamp (group messages show per-message timestamps) |
+| `created-at` | Always | Timestamp (local timezone offset) |
 | `deliver-at` | Only for scheduled messages | Requested delivery time |
+| `cron-id` | Only for cron messages | Cron schedule id (short id) |
 
-## Message Fields (group messages)
+## Message Body
 
-Each message in a group shows:
-- Author with `[boss]` suffix if sender is the configured boss
-- Timestamp
-- Text content
-- Attachments (only if present)
+The body is printed as plain text (or `(none)`), followed by an `attachments:` block only when present.
 
 Attachment format: `- [type] filename (source)` where type is `image`, `audio`, `video`, or `file`.
 
@@ -36,11 +32,10 @@ Attachment format: `- [type] filename (source)` where type is `image`, `audio`, 
 
 ```
 from: channel:telegram:6447779930
-status: pending
-from-name: group "hiboss-test"
+sender: Kevin (@kky1024) [boss] in group "hiboss-test"
 channel-message-id: zik0zj
+created-at: 2026-01-28T20:08:45+08:00
 
-Kevin (@kky1024) [boss] at 2026-01-28T20:08:45+08:00:
 Here's the weekly report and the updated diagram.
 attachments:
 - [file] report.pdf (/tmp/downloads/report.pdf)
@@ -49,32 +44,28 @@ attachments:
 
 ## Multiple Envelopes (list output)
 
-`hiboss envelope list` prints one envelope instruction per envelope, separated by a blank line. In group chats, multiple messages appear as multiple envelopes, each repeating the same `from:` / `from-name:` header.
+`hiboss envelope list` prints one envelope instruction per envelope, separated by a blank line. In group chats, multiple messages appear as multiple envelopes, each repeating the same `from:` / `sender:` header.
 
 ## Full Example (direct message)
 
 ```
 from: channel:telegram:6447779930
-status: pending
-from-name: Kevin (@kky1024) [boss]
+sender: Kevin (@kky1024) [boss] in private chat
 channel-message-id: zik0zi
 created-at: 2026-01-28T20:08:45+08:00
-text:
+
 Here's the weekly report.
 attachments:
 - [file] report.pdf (/tmp/downloads/report.pdf)
 ```
 
-Note: Direct messages use the original format since there's no group and only one author.
-
 ## Full Example (agent-to-agent)
 
 ```
 from: agent:scheduler
-status: pending
 created-at: 2026-01-28T20:08:45+08:00
-text:
+
 Time to run the daily backup.
 ```
 
-Note: `from-name` is omitted since the address is already readable. `attachments:` is omitted when there are none.
+Note: `sender` is omitted for agent-origin envelopes since the address is already readable. `attachments:` is omitted when there are none.

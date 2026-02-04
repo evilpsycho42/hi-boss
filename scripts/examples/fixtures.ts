@@ -217,7 +217,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
-  // Two pending group messages (used by envelope list + turn prompt)
+  // Three pending group messages in the same Telegram group (used by envelope list + turn prompt)
   insertEnvelope.run(
     "env_group_001",
     "channel:telegram:-100123456789",
@@ -241,7 +241,10 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     "agent:nex",
     0,
     "@nex what's the ETA on the feature? (need it for the weekly update)",
-    null,
+    JSON.stringify([
+      { source: "/home/user/downloads/feature-scope.png", filename: "feature-scope.png" },
+      { source: "/home/user/downloads/eta-notes.txt", filename: "eta-notes.txt" },
+    ]),
     null,
     "pending",
     Date.parse("2026-01-29T09:15:00.000Z"),
@@ -252,6 +255,42 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
       chat: { id: "-100123456789", name: "Project X Dev" },
     })
   );
+  insertEnvelope.run(
+    "env_group_003",
+    "channel:telegram:-100123456789",
+    "agent:nex",
+    0,
+    "@nex FYI: I pushed the latest screenshots to the shared drive.",
+    null,
+    null,
+    "pending",
+    Date.parse("2026-01-29T09:30:00.000Z"),
+    JSON.stringify({
+      platform: "telegram",
+      channelMessageId: "337",
+      author: { id: "u-789", username: "bob_pm", displayName: "Bob" },
+      chat: { id: "-100123456789", name: "Project X Dev" },
+    })
+  );
+
+  // One pending group message from a different Telegram group (used by turn prompt)
+  insertEnvelope.run(
+    "env_group_other_001",
+    "channel:telegram:-100987654321",
+    "agent:nex",
+    0,
+    "@nex can you check the deploy status for staging?",
+    null,
+    null,
+    "pending",
+    Date.parse("2026-01-29T09:20:00.000Z"),
+    JSON.stringify({
+      platform: "telegram",
+      channelMessageId: "444",
+      author: { id: "u-999", username: "eve_ops", displayName: "Eve" },
+      chat: { id: "-100987654321", name: "Infra Ops" },
+    })
+  );
 
   // Direct boss message (used by envelope prompt examples)
   insertEnvelope.run(
@@ -260,7 +299,11 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     "agent:nex",
     1,
     "Can you summarize the meeting notes from yesterday?",
-    JSON.stringify([{ source: "/home/user/downloads/meeting-notes.pdf", filename: "meeting-notes.pdf" }]),
+    JSON.stringify([
+      { source: "/home/user/downloads/meeting-notes.pdf", filename: "meeting-notes.pdf" },
+      { source: "/home/user/downloads/action-items.md", filename: "action-items.md" },
+      { source: "/home/user/downloads/diagram.png", filename: "diagram.png" },
+    ]),
     null,
     "pending",
     Date.parse("2026-01-29T09:00:00.000Z"),
@@ -279,11 +322,14 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     "agent:nex",
     0,
     "Reminder: Review the PR as requested by Kevin.",
+    JSON.stringify([
+      { source: "/home/user/projects/myapp/pr-247.patch", filename: "pr-247.patch" },
+      { source: "/home/user/projects/myapp/ci-log.txt", filename: "ci-log.txt" },
+    ]),
     null,
-    Date.parse("2026-01-29T15:00:00.000Z"),
     "pending",
     Date.parse("2026-01-29T09:30:00.000Z"),
-    JSON.stringify({ fromName: "scheduler" })
+    null
   );
 
   // Cron pending envelope (referenced by cron schedule)
@@ -292,12 +338,26 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     "agent:nex",
     "agent:nex",
     0,
-    "Daily standup reminder: post your update in #team.",
+    "Daily standup reminder (cron): post your update in #team.",
     null,
     Date.parse("2026-01-30T17:00:00.000Z"),
     "pending",
     Date.parse("2026-01-15T10:30:00.000Z"),
     JSON.stringify({ cronScheduleId: CRON_ID_1, parseMode: "plain" })
+  );
+
+  // Delayed self-message (not cron) (used by turn prompt)
+  insertEnvelope.run(
+    "env_self_delayed_001",
+    "agent:nex",
+    "agent:nex",
+    0,
+    "Delayed note to self: follow up with Alice about the weekly update.",
+    null,
+    Date.parse("2026-02-02T09:00:00.000Z"),
+    "pending",
+    Date.parse("2026-01-29T09:40:00.000Z"),
+    JSON.stringify({ parseMode: "plain" })
   );
 
   const insertCron = db.prepare(

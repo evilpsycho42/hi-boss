@@ -1,14 +1,14 @@
 from: {{ envelope.from }}
-status: {{ envelope.status }}
-{% if envelope.fromName %}
-from-name: {{ envelope.fromName }}
+{% if envelope.senderLine %}
+sender: {{ envelope.senderLine }}
 {% endif %}
 {% if envelope.channelMessageId %}
 channel-message-id: {{ envelope.channelMessageId }}
 {% endif %}
-{% if envelope.isGroup == false %}
 created-at: {{ envelope.createdAt.localIso }}
-{% endif %}
 {% if envelope.deliverAt.utcIso %}
 deliver-at: {{ envelope.deliverAt.localIso }}
+{% endif %}
+{% if envelope.cronId %}
+cron-id: {{ envelope.cronId }}
 {% endif %}

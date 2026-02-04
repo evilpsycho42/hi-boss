@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { HiBossDatabase } from "../src/daemon/db/database.js";
-import { buildSystemPromptContext, buildTurnPromptContext, buildCliEnvelopePromptContext } from "../src/shared/prompt-context.js";
+import { buildSystemPromptContext, buildTurnPromptContext } from "../src/shared/prompt-context.js";
 import { renderPrompt } from "../src/shared/prompt-renderer.js";
 
 import { createExampleFixture } from "./examples/fixtures.js";
@@ -81,11 +81,30 @@ async function main(): Promise<void> {
 
     console.log("\nGenerating turn prompt example (e2e fixture)...");
 
-    const envelopes = db.listEnvelopes({
-      address: "agent:nex",
-      box: "inbox",
-      status: "pending",
-      limit: 25,
+    const turnEnvelopeIds = [
+      // 3 messages from the same Telegram group
+      "env_group_003",
+      "env_group_002",
+      "env_group_001",
+
+      // 2 messages: one private chat + one other group
+      "env_direct_001",
+      "env_group_other_001",
+
+      // 1 agent message
+      "env_agent_001",
+
+      // 1 message from a cron schedule
+      "9a0b1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d",
+
+      // 1 delayed self-message
+      "env_self_delayed_001",
+    ] as const;
+
+    const envelopes = turnEnvelopeIds.map((id) => {
+      const env = db.getEnvelopeById(id);
+      if (!env) throw new Error(`Missing fixture envelope for turn example: ${id}`);
+      return env;
     });
 
     const turnContext = buildTurnPromptContext({
@@ -103,37 +122,9 @@ async function main(): Promise<void> {
     fs.writeFileSync(path.join(OUTPUT_DIR, "turn_example.DOC.md"), turnRendered.trim() + "\n", "utf-8");
     console.log("  turn_example.DOC.md");
 
-    // =============================================================================
-    // Envelope prompt examples
-    // =============================================================================
-
-    console.log("\nGenerating envelope prompt examples (e2e fixture)...");
-
-    const examples = [
-      { id: "env_direct_001", out: "envelope_example_direct.DOC.md" },
-      { id: "env_group_002", out: "envelope_example_group.DOC.md" },
-      { id: "env_agent_001", out: "envelope_example_agent.DOC.md" },
-    ] as const;
-
-    for (const ex of examples) {
-      const env = db.getEnvelopeById(ex.id);
-      if (!env) throw new Error(`Missing fixture envelope: ${ex.id}`);
-
-      const envelopeContext = buildCliEnvelopePromptContext({ envelope: env });
-      const rendered = renderPrompt({
-        surface: "cli-envelope",
-        template: "envelope/instruction.md",
-        context: envelopeContext,
-      });
-
-      fs.writeFileSync(path.join(OUTPUT_DIR, ex.out), rendered.trim() + "\n", "utf-8");
-      console.log(`  ${ex.out}`);
-    }
-
     console.log("\n---");
     console.log(`Generated ${permissionLevels.length * adapterConfigs.length} system prompt examples`);
     console.log("Generated 1 turn prompt example");
-    console.log("Generated 3 envelope prompt examples");
   } finally {
     db.close();
     fixture.cleanup();

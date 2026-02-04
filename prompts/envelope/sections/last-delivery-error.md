@@ -7,4 +7,3 @@ last-delivery-error-kind: {{ envelope.lastDeliveryError.kind }}
 last-delivery-error-message: {{ envelope.lastDeliveryError.message }}
 {% endif %}
 {% endif %}
-

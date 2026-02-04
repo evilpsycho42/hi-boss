@@ -9,6 +9,7 @@ import { HIBOSS_TOKEN_ENV } from "./env.js";
 import { getAgentDir, getHiBossDir } from "../agent/home-setup.js";
 import { DEFAULT_AGENT_PROVIDER } from "./defaults.js";
 import { formatTelegramMessageIdCompact } from "./telegram-message-id.js";
+import { formatShortId } from "./id-format.js";
 
 const MAX_CUSTOM_FILE_CHARS = 10_000;
 
@@ -135,6 +136,12 @@ function withBossMarkerSuffix(name: string, fromBoss: boolean): string {
   if (!trimmed) return trimmed;
   if (trimmed.endsWith("[boss]")) return trimmed;
   return `${trimmed} [boss]`;
+}
+
+function getCronScheduleId(metadata: unknown): string | null {
+  if (!metadata || typeof metadata !== "object") return null;
+  const v = (metadata as Record<string, unknown>).cronScheduleId;
+  return typeof v === "string" && v.trim() ? v.trim() : null;
 }
 
 interface SemanticFromResult {
@@ -326,6 +333,25 @@ export function buildTurnPromptContext(params: {
     });
 
     const authorLine = semantic ? withBossMarkerSuffix(semantic.authorName, env.fromBoss) : "";
+    const senderLine = (() => {
+      if (!semantic) return "";
+      if (!isChannelMetadata(env.metadata)) return "";
+      if (semantic.isGroup) return `${authorLine} in group "${semantic.groupName}"`;
+      return `${authorLine} in private chat`;
+    })();
+
+    const cronId = (() => {
+      const cronScheduleId = getCronScheduleId(env.metadata);
+      return cronScheduleId ? formatShortId(cronScheduleId) : "";
+    })();
+
+    const deliverAt =
+      typeof env.deliverAt === "number"
+        ? {
+            utcIso: formatUnixMsAsUtcIso(env.deliverAt),
+            localIso: formatUnixMsAsLocalOffset(env.deliverAt),
+          }
+        : { utcIso: "", localIso: "" };
 
     return {
       index: idx + 1,
@@ -337,12 +363,15 @@ export function buildTurnPromptContext(params: {
       groupName: semantic?.groupName ?? "",
       authorName: semantic?.authorName ?? "",
       authorLine,
+      senderLine,
       channelMessageId,
       inReplyTo,
       createdAt: {
         utcIso: formatUnixMsAsUtcIso(env.createdAt),
         localIso: formatUnixMsAsLocalOffset(env.createdAt),
       },
+      deliverAt,
+      cronId,
       content: {
         text: env.content.text ?? "(none)",
         attachments,
@@ -407,6 +436,17 @@ export function buildCliEnvelopePromptContext(params: {
       : { utcIso: "", localIso: "" };
 
   const authorLine = semantic ? withBossMarkerSuffix(semantic.authorName, env.fromBoss) : "";
+  const senderLine = (() => {
+    if (!semantic) return "";
+    if (!isChannelMetadata(env.metadata)) return "";
+    if (semantic.isGroup) return `${authorLine} in group "${semantic.groupName}"`;
+    return `${authorLine} in private chat`;
+  })();
+
+  const cronId = (() => {
+    const cronScheduleId = getCronScheduleId(env.metadata);
+    return cronScheduleId ? formatShortId(cronScheduleId) : "";
+  })();
 
   const lastDeliveryError = (() => {
     if (!env.metadata || typeof env.metadata !== "object") return null;
@@ -435,6 +475,7 @@ export function buildCliEnvelopePromptContext(params: {
       groupName: semantic?.groupName ?? "",
       authorName: semantic?.authorName ?? "",
       authorLine,
+      senderLine,
       channelMessageId,
       inReplyTo,
       createdAt: {
@@ -442,6 +483,7 @@ export function buildCliEnvelopePromptContext(params: {
         localIso: formatUnixMsAsLocalOffset(env.createdAt),
       },
       deliverAt,
+      cronId,
       content: {
         text: env.content.text ?? "(none)",
         attachments,

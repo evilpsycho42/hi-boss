@@ -16,7 +16,7 @@ Short IDs:
 
 Canonical mapping (selected):
 - `envelope.deliverAt` → SQLite `deliver_at` → `--deliver-at` → `deliver-at:`
-- `envelope.createdAt` → SQLite `created_at` → `created-at:` (direct/agent messages only)
+- `envelope.createdAt` → SQLite `created_at` → `created-at:`
 - `envelope.fromBoss` → SQLite `from_boss` → `[boss]` suffix in rendered sender lines
 
 ---
@@ -63,11 +63,11 @@ Command flags:
 
 **Header keys**
 - `from:` (always; raw address)
-- `status:` (always; `pending|done`)
-- `from-name:` (only for channel messages; group name or author name with `[boss]` suffix for direct)
+- `sender:` (only for channel messages; `Author [boss] in group "<name>"` or `Author [boss] in private chat`)
 - `channel-message-id:` (only for channel messages; platform message id. For Telegram, rendered in compact base36 (no prefix); accepted by `--reply-to` and `hiboss reaction set --channel-message-id` using the displayed value. Raw decimal can be passed as `dec:<id>`.)
-- `created-at:` (only for direct/agent messages; group messages show per-message timestamps)
+- `created-at:` (always; local timezone offset)
 - `deliver-at:` (optional; shown when present, in local timezone offset)
+- `cron-id:` (optional; shown when present; short id derived from the internal cron schedule UUID)
 
 **Reply/quote keys** (only when the incoming channel message is a reply)
 - `in-reply-to-channel-message-id:` (Telegram uses the same compact base36 (no prefix) form)
@@ -80,13 +80,9 @@ Command flags:
 - `last-delivery-error-kind:`
 - `last-delivery-error-message:`
 
-**Sections (direct/agent messages)**
-- `text:` followed by the text (or `(none)`)
+**Body**
+- Plain text (or `(none)`)
 - `attachments:` followed by a rendered list (only shown if present)
-
-**Sections (group messages)**
-- Message lines: `Author [boss] at timestamp:` followed by text
-- `attachments:` only shown if present
 
 `hiboss envelope send` prints:
 - `id: <envelope-id>` (short id; derived from the internal envelope UUID)
@@ -129,10 +125,10 @@ Envelope instructions printed by `hiboss envelope list` do **not** include the i
 
 ```
 from: channel:telegram:6447779930
-from-name: group "hiboss-test"
+sender: Kevin (@kky1024) [boss] in group "hiboss-test"
 channel-message-id: zik0zj
+created-at: 2026-01-28T20:08:45+08:00
 
-Kevin (@kky1024) [boss] at 2026-01-28T20:08:45+08:00:
 Hello!
 attachments:
 - [image] photo.jpg (/Users/kky/.hiboss/media/photo.jpg)
@@ -142,10 +138,10 @@ attachments:
 
 ```
 from: channel:telegram:6447779930
-from-name: Kevin (@kky1024) [boss]
+sender: Kevin (@kky1024) [boss] in private chat
 channel-message-id: zik0zi
 created-at: 2026-01-28T20:08:45+08:00
-text:
+
 Hello!
 attachments:
 - [image] photo.jpg (/Users/kky/.hiboss/media/photo.jpg)

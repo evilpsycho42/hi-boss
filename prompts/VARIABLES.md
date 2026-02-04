@@ -66,8 +66,12 @@ Notes:
 | `envelopes[].groupName` | string | Group name (or empty for direct/agent messages) |
 | `envelopes[].authorName` | string | Author display name without boss marker (or empty) |
 | `envelopes[].authorLine` | string | Author with `[boss]` suffix for group messages (or empty) |
+| `envelopes[].senderLine` | string | Sender line for channel messages (e.g. `Alice (@alice) in group "hiboss-test"` or `Alice (@alice) in private chat`) (or empty) |
 | `envelopes[].createdAt.utcIso` | string | Created-at (UTC ISO 8601) |
 | `envelopes[].createdAt.localIso` | string | Created-at formatted in local timezone offset |
+| `envelopes[].deliverAt.utcIso` | string | Deliver-at (UTC ISO 8601) or empty |
+| `envelopes[].deliverAt.localIso` | string | Deliver-at formatted in local timezone offset or empty |
+| `envelopes[].cronId` | string | Cron schedule id (short id) if this envelope was created by a cron schedule (or empty) |
 | `envelopes[].content.text` | string | Text content (or `(none)`) |
 | `envelopes[].content.attachments` | array | Attachment objects |
 | `envelopes[].content.attachments[].type` | string | `image|video|audio|file` |
@@ -96,10 +100,12 @@ Notes:
 | `envelope.groupName` | string | Group name (or empty for direct/agent messages) |
 | `envelope.authorName` | string | Author display name without boss marker (or empty) |
 | `envelope.authorLine` | string | Author with `[boss]` suffix for group messages (or empty) |
+| `envelope.senderLine` | string | Sender line for channel messages (e.g. `Alice (@alice) in group "hiboss-test"` or `Alice (@alice) in private chat`) (or empty) |
 | `envelope.createdAt.utcIso` | string | Created-at (UTC ISO 8601) |
 | `envelope.createdAt.localIso` | string | Created-at formatted in local timezone offset |
 | `envelope.deliverAt.utcIso` | string | Deliver-at (UTC ISO 8601) or empty |
 | `envelope.deliverAt.localIso` | string | Deliver-at formatted in local timezone offset or empty |
+| `envelope.cronId` | string | Cron schedule id (short id) if this envelope was created by a cron schedule (or empty) |
 | `envelope.content.text` | string | Text content (or `(none)`) |
 | `envelope.content.attachments` | array | Attachment objects |
 | `envelope.content.attachmentsText` | string | Pre-rendered attachment list (or `(none)`) |

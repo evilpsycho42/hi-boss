@@ -33,20 +33,27 @@ Start here: `docs/index.md`, `docs/spec/goals.md`, `docs/spec/architecture.md`, 
 |---------|------------|---------|
 | Code (TypeScript) | camelCase | `envelope.fromBoss` |
 | CLI flags | kebab-case, lowercase | `--deliver-at` |
-| CLI output keys | kebab-case, lowercase | `from-name:` |
+| CLI output keys | kebab-case, lowercase | `sender:` |
 | Agent instruction keys | kebab-case, lowercase | `from-boss` |
 
 Canonical mapping (see `docs/spec/definitions.md`):
 ```
 envelope.deliverAt  -> --deliver-at   (flag)
 envelope.fromBoss   -> from_boss      (SQLite; affects `[boss]` suffix in prompts)
-envelope.createdAt  -> created-at:    (output key; direct/agent messages only)
+envelope.createdAt  -> created-at:    (output key)
 ```
 
 Boss marker:
 - When `fromBoss` is true, rendered sender lines include the `[boss]` suffix:
-  - direct: `from-name: <author> [boss]`
-  - group: `Author [boss] at <timestamp>:`
+  - direct: `sender: <author> [boss] in private chat`
+  - group: `sender: <author> [boss] in group "<name>"`
+
+Short IDs (must follow):
+- **All** user/agent-visible UUID-backed ids are rendered as **short ids** by default (first 8 lowercase hex chars of the UUID with hyphens removed).
+- Prefer `src/shared/id-format.ts` helpers:
+  - `formatShortId(...)` for printing
+  - `normalizeIdPrefixInput(...)` for parsing `--id` inputs
+- Full UUIDs should be accepted as input where an `--id` flag exists, but should generally not be printed in CLI output or prompts.
 
 ## Important settings / operational invariants
 

@@ -32,29 +32,29 @@ export interface TurnInput {
  * ## Turn Context
  *
  * now: 2026-01-27T20:00:00+08:00
+ * pending-envelopes: 3
  *
  * ---
- * ## Pending Envelopes (3)
- *
- * ### Envelope 1
  *
  * from: channel:telegram:12345
- * from-name: group "hiboss-test"
+ * sender: Alice (@alice) in group "hiboss-test"
+ * channel-message-id: zik0zj
+ * created-at: 2026-01-27T20:00:00+08:00
  *
- * Alice (@alice) at 2026-01-27T20:00:00+08:00:
  * Hello!
  *
- * Bob (@bob) at 2026-01-27T20:01:00+08:00:
+ * ---
+ *
+ * from: channel:telegram:12345
+ * sender: Bob (@bob) in group "hiboss-test"
+ * channel-message-id: zik0zk
+ * created-at: 2026-01-27T20:01:00+08:00
+ *
  * Hi!
  *
  * ---
- *
- * ### Envelope 2
  * ...
  * ```
- *
- * Note: consecutive group-chat envelopes from the same `from:` address are batched under a single
- * `### Envelope <index>` header for token efficiency (header printed once, multiple message lines).
  *
  * @param turnInput - Turn context and envelopes
  * @returns Formatted turn input text
