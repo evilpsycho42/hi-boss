@@ -8,7 +8,7 @@
     "node": ">=18"
   },
   "bin": {
-    "hiboss": "./dist/bin/hiboss.js"
+    "hiboss": "dist/bin/hiboss.js"
   },
   "files": [
     "dist/",
