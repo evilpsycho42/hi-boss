@@ -31,9 +31,9 @@ export interface Envelope {
   to: Address;
   fromBoss: boolean;          // true if sender matches boss config
   content: EnvelopeContent;
-  deliverAt?: string;         // ISO 8601 UTC timestamp (not-before delivery)
+  deliverAt?: number;         // unix epoch ms (UTC) (not-before delivery)
   status: EnvelopeStatus;
-  createdAt: string;          // ISO 8601
+  createdAt: number;          // unix epoch ms (UTC)
   metadata?: Record<string, unknown>;
 }
 
@@ -45,6 +45,6 @@ export interface CreateEnvelopeInput {
   to: Address;
   fromBoss?: boolean;
   content: EnvelopeContent;
-  deliverAt?: string;
+  deliverAt?: number;
   metadata?: Record<string, unknown>;
 }

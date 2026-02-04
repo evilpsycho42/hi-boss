@@ -2,7 +2,7 @@ import { getDefaultConfig, getSocketPath } from "../../daemon/daemon.js";
 import { IpcClient } from "../ipc-client.js";
 import type { Agent } from "../../agent/types.js";
 import type { AgentStatusResult } from "../../daemon/ipc/types.js";
-import { formatUtcIsoAsLocalOffset } from "../../shared/time.js";
+import { formatUnixMsAsLocalOffset } from "../../shared/time.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../shared/validation.js";
 import { resolveToken } from "../token.js";
 import { DEFAULT_AGENT_PERMISSION_LEVEL } from "../../shared/defaults.js";
@@ -66,10 +66,6 @@ export interface DeleteAgentOptions {
 export interface AgentStatusOptions {
   token?: string;
   name: string;
-}
-
-function formatMsAsLocalOffset(ms: number): string {
-  return formatUtcIsoAsLocalOffset(new Date(ms).toISOString());
 }
 
 export interface ListAgentsOptions {
@@ -283,7 +279,7 @@ export async function listAgents(options: ListAgentsOptions): Promise<void> {
       if (agent.workspace) {
         console.log(`workspace: ${agent.workspace}`);
       }
-      console.log(`created-at: ${formatUtcIsoAsLocalOffset(agent.createdAt)}`);
+      console.log(`created-at: ${formatUnixMsAsLocalOffset(agent.createdAt)}`);
       console.log();
     }
   } catch (err) {
@@ -339,7 +335,7 @@ export async function agentStatus(options: AgentStatusOptions): Promise<void> {
     if (result.status.currentRun) {
       console.log(`current-run-id: ${result.status.currentRun.id}`);
       console.log(
-        `current-run-started-at: ${formatMsAsLocalOffset(result.status.currentRun.startedAt)}`
+        `current-run-started-at: ${formatUnixMsAsLocalOffset(result.status.currentRun.startedAt)}`
       );
     }
 
@@ -350,10 +346,10 @@ export async function agentStatus(options: AgentStatusOptions): Promise<void> {
 
     console.log(`last-run-id: ${result.status.lastRun.id}`);
     console.log(`last-run-status: ${result.status.lastRun.status}`);
-    console.log(`last-run-started-at: ${formatMsAsLocalOffset(result.status.lastRun.startedAt)}`);
+    console.log(`last-run-started-at: ${formatUnixMsAsLocalOffset(result.status.lastRun.startedAt)}`);
     if (typeof result.status.lastRun.completedAt === "number") {
       console.log(
-        `last-run-completed-at: ${formatMsAsLocalOffset(result.status.lastRun.completedAt)}`
+        `last-run-completed-at: ${formatUnixMsAsLocalOffset(result.status.lastRun.completedAt)}`
       );
     }
     if (typeof result.status.lastRun.contextLength === "number") {

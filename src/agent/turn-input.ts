@@ -12,7 +12,7 @@ import { buildTurnPromptContext } from "../shared/prompt-context.js";
  * Context for the current turn.
  */
 export interface TurnContext {
-  datetime: string;  // ISO 8601 (UTC recommended; rendered as local time)
+  datetimeMs: number; // unix epoch ms (UTC)
   agentName: string;
 }
 
@@ -64,7 +64,7 @@ export function buildTurnInput(turnInput: TurnInput): string {
 
   const promptContext = buildTurnPromptContext({
     agentName: context.agentName,
-    datetimeIso: context.datetime,
+    datetimeMs: context.datetimeMs,
     envelopes,
   });
 
@@ -83,7 +83,7 @@ export function buildTurnInput(turnInput: TurnInput): string {
  */
 export function formatEnvelopeAsPrompt(envelope: Envelope): string {
   return buildTurnInput({
-    context: { datetime: new Date().toISOString(), agentName: "(single-envelope)" },
+    context: { datetimeMs: Date.now(), agentName: "(single-envelope)" },
     envelopes: [envelope],
   });
 }

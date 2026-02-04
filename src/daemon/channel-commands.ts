@@ -6,13 +6,9 @@ import {
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
 } from "../shared/defaults.js";
-import { formatUtcIsoAsLocalOffset } from "../shared/time.js";
+import { formatUnixMsAsLocalOffset } from "../shared/time.js";
 
 type EnrichedChannelCommand = ChannelCommand & { agentName?: string };
-
-function formatMsAsLocalOffset(ms: number): string {
-  return formatUtcIsoAsLocalOffset(new Date(ms).toISOString());
-}
 
 function buildAgentStatusText(params: { db: HiBossDatabase; executor: AgentExecutor; agentName: string }): string {
   const agent = params.db.getAgentByNameCaseInsensitive(params.agentName);
@@ -53,7 +49,7 @@ function buildAgentStatusText(params: { db: HiBossDatabase; executor: AgentExecu
 
   if (currentRun) {
     lines.push(`current-run-id: ${currentRun.id}`);
-    lines.push(`current-run-started-at: ${formatMsAsLocalOffset(currentRun.startedAt)}`);
+    lines.push(`current-run-started-at: ${formatUnixMsAsLocalOffset(currentRun.startedAt)}`);
   }
 
   if (!lastRun) {
@@ -63,9 +59,9 @@ function buildAgentStatusText(params: { db: HiBossDatabase; executor: AgentExecu
 
   lines.push(`last-run-id: ${lastRun.id}`);
   lines.push(`last-run-status: ${lastRun.status === "failed" ? "failed" : "completed"}`);
-  lines.push(`last-run-started-at: ${formatMsAsLocalOffset(lastRun.startedAt)}`);
+  lines.push(`last-run-started-at: ${formatUnixMsAsLocalOffset(lastRun.startedAt)}`);
   if (typeof lastRun.completedAt === "number") {
-    lines.push(`last-run-completed-at: ${formatMsAsLocalOffset(lastRun.completedAt)}`);
+    lines.push(`last-run-completed-at: ${formatUnixMsAsLocalOffset(lastRun.completedAt)}`);
   }
   if (typeof lastRun.contextLength === "number") {
     lines.push(`last-run-context-length: ${lastRun.contextLength}`);
@@ -95,4 +91,3 @@ export function createChannelCommandHandler(params: {
     }
   };
 }
-

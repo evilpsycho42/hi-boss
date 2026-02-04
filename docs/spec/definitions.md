@@ -40,9 +40,9 @@ Table: `envelopes` (see `src/daemon/db/schema.ts`)
 | `envelope.fromBoss` | `from_boss` | `0/1` boolean |
 | `envelope.content.text` | `content_text` | Nullable |
 | `envelope.content.attachments` | `content_attachments` | JSON (nullable) |
-| `envelope.deliverAt` | `deliver_at` | ISO 8601 UTC (nullable) |
+| `envelope.deliverAt` | `deliver_at` | Unix epoch ms (UTC) (nullable) |
 | `envelope.status` | `status` | `pending` or `done` |
-| `envelope.createdAt` | `created_at` | ISO 8601 UTC |
+| `envelope.createdAt` | `created_at` | Unix epoch ms (UTC) |
 | `envelope.metadata` | `metadata` | JSON (nullable); used for channel semantics |
 
 ### CLI
@@ -70,7 +70,7 @@ Command flags:
   - Note: adapters may truncate `in-reply-to-text` for safety/size. The Telegram adapter truncates at 1200 characters and appends `\n\n[...truncated...]\n`.
 
 **Delivery error keys** (only when a channel delivery attempt failed)
-- `last-delivery-error-at:`
+- `last-delivery-error-at:` (local timezone offset)
 - `last-delivery-error-kind:`
 - `last-delivery-error-message:`
 
@@ -166,11 +166,11 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 | `agent.provider` | `provider` | `claude` or `codex` |
 | `agent.model` | `model` | Nullable; `NULL` means “use provider default model” |
 | `agent.reasoningEffort` | `reasoning_effort` | See `src/agent/types.ts` for allowed values; `NULL` means “use provider default reasoning effort” |
-| `agent.autoLevel` | `auto_level` | `medium`, `high` (unified-agent-sdk supports `low`, but Hi-Boss disallows it; any stored `low` values are migrated to `medium`) |
+| `agent.autoLevel` | `auto_level` | `medium`, `high` (Hi-Boss disallows `low`) |
 | `agent.permissionLevel` | `permission_level` | `restricted`, `standard`, `privileged`, `boss` |
 | `agent.sessionPolicy` | `session_policy` | JSON (nullable) |
-| `agent.createdAt` | `created_at` | ISO 8601 UTC |
-| `agent.lastSeenAt` | `last_seen_at` | Nullable |
+| `agent.createdAt` | `created_at` | Unix epoch ms (UTC) |
+| `agent.lastSeenAt` | `last_seen_at` | Unix epoch ms (UTC) (nullable) |
 | `agent.metadata` | `metadata` | JSON (nullable) |
 
 ### Agent Metadata (Reserved Keys)
@@ -228,7 +228,7 @@ Table: `agent_bindings` (see `src/daemon/db/schema.ts`)
 | `binding.agentName` | `agent_name` | Agent name |
 | `binding.adapterType` | `adapter_type` | e.g. `telegram` |
 | `binding.adapterToken` | `adapter_token` | Adapter credential |
-| `binding.createdAt` | `created_at` | ISO 8601 UTC |
+| `binding.createdAt` | `created_at` | Unix epoch ms (UTC) |
 
 ### CLI
 
@@ -272,7 +272,7 @@ Command flags:
 
 `hiboss daemon status` prints:
 - `running:`
-- `start-time:`
+- `start-time:` (local timezone offset or `(none)`)
 - `adapters:`
 - `data-dir:`
 
@@ -300,9 +300,9 @@ export interface Envelope {
       telegramFileId?: string;
     }>;
   };
-  deliverAt?: string;           // ISO 8601 UTC timestamp (not-before delivery)
+  deliverAt?: number;           // unix epoch ms (UTC) (not-before delivery)
   status: "pending" | "done";
-  createdAt: string;            // ISO 8601 UTC
+  createdAt: number;            // unix epoch ms (UTC)
   metadata?: Record<string, unknown>;
 }
 ```
@@ -325,8 +325,8 @@ export interface Agent {
     idleTimeout?: string;     // e.g. "2h", "30m", "1h30m" (units: d/h/m/s)
     maxContextLength?: number;
   };
-  createdAt: string;
-  lastSeenAt?: string;
+  createdAt: number;      // unix epoch ms (UTC)
+  lastSeenAt?: number;    // unix epoch ms (UTC)
   metadata?: Record<string, unknown>;
 }
 ```

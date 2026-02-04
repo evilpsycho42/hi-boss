@@ -198,9 +198,9 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
         }
       }
 
-      let result: { agent: { name: string; createdAt: string }; token: string };
+      let createdAgentToken: string;
       try {
-        result = ctx.db.runInTransaction(() => {
+        createdAgentToken = ctx.db.runInTransaction(() => {
           // Set boss name
           ctx.db.setBossName(p.bossName);
 
@@ -253,7 +253,7 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
           // Mark setup as complete
           ctx.db.markSetupComplete();
 
-          return agentResult;
+          return agentResult.token;
         });
       } catch (err) {
         // Roll back any adapter started during setup if DB commit fails.
@@ -266,7 +266,7 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
       // Register agent handler for auto-execution
       ctx.registerAgentHandler(p.agent.name);
 
-      return { agentToken: result.token };
+      return { agentToken: createdAgentToken };
     },
 
     // Boss methods

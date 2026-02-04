@@ -4,8 +4,6 @@ import { fileURLToPath } from "node:url";
 
 import { createExampleFixture, runHibossCli, startExamplesDaemon } from "./examples/fixtures.js";
 
-process.env.TZ ??= "UTC";
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 

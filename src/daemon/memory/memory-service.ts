@@ -11,7 +11,7 @@ export interface MemoryResult {
   id: string;
   text: string;
   category: string;
-  createdAt: string;
+  createdAt: number; // unix epoch ms (UTC)
   similarity?: number;
 }
 
@@ -20,7 +20,7 @@ type MemoryRow = Record<string, unknown> & {
   text: string;
   vector: number[];
   category: string;
-  createdAt: string;
+  createdAt: string; // stored as string for Arrow Utf8 compatibility
 };
 
 function toSafeAgentTableSuffix(agentName: string): string {
@@ -29,6 +29,14 @@ function toSafeAgentTableSuffix(agentName: string): string {
 
 function escapeSqlStringLiteral(value: string): string {
   return value.replace(/'/g, "''");
+}
+
+function parseUnixMs(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
+  const asString = typeof value === "string" ? value : String(value ?? "");
+  const n = Number(asString);
+  if (!Number.isFinite(n)) return 0;
+  return Math.trunc(n);
 }
 
 function normalizeVector(vector: readonly number[]): number[] {
@@ -153,7 +161,7 @@ export class MemoryService {
     const table = await this.getTable(agentName);
     const id = randomUUID();
     const category = (opts?.category ?? "fact").trim() || "fact";
-    const createdAt = new Date().toISOString();
+    const createdAt = String(Date.now());
     const vector = await this.embedText(trimmed);
 
     const row: MemoryRow = {
@@ -205,7 +213,7 @@ export class MemoryService {
         id: String(r.id),
         text: String(r.text),
         category: String(r.category),
-        createdAt: String(r.createdAt),
+        createdAt: parseUnixMs((r as Record<string, unknown>).createdAt),
         similarity,
       };
     });
@@ -230,10 +238,10 @@ export class MemoryService {
       id: String(r.id),
       text: String(r.text),
       category: String(r.category),
-      createdAt: String(r.createdAt),
+      createdAt: parseUnixMs((r as Record<string, unknown>).createdAt),
     }));
 
-    results.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+    results.sort((a, b) => b.createdAt - a.createdAt);
     return results.slice(0, limit);
   }
 
@@ -256,7 +264,7 @@ export class MemoryService {
       id: String(r.id),
       text: String(r.text),
       category: String(r.category),
-      createdAt: String(r.createdAt),
+      createdAt: parseUnixMs(r.createdAt),
     };
   }
 

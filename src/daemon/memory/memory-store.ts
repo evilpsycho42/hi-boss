@@ -13,6 +13,14 @@ function escapeSqlStringLiteral(value: string): string {
   return value.replace(/'/g, "''");
 }
 
+function parseUnixMs(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
+  const asString = typeof value === "string" ? value : String(value ?? "");
+  const n = Number(asString);
+  if (!Number.isFinite(n)) return 0;
+  return Math.trunc(n);
+}
+
 export class MemoryStore {
   private db!: lancedb.Connection;
   private tables: Map<string, lancedb.Table> = new Map();
@@ -58,10 +66,10 @@ export class MemoryStore {
       id: String((r as Record<string, unknown>).id),
       text: String((r as Record<string, unknown>).text),
       category: String((r as Record<string, unknown>).category),
-      createdAt: String((r as Record<string, unknown>).createdAt),
+      createdAt: parseUnixMs((r as Record<string, unknown>).createdAt),
     }));
 
-    results.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+    results.sort((a, b) => b.createdAt - a.createdAt);
     const limit = opts?.limit ?? 100;
     return results.slice(0, limit);
   }
@@ -87,7 +95,7 @@ export class MemoryStore {
       id: String(r.id),
       text: String(r.text),
       category: String(r.category),
-      createdAt: String(r.createdAt),
+      createdAt: parseUnixMs(r.createdAt),
     };
   }
 
@@ -147,4 +155,3 @@ export class MemoryStore {
     this.db.close();
   }
 }
-

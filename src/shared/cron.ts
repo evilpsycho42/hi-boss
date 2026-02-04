@@ -12,11 +12,11 @@ export function normalizeTimeZoneInput(timezone?: string): string | undefined {
   return trimmed;
 }
 
-export function computeNextCronUtcIso(params: {
+export function computeNextCronUnixMs(params: {
   cron: string;
   timezone?: string;
   afterDate?: Date;
-}): string {
+}): number {
   const after = params.afterDate ?? new Date();
   const afterMs = after.getTime();
   const tz = normalizeTimeZoneInput(params.timezone) ?? getLocalIanaTimeZone();
@@ -32,6 +32,5 @@ export function computeNextCronUtcIso(params: {
     next = interval.next().toDate();
   }
 
-  return next.toISOString();
+  return next.getTime();
 }
-

@@ -20,7 +20,7 @@ export function createDaemonHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const bindings = ctx.db.listBindings();
       return {
         running: ctx.running,
-        startTime: ctx.startTime?.toISOString(),
+        startTimeMs: typeof ctx.startTimeMs === "number" ? ctx.startTimeMs : undefined,
         adapters: Array.from(ctx.adapters.values()).map((a) => a.platform),
         bindings: bindings.map((b) => ({
           agentName: b.agentName,
@@ -36,7 +36,7 @@ export function createDaemonHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const principal = ctx.resolvePrincipal(token);
       ctx.assertOperationAllowed("daemon.ping", principal);
 
-      return { pong: true, timestamp: new Date().toISOString() };
+      return { pong: true, timestampMs: Date.now() };
     },
   };
 }

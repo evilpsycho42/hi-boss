@@ -15,9 +15,9 @@ export interface CronSchedule {
   metadata?: Record<string, unknown>;
   pendingEnvelopeId?: string;
   pendingEnvelopeStatus?: EnvelopeStatus;
-  nextDeliverAt?: string; // UTC ISO timestamp for the pending envelope (if any)
-  createdAt: string;
-  updatedAt?: string;
+  nextDeliverAt?: number; // unix epoch ms (UTC) for the pending envelope (if any)
+  createdAt: number;      // unix epoch ms (UTC)
+  updatedAt?: number;     // unix epoch ms (UTC)
 }
 
 export interface CreateCronScheduleInput {

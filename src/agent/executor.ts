@@ -202,7 +202,7 @@ export class AgentExecutor {
       // Build turn input
       const turnInput = buildTurnInput({
         context: {
-          datetime: new Date().toISOString(),
+          datetimeMs: Date.now(),
           agentName: agent.name,
         },
         envelopes,

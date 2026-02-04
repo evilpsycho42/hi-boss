@@ -39,7 +39,7 @@ export interface DaemonContext {
   // Configuration
   readonly config: { dataDir: string };
   readonly running: boolean;
-  readonly startTime: Date | null;
+  readonly startTimeMs: number | null;
 
   // Methods
   resolvePrincipal(token: string): Principal;

@@ -82,7 +82,6 @@ export function runHibossCli(params: {
         ...process.env,
         HOME: params.homeDir,
         HIBOSS_TOKEN: params.token,
-        TZ: "UTC",
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -149,7 +148,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
      VALUES (?, ?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value`
   );
-  const cfgTime = "2026-01-01T00:00:00.000Z";
+  const cfgTime = Date.parse("2026-01-01T00:00:00.000Z");
   upsertConfig.run("setup_completed", "true", cfgTime);
   upsertConfig.run("boss_token_hash", hashToken(bossToken), cfgTime);
   upsertConfig.run("boss_name", "Kevin", cfgTime);
@@ -178,8 +177,8 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     "medium",
     "restricted",
     JSON.stringify({ dailyResetAt: "03:00", idleTimeout: "30m", maxContextLength: 180000 }),
-    "2026-01-15T10:30:00.000Z",
-    "2026-01-29T14:22:00.000Z",
+    Date.parse("2026-01-15T10:30:00.000Z"),
+    Date.parse("2026-01-29T14:22:00.000Z"),
     JSON.stringify({})
   );
 
@@ -194,7 +193,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     "medium",
     "restricted",
     null,
-    "2026-01-10T09:00:00.000Z",
+    Date.parse("2026-01-10T09:00:00.000Z"),
     null,
     JSON.stringify({})
   );
@@ -208,7 +207,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     "nex",
     "telegram",
     "telegram_bot_token_example",
-    "2026-01-15T11:00:00.000Z"
+    Date.parse("2026-01-15T11:00:00.000Z")
   );
 
   const insertEnvelope = db.prepare(
@@ -227,7 +226,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     null,
     null,
     "pending",
-    "2026-01-29T09:00:00.000Z",
+    Date.parse("2026-01-29T09:00:00.000Z"),
     JSON.stringify({
       platform: "telegram",
       channelMessageId: "335",
@@ -244,7 +243,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     null,
     null,
     "pending",
-    "2026-01-29T09:15:00.000Z",
+    Date.parse("2026-01-29T09:15:00.000Z"),
     JSON.stringify({
       platform: "telegram",
       channelMessageId: "336",
@@ -263,7 +262,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     JSON.stringify([{ source: "/home/user/downloads/meeting-notes.pdf", filename: "meeting-notes.pdf" }]),
     null,
     "pending",
-    "2026-01-29T09:00:00.000Z",
+    Date.parse("2026-01-29T09:00:00.000Z"),
     JSON.stringify({
       platform: "telegram",
       channelMessageId: "3001",
@@ -280,9 +279,9 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     0,
     "Reminder: Review the PR as requested by Kevin.",
     null,
-    "2026-01-29T15:00:00.000Z",
+    Date.parse("2026-01-29T15:00:00.000Z"),
     "pending",
-    "2026-01-29T09:30:00.000Z",
+    Date.parse("2026-01-29T09:30:00.000Z"),
     JSON.stringify({ fromName: "scheduler" })
   );
 
@@ -294,9 +293,9 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     0,
     "Daily standup reminder: post your update in #team.",
     null,
-    "2026-01-30T17:00:00.000Z",
+    Date.parse("2026-01-30T17:00:00.000Z"),
     "pending",
-    "2026-01-15T10:30:00.000Z",
+    Date.parse("2026-01-15T10:30:00.000Z"),
     JSON.stringify({ cronScheduleId: CRON_ID_1, parseMode: "plain" })
   );
 
@@ -317,8 +316,8 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     null,
     JSON.stringify({ parseMode: "plain" }),
     PENDING_ENV_CRON_1,
-    "2026-01-15T10:30:00.000Z",
-    "2026-01-20T08:12:00.000Z"
+    Date.parse("2026-01-15T10:30:00.000Z"),
+    Date.parse("2026-01-20T08:12:00.000Z")
   );
 
   insertCron.run(
@@ -332,7 +331,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     JSON.stringify([{ source: "/home/user/reports/build-status.txt" }]),
     null,
     null,
-    "2026-01-10T11:00:00.000Z",
+    Date.parse("2026-01-10T11:00:00.000Z"),
     null
   );
 
@@ -360,14 +359,14 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
       text: "Project X uses Node.js 22.",
       vector: [1, 0, 0],
       category: "fact",
-      createdAt: "2026-01-05T12:00:00.000Z",
+      createdAt: String(Date.parse("2026-01-05T12:00:00.000Z")),
     },
     {
       id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
       text: "Weekly update is due every Friday 5pm PT.",
       vector: [0, 1, 0],
       category: "process",
-      createdAt: "2026-01-06T09:00:00.000Z",
+      createdAt: String(Date.parse("2026-01-06T09:00:00.000Z")),
     },
   ]);
   mem.close();

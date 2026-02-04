@@ -1,6 +1,6 @@
 import { getDefaultConfig, getSocketPath } from "../../daemon/daemon.js";
 import { IpcClient } from "../ipc-client.js";
-import { formatUtcIsoAsLocalOffset } from "../../shared/time.js";
+import { formatUnixMsAsLocalOffset } from "../../shared/time.js";
 import { resolveToken } from "../token.js";
 
 interface BindAgentResult {
@@ -8,7 +8,7 @@ interface BindAgentResult {
     id: string;
     agentName: string;
     adapterType: string;
-    createdAt: string;
+    createdAt: number;
   };
 }
 
@@ -44,7 +44,7 @@ export async function bindAgent(options: BindAgentOptions): Promise<void> {
     console.log(`id: ${result.binding.id}`);
     console.log(`agent-name: ${result.binding.agentName}`);
     console.log(`adapter-type: ${result.binding.adapterType}`);
-    console.log(`created-at: ${formatUtcIsoAsLocalOffset(result.binding.createdAt)}`);
+    console.log(`created-at: ${formatUnixMsAsLocalOffset(result.binding.createdAt)}`);
   } catch (err) {
     console.error("error:", (err as Error).message);
     process.exit(1);
@@ -73,4 +73,3 @@ export async function unbindAgent(options: UnbindAgentOptions): Promise<void> {
     process.exit(1);
   }
 }
-

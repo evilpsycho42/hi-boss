@@ -4,7 +4,7 @@ import type { Agent } from "../agent/types.js";
 import type { AgentBinding } from "../daemon/db/database.js";
 import type { Envelope, EnvelopeAttachment } from "../envelope/types.js";
 import { detectAttachmentType } from "../adapters/types.js";
-import { formatUtcIsoAsLocalOffset } from "./time.js";
+import { formatUnixMsAsLocalOffset, formatUnixMsAsUtcIso } from "./time.js";
 import { HIBOSS_TOKEN_ENV } from "./env.js";
 import { getAgentDir, getHiBossDir } from "../agent/home-setup.js";
 import { DEFAULT_AGENT_PROVIDER } from "./defaults.js";
@@ -278,8 +278,11 @@ export function buildSystemPromptContext(params: {
         idleTimeout: params.agent.sessionPolicy?.idleTimeout ?? "",
         maxContextLength: params.agent.sessionPolicy?.maxContextLength ?? 0,
       },
-      createdAt: params.agent.createdAt,
-      lastSeenAt: params.agent.lastSeenAt ?? "",
+      createdAt: formatUnixMsAsLocalOffset(params.agent.createdAt),
+      lastSeenAt:
+        typeof params.agent.lastSeenAt === "number"
+          ? formatUnixMsAsLocalOffset(params.agent.lastSeenAt)
+          : "",
       metadata: params.agent.metadata ?? {},
       files: {
         soul: agentFiles.soul ?? "",
@@ -290,7 +293,7 @@ export function buildSystemPromptContext(params: {
     },
     bindings: (params.bindings ?? []).map((b) => ({
       adapterType: b.adapterType,
-      createdAt: b.createdAt,
+      createdAt: formatUnixMsAsLocalOffset(b.createdAt),
     })),
     workspace: {
       dir: workspaceDir,
@@ -300,7 +303,7 @@ export function buildSystemPromptContext(params: {
 
 export function buildTurnPromptContext(params: {
   agentName: string;
-  datetimeIso: string;
+  datetimeMs: number;
   envelopes: Envelope[];
 }): Record<string, unknown> {
   const envelopes = (params.envelopes ?? []).map((env, idx) => {
@@ -337,8 +340,8 @@ export function buildTurnPromptContext(params: {
       channelMessageId,
       inReplyTo,
       createdAt: {
-        utcIso: env.createdAt,
-        localIso: formatUtcIsoAsLocalOffset(env.createdAt),
+        utcIso: formatUnixMsAsUtcIso(env.createdAt),
+        localIso: formatUnixMsAsLocalOffset(env.createdAt),
       },
       content: {
         text: env.content.text ?? "(none)",
@@ -364,7 +367,7 @@ export function buildTurnPromptContext(params: {
 
   return {
     turn: {
-      datetimeIso: formatUtcIsoAsLocalOffset(params.datetimeIso),
+      datetimeIso: formatUnixMsAsLocalOffset(params.datetimeMs),
       agentName: params.agentName,
       envelopeCount: envelopes.length,
       envelopeBlockCount,
@@ -396,14 +399,29 @@ export function buildCliEnvelopePromptContext(params: {
   });
 
   const deliverAt =
-    env.deliverAt && env.deliverAt.trim()
+    typeof env.deliverAt === "number"
       ? {
-          utcIso: env.deliverAt,
-          localIso: formatUtcIsoAsLocalOffset(env.deliverAt),
+          utcIso: formatUnixMsAsUtcIso(env.deliverAt),
+          localIso: formatUnixMsAsLocalOffset(env.deliverAt),
         }
       : { utcIso: "", localIso: "" };
 
   const authorLine = semantic ? withBossMarkerSuffix(semantic.authorName, env.fromBoss) : "";
+
+  const lastDeliveryError = (() => {
+    if (!env.metadata || typeof env.metadata !== "object") return null;
+    const raw = (env.metadata as Record<string, unknown>).lastDeliveryError;
+    if (!raw || typeof raw !== "object") return null;
+
+    const r = raw as Record<string, unknown>;
+    const atMs = r.atMs;
+    if (typeof atMs !== "number") return null;
+
+    return {
+      ...r,
+      at: formatUnixMsAsLocalOffset(atMs),
+    };
+  })();
 
   return {
     envelope: {
@@ -420,8 +438,8 @@ export function buildCliEnvelopePromptContext(params: {
       channelMessageId,
       inReplyTo,
       createdAt: {
-        utcIso: env.createdAt,
-        localIso: formatUtcIsoAsLocalOffset(env.createdAt),
+        utcIso: formatUnixMsAsUtcIso(env.createdAt),
+        localIso: formatUnixMsAsLocalOffset(env.createdAt),
       },
       deliverAt,
       content: {
@@ -429,10 +447,7 @@ export function buildCliEnvelopePromptContext(params: {
         attachments,
         attachmentsText: formatAttachmentsText(env.content.attachments),
       },
-      lastDeliveryError:
-        env.metadata && typeof env.metadata === "object"
-          ? (env.metadata as Record<string, unknown>).lastDeliveryError ?? null
-          : null,
+      lastDeliveryError,
       metadata: env.metadata ?? {},
     },
   };

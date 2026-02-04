@@ -1,9 +1,10 @@
 import type { HiBossDatabase } from "../db/database.js";
 import type { CronSchedule, CreateCronScheduleInput } from "../../cron/types.js";
 import type { Envelope } from "../../envelope/types.js";
-import { computeNextCronUtcIso, normalizeTimeZoneInput } from "../../shared/cron.js";
+import { computeNextCronUnixMs, normalizeTimeZoneInput } from "../../shared/cron.js";
 import { formatAgentAddress, parseAddress } from "../../adapters/types.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
+import { formatUnixMsAsLocalOffset } from "../../shared/time.js";
 import type { EnvelopeScheduler } from "./envelope-scheduler.js";
 
 function getCronScheduleIdFromEnvelopeMetadata(metadata: unknown): string | null {
@@ -45,7 +46,7 @@ export class CronScheduler {
   private createNextEnvelopeForSchedule(schedule: CronSchedule, afterDate?: Date): Envelope {
     this.assertChannelBinding(schedule);
 
-    const deliverAt = computeNextCronUtcIso({
+    const deliverAt = computeNextCronUnixMs({
       cron: schedule.cron,
       timezone: schedule.timezone,
       afterDate,
@@ -68,7 +69,7 @@ export class CronScheduler {
       "agent-name": schedule.agentName,
       from: envelope.from,
       to: envelope.to,
-      "deliver-at": envelope.deliverAt ?? "none",
+      "deliver-at": envelope.deliverAt ? formatUnixMsAsLocalOffset(envelope.deliverAt) : "none",
     });
     return envelope;
   }
@@ -82,7 +83,7 @@ export class CronScheduler {
 
     // Pre-validate that cron parses and that we can compute a next deliver-at.
     // (Also protects against creating an enabled schedule with no pending envelope.)
-    computeNextCronUtcIso({
+    computeNextCronUnixMs({
       cron: normalizedInput.cron,
       timezone: normalizedInput.timezone,
     });
@@ -218,10 +219,7 @@ export class CronScheduler {
             return;
           }
 
-          const deliverAtMs =
-            current.nextDeliverAt && !Number.isNaN(Date.parse(current.nextDeliverAt))
-              ? Date.parse(current.nextDeliverAt)
-              : null;
+          const deliverAtMs = typeof current.nextDeliverAt === "number" ? current.nextDeliverAt : null;
 
           const isMissingPendingEnvelope =
             !current.pendingEnvelopeId ||

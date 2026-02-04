@@ -4,6 +4,7 @@ import { getDefaultConfig, getSocketPath } from "../../daemon/daemon.js";
 import { IpcClient } from "../ipc-client.js";
 import { resolveToken } from "../token.js";
 import { resolveAndValidateMemoryModel } from "../memory-model.js";
+import { formatUnixMsAsLocalOffset } from "../../shared/time.js";
 
 interface MemoryAddResult {
   id: string;
@@ -14,7 +15,7 @@ interface MemorySearchResult {
     id: string;
     text: string;
     category: string;
-    createdAt: string;
+    createdAt: number;
     similarity?: number;
   }>;
 }
@@ -24,7 +25,7 @@ interface MemoryListResult {
     id: string;
     text: string;
     category: string;
-    createdAt: string;
+    createdAt: number;
   }>;
 }
 
@@ -42,7 +43,7 @@ interface MemoryGetResult {
     id: string;
     text: string;
     category: string;
-    createdAt: string;
+    createdAt: number;
   } | null;
 }
 
@@ -104,13 +105,13 @@ export interface MemorySetupOptions {
 function printMemoryItem(item: {
   id: string;
   category: string;
-  createdAt: string;
+  createdAt: number;
   text: string;
   similarity?: number;
 }): void {
   console.log(`id: ${item.id}`);
   console.log(`category: ${item.category}`);
-  console.log(`created-at: ${item.createdAt}`);
+  console.log(`created-at: ${formatUnixMsAsLocalOffset(item.createdAt)}`);
   if (typeof item.similarity === "number") {
     console.log(`similarity: ${item.similarity}`);
   }

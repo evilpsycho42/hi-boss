@@ -2,7 +2,7 @@ import { getDefaultConfig, getSocketPath } from "../../daemon/daemon.js";
 import { IpcClient } from "../ipc-client.js";
 import { resolveToken } from "../token.js";
 import type { CronSchedule } from "../../cron/types.js";
-import { formatUtcIsoAsLocalOffset } from "../../shared/time.js";
+import { formatUnixMsAsLocalOffset } from "../../shared/time.js";
 import { extractTelegramFileId, normalizeAttachmentSource, resolveText } from "./envelope-input.js";
 
 interface CronCreateResult {
@@ -37,11 +37,9 @@ export interface CronIdOptions {
   id: string;
 }
 
-function formatMaybeLocalIso(utcIso?: string): string {
-  if (!utcIso) return "(none)";
-  const trimmed = utcIso.trim();
-  if (!trimmed) return "(none)";
-  return formatUtcIsoAsLocalOffset(trimmed);
+function formatMaybeLocalOffset(ms?: number): string {
+  if (typeof ms !== "number") return "(none)";
+  return formatUnixMsAsLocalOffset(ms);
 }
 
 function formatCronScheduleSummary(schedule: CronSchedule): string {
@@ -51,7 +49,7 @@ function formatCronScheduleSummary(schedule: CronSchedule): string {
   lines.push(`timezone: ${schedule.timezone ?? "local"}`);
   lines.push(`enabled: ${schedule.enabled ? "true" : "false"}`);
   lines.push(`to: ${schedule.to}`);
-  lines.push(`next-deliver-at: ${formatMaybeLocalIso(schedule.nextDeliverAt)}`);
+  lines.push(`next-deliver-at: ${formatMaybeLocalOffset(schedule.nextDeliverAt)}`);
   lines.push(`pending-envelope-id: ${schedule.pendingEnvelopeId ?? "(none)"}`);
   return lines.join("\n");
 }
@@ -59,9 +57,9 @@ function formatCronScheduleSummary(schedule: CronSchedule): string {
 function formatCronScheduleDetail(schedule: CronSchedule): string {
   const lines: string[] = [];
   lines.push(formatCronScheduleSummary(schedule));
-  lines.push(`created-at: ${formatMaybeLocalIso(schedule.createdAt)}`);
+  lines.push(`created-at: ${formatMaybeLocalOffset(schedule.createdAt)}`);
   if (schedule.updatedAt) {
-    lines.push(`updated-at: ${formatMaybeLocalIso(schedule.updatedAt)}`);
+    lines.push(`updated-at: ${formatMaybeLocalOffset(schedule.updatedAt)}`);
   }
 
   const md = schedule.metadata;

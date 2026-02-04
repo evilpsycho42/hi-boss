@@ -39,7 +39,7 @@ Output (human-oriented):
 Shows daemon status as parseable keys:
 
 - `running: true|false`
-- `start-time: <iso>|(none)`
+- `start-time: <local-iso-with-offset>|(none)`
 - `adapters: <csv>|(none)`
 - `data-dir: <path>`
 

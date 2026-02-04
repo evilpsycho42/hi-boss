@@ -6,7 +6,6 @@ export function countDuePendingEnvelopesForAgent(db: HiBossDatabase, agentName: 
   const sql =
     `SELECT COUNT(*) AS count FROM envelopes WHERE "to" = ? AND status = 'pending'` +
     ` AND (deliver_at IS NULL OR deliver_at <= ?)`;
-  const row = rawDb.prepare(sql).get(`agent:${agentName}`, new Date().toISOString()) as { count: number } | undefined;
+  const row = rawDb.prepare(sql).get(`agent:${agentName}`, Date.now()) as { count: number } | undefined;
   return row?.count ?? 0;
 }
-
