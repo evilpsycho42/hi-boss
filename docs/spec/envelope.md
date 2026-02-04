@@ -28,9 +28,9 @@ Key fields:
 - `from`: sender address (agent or channel)
 - `to`: destination address (agent or channel)
 - `fromBoss`: `true` if the sender matches configured boss identity for that adapter (channel messages only)
-- `createdAt`: when the envelope was created (ISO 8601 UTC)
+- `createdAt`: when the envelope was created (unix epoch ms UTC)
 - `status`: `pending` or `done`
-- `deliverAt` (optional): not-before delivery timestamp (stored as UTC ISO 8601)
+- `deliverAt` (optional): not-before delivery timestamp (stored as unix epoch ms UTC)
 - `content.text` (optional)
 - `content.attachments` (optional): list of `{ source, filename?, telegramFileId? }`
 - `metadata` (optional): channel metadata for richer display (author/chat)
@@ -102,6 +102,6 @@ Sending **to a channel** (e.g. `channel:telegram:...`) is only allowed if the se
 - **Relative time**: `+2h`, `+30m`, `+1Y2M3D`, `-15m` (units are case-sensitive: `Y/M/D/h/m/s`)
 - **ISO 8601**: `2026-01-27T16:30:00+08:00` (or UTC `Z`)
 
-The daemon parses the input and stores `deliver-at` as a UTC ISO timestamp.
+The daemon parses the input and stores `deliver-at` as unix epoch milliseconds (UTC).
 
 See `docs/spec/components/scheduler.md` for delivery behavior and wake-up logic.

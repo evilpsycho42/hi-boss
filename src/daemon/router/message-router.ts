@@ -3,7 +3,7 @@ import type { Envelope, CreateEnvelopeInput } from "../../envelope/types.js";
 import { getEnvelopeSourceFromCreateInput } from "../../envelope/source.js";
 import { parseAddress } from "../../adapters/types.js";
 import type { ChatAdapter } from "../../adapters/types.js";
-import { isDueUtcIso } from "../../shared/time.js";
+import { formatUnixMsAsLocalOffset, isDueUnixMs } from "../../shared/time.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 import { RPC_ERRORS } from "../ipc/types.js";
 import type { OutgoingParseMode } from "../../adapters/types.js";
@@ -60,7 +60,7 @@ export class MessageRouter {
       "envelope-id": envelope.id,
       from: envelope.from,
       to: envelope.to,
-      "deliver-at": envelope.deliverAt ?? "none",
+      "deliver-at": envelope.deliverAt ? formatUnixMsAsLocalOffset(envelope.deliverAt) : "none",
     };
 
     if (source === "channel") {
@@ -75,7 +75,7 @@ export class MessageRouter {
 
     logEvent("info", "envelope-created", fields);
 
-    if (isDueUtcIso(envelope.deliverAt)) {
+    if (isDueUnixMs(envelope.deliverAt)) {
       await this.deliverEnvelope(envelope);
     }
     return envelope;
@@ -251,7 +251,7 @@ export class MessageRouter {
     const next = {
       ...current,
       lastDeliveryError: {
-        at: new Date().toISOString(),
+        atMs: Date.now(),
         ...update,
       },
     };

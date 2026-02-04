@@ -126,11 +126,11 @@ Per-agent settings:
 | `provider` | TEXT | `'claude'` | `"claude"` or `"codex"` |
 | `model` | TEXT | `NULL` | Optional model name. `NULL` means “use the provider default model”. |
 | `reasoning_effort` | TEXT | `'medium'` | `"none"`, `"low"`, `"medium"`, `"high"`, or `"xhigh"`. `NULL` means “use the provider default reasoning effort”. |
-| `auto_level` | TEXT | `'high'` | `"medium"` or `"high"`. Note: unified-agent-sdk also supports `"low"`, but Hi-Boss disallows it because it can prevent the agent from running `hiboss` commands; any stored `"low"` values are migrated to `"medium"`. |
+| `auto_level` | TEXT | `'high'` | `"medium"` or `"high"`. Note: unified-agent-sdk also supports `"low"`, but Hi-Boss disallows it because it can prevent the agent from running `hiboss` commands. |
 | `permission_level` | TEXT | `'standard'` | `"restricted"`, `"standard"`, `"privileged"`, or `"boss"` |
 | `session_policy` | TEXT | `NULL` | JSON blob for SessionPolicyConfig |
-| `created_at` | TEXT | `datetime('now')` | ISO 8601 timestamp |
-| `last_seen_at` | TEXT | `NULL` | Updated when the agent authenticates RPC calls via token |
+| `created_at` | INTEGER | `CAST(strftime('%s','now') AS INTEGER) * 1000` | Unix epoch ms (UTC) |
+| `last_seen_at` | INTEGER | `NULL` | Updated when the agent authenticates RPC calls via token (unix ms UTC) |
 | `metadata` | TEXT | `NULL` | JSON blob for extended settings |
 
 Set permission level via: `hiboss agent set --name <agent-name> --permission-level <level> --token <boss-privileged-token>` (daemon required)
@@ -145,7 +145,7 @@ Bindings connect an agent to an adapter credential:
 | `agent_name` | TEXT | — | References `agents(name)` |
 | `adapter_type` | TEXT | — | e.g., `"telegram"` |
 | `adapter_token` | TEXT | — | Adapter credential (e.g., Telegram bot token) |
-| `created_at` | TEXT | `datetime('now')` | ISO 8601 timestamp |
+| `created_at` | INTEGER | `CAST(strftime('%s','now') AS INTEGER) * 1000` | Unix epoch ms (UTC) |
 
 Constraints:
 - `UNIQUE(adapter_type, adapter_token)` — each adapter binds to one agent
@@ -161,9 +161,9 @@ Constraints:
 | `from_boss` | INTEGER | `0` | `1` if sent by boss, `0` otherwise |
 | `content_text` | TEXT | `NULL` | Message text |
 | `content_attachments` | TEXT | `NULL` | JSON array of attachments |
-| `deliver_at` | TEXT | `NULL` | ISO 8601 UTC timestamp (scheduled delivery) |
+| `deliver_at` | INTEGER | `NULL` | Unix epoch ms (UTC) (scheduled delivery) |
 | `status` | TEXT | `'pending'` | `"pending"` or `"done"` |
-| `created_at` | TEXT | `datetime('now')` | ISO 8601 timestamp |
+| `created_at` | INTEGER | `CAST(strftime('%s','now') AS INTEGER) * 1000` | Unix epoch ms (UTC) |
 | `metadata` | TEXT | `NULL` | JSON blob |
 
 ### `cron_schedules` table
@@ -182,8 +182,8 @@ Cron schedules are stored per agent and materialize as normal envelopes (see `do
 | `content_attachments` | TEXT | `NULL` | Template attachments (JSON array) |
 | `metadata` | TEXT | `NULL` | Template metadata (JSON blob; e.g., parse mode) |
 | `pending_envelope_id` | TEXT | `NULL` | Next scheduled envelope id (nullable) |
-| `created_at` | TEXT | `datetime('now')` | ISO 8601 timestamp |
-| `updated_at` | TEXT | `NULL` | ISO 8601 timestamp |
+| `created_at` | INTEGER | `CAST(strftime('%s','now') AS INTEGER) * 1000` | Unix epoch ms (UTC) |
+| `updated_at` | INTEGER | `NULL` | Unix epoch ms (UTC) |
 
 ### `agent_runs` table
 

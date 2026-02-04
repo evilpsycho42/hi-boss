@@ -11,7 +11,7 @@ import { RPC_ERRORS } from "../ipc/types.js";
 import type { DaemonContext } from "./context.js";
 import { requireToken, rpcError } from "./context.js";
 import { formatAgentAddress, parseAddress } from "../../adapters/types.js";
-import { parseDateTimeInputToUtcIso } from "../../shared/time.js";
+import { parseDateTimeInputToUnixMs } from "../../shared/time.js";
 
 /**
  * Create envelope RPC handlers.
@@ -104,10 +104,10 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
       metadata.replyToMessageId = p.replyToMessageId.trim();
     }
 
-    let deliverAt: string | undefined;
+    let deliverAt: number | undefined;
     if (p.deliverAt) {
       try {
-        deliverAt = parseDateTimeInputToUtcIso(p.deliverAt);
+        deliverAt = parseDateTimeInputToUnixMs(p.deliverAt);
       } catch (err) {
         rpcError(
           RPC_ERRORS.INVALID_PARAMS,

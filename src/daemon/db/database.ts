@@ -15,7 +15,6 @@ import {
 import { generateToken, hashToken, verifyToken } from "../../agent/auth.js";
 import { generateUUID } from "../../shared/uuid.js";
 import { assertValidAgentName } from "../../shared/validation.js";
-import { migrateTelegramReplyToMessageIdsToBase36 } from "./migrations/telegram-reply-to.js";
 
 /**
  * Database row types for SQLite mapping.
@@ -31,8 +30,8 @@ interface AgentRow {
   auto_level: string | null;
   permission_level: string | null;
   session_policy: string | null;
-  created_at: string;
-  last_seen_at: string | null;
+  created_at: number;
+  last_seen_at: number | null;
   metadata: string | null;
 }
 
@@ -43,9 +42,9 @@ interface EnvelopeRow {
   from_boss: number;
   content_text: string | null;
   content_attachments: string | null;
-  deliver_at: string | null;
+  deliver_at: number | null;
   status: string;
-  created_at: string;
+  created_at: number;
   metadata: string | null;
 }
 
@@ -60,9 +59,9 @@ interface CronScheduleRow {
   content_attachments: string | null;
   metadata: string | null;
   pending_envelope_id: string | null;
-  created_at: string;
-  updated_at: string | null;
-  pending_deliver_at?: string | null;
+  created_at: number;
+  updated_at: number | null;
+  pending_deliver_at?: number | null;
   pending_status?: string | null;
 }
 
@@ -71,7 +70,7 @@ interface AgentBindingRow {
   agent_name: string;
   adapter_type: string;
   adapter_token: string;
-  created_at: string;
+  created_at: number;
 }
 
 interface AgentRunRow {
@@ -94,7 +93,7 @@ export interface AgentBinding {
   agentName: string;
   adapterType: string;
   adapterToken: string;
-  createdAt: string;
+  createdAt: number;
 }
 
 /**
@@ -130,104 +129,136 @@ export class HiBossDatabase {
   }
 
   private initSchema(): void {
-    this.runMigrations();
     this.db.exec(SCHEMA_SQL);
+    this.assertSchemaCompatible();
+    this.reconcileStaleAgentRunsOnStartup();
   }
 
-  private runMigrations(): void {
-    // Migrate envelopes.deliver_at column (added after initial schema)
-    const envelopeColumns = this.db.prepare("PRAGMA table_info(envelopes)").all() as Array<{
-      name: string;
-    }>;
-    if (envelopeColumns.length > 0) {
-      const hasDeliverAt = envelopeColumns.some((c) => c.name === "deliver_at");
-      if (!hasDeliverAt) {
-        this.db.exec("ALTER TABLE envelopes ADD COLUMN deliver_at TEXT");
-      }
+  private assertSchemaCompatible(): void {
+    const requiredColumnsByTable: Record<string, string[]> = {
+      config: ["key", "value", "created_at"],
+      agents: [
+        "name",
+        "token",
+        "description",
+        "workspace",
+        "provider",
+        "model",
+        "reasoning_effort",
+        "auto_level",
+        "permission_level",
+        "session_policy",
+        "created_at",
+        "last_seen_at",
+        "metadata",
+      ],
+      envelopes: [
+        "id",
+        "from",
+        "to",
+        "from_boss",
+        "content_text",
+        "content_attachments",
+        "deliver_at",
+        "status",
+        "created_at",
+        "metadata",
+      ],
+      cron_schedules: [
+        "id",
+        "agent_name",
+        "cron",
+        "timezone",
+        "enabled",
+        "to_address",
+        "content_text",
+        "content_attachments",
+        "metadata",
+        "pending_envelope_id",
+        "created_at",
+        "updated_at",
+      ],
+      agent_bindings: ["id", "agent_name", "adapter_type", "adapter_token", "created_at"],
+      agent_runs: [
+        "id",
+        "agent_name",
+        "started_at",
+        "completed_at",
+        "envelope_ids",
+        "final_response",
+        "context_length",
+        "status",
+        "error",
+      ],
+    };
 
-      // Migrate Telegram reply-to-channel-message-id values stored as decimal strings into the compact base36 form.
-      migrateTelegramReplyToMessageIdsToBase36(this.db);
-    }
+    const expectedIntegerColumns: Array<{ table: string; column: string }> = [
+      { table: "config", column: "created_at" },
+      { table: "agents", column: "created_at" },
+      { table: "agents", column: "last_seen_at" },
+      { table: "agent_bindings", column: "created_at" },
+      { table: "envelopes", column: "created_at" },
+      { table: "envelopes", column: "deliver_at" },
+      { table: "cron_schedules", column: "created_at" },
+      { table: "cron_schedules", column: "updated_at" },
+      { table: "agent_runs", column: "started_at" },
+      { table: "agent_runs", column: "completed_at" },
+    ];
 
-    // Migrate agents.permission_level and agents.session_policy columns
-    const agentColumns = this.db.prepare("PRAGMA table_info(agents)").all() as Array<{
-      name: string;
-    }>;
-    if (agentColumns.length > 0) {
-      const hasPermissionLevel = agentColumns.some((c) => c.name === "permission_level");
-      if (!hasPermissionLevel) {
-        this.db.exec(
-          `ALTER TABLE agents ADD COLUMN permission_level TEXT DEFAULT '${DEFAULT_AGENT_PERMISSION_LEVEL}'`
+    for (const [table, requiredColumns] of Object.entries(requiredColumnsByTable)) {
+      const info = this.db.prepare(`PRAGMA table_info(${table})`).all() as Array<{
+        name: string;
+        type: string;
+      }>;
+      if (info.length === 0) {
+        throw new Error(
+          `Unsupported database schema: missing table ${table}. ` +
+            `Reset your local state by deleting ~/.hiboss.`
         );
       }
-      const hasSessionPolicy = agentColumns.some((c) => c.name === "session_policy");
-      if (!hasSessionPolicy) {
-        this.db.exec("ALTER TABLE agents ADD COLUMN session_policy TEXT");
+      const names = new Set(info.map((c) => c.name));
+      for (const col of requiredColumns) {
+        if (!names.has(col)) {
+          throw new Error(
+            `Unsupported database schema: missing ${table}.${col}. ` +
+              `Reset your local state by deleting ~/.hiboss.`
+          );
+        }
       }
-
-      // Migrate existing data from metadata to new columns
-      if (!hasPermissionLevel || !hasSessionPolicy) {
-        this.db.exec(`
-          UPDATE agents
-          SET permission_level = json_extract(metadata, '$.permissionLevel')
-          WHERE json_extract(metadata, '$.permissionLevel') IS NOT NULL
-            AND (permission_level IS NULL OR permission_level = '${DEFAULT_AGENT_PERMISSION_LEVEL}');
-
-          UPDATE agents
-          SET session_policy = json_extract(metadata, '$.sessionPolicy')
-          WHERE json_extract(metadata, '$.sessionPolicy') IS NOT NULL
-            AND session_policy IS NULL;
-        `);
-      }
-
-      // Migrate deprecated auto-level "low" -> "medium" (low is no longer supported).
-      this.db.exec(`
-        UPDATE agents
-        SET auto_level = 'medium'
-        WHERE auto_level = 'low';
-      `);
-
-      // Migrate session policy field rename: maxTokens -> maxContextLength.
-      // This keeps existing configs working without runtime fallback logic.
-      this.db.exec(`
-        UPDATE agents
-        SET session_policy = json_remove(
-          json_set(session_policy, '$.maxContextLength', json_extract(session_policy, '$.maxTokens')),
-          '$.maxTokens'
-        )
-        WHERE session_policy IS NOT NULL
-          AND json_valid(session_policy)
-          AND json_extract(session_policy, '$.maxContextLength') IS NULL
-          AND json_extract(session_policy, '$.maxTokens') IS NOT NULL;
-
-        UPDATE agents
-        SET session_policy = json_remove(session_policy, '$.maxTokens')
-        WHERE session_policy IS NOT NULL
-          AND json_valid(session_policy)
-          AND json_extract(session_policy, '$.maxTokens') IS NOT NULL;
-      `);
     }
 
-    // Migrate agent_runs.context_length column and reconcile stale running runs from previous daemon exits.
-    const agentRunColumns = this.db.prepare("PRAGMA table_info(agent_runs)").all() as Array<{
-      name: string;
-    }>;
-    if (agentRunColumns.length > 0) {
-      const hasContextLength = agentRunColumns.some((c) => c.name === "context_length");
-      if (!hasContextLength) {
-        this.db.exec("ALTER TABLE agent_runs ADD COLUMN context_length INTEGER");
-      }
+    for (const spec of expectedIntegerColumns) {
+      const info = this.db.prepare(`PRAGMA table_info(${spec.table})`).all() as Array<{
+        name: string;
+        type: string;
+      }>;
+      const col = info.find((c) => c.name === spec.column);
+      if (!col) continue;
 
-      // Best-effort: mark any "running" runs as failed on startup. Runs cannot survive daemon restarts.
-      const nowMs = Date.now();
-      this.db.prepare(`
-        UPDATE agent_runs
-        SET status = 'failed',
-            completed_at = CASE WHEN completed_at IS NULL THEN ? ELSE completed_at END,
-            error = CASE WHEN error IS NULL OR error = '' THEN 'daemon-stopped' ELSE error END
-        WHERE status = 'running'
-      `).run(nowMs);
+      const type = String(col.type ?? "").trim().toUpperCase();
+      const isInteger = type === "INTEGER" || type === "INT" || type.startsWith("INT(");
+      if (!isInteger) {
+        throw new Error(
+          `Unsupported database schema: expected ${spec.table}.${spec.column} to be INTEGER (unix-ms), got '${col.type}'. ` +
+            `Reset your local state by deleting ~/.hiboss.`
+        );
+      }
     }
+  }
+
+  private reconcileStaleAgentRunsOnStartup(): void {
+    const info = this.db.prepare("PRAGMA table_info(agent_runs)").all() as Array<{ name: string }>;
+    if (info.length === 0) return;
+
+    // Best-effort: mark any "running" runs as failed on startup. Runs cannot survive daemon restarts.
+    const nowMs = Date.now();
+    this.db.prepare(`
+      UPDATE agent_runs
+      SET status = 'failed',
+          completed_at = CASE WHEN completed_at IS NULL THEN ? ELSE completed_at END,
+          error = CASE WHEN error IS NULL OR error = '' THEN 'daemon-stopped' ELSE error END
+      WHERE status = 'running'
+    `).run(nowMs);
   }
 
   close(): void {
@@ -256,7 +287,7 @@ export class HiBossDatabase {
     }
 
     const token = generateToken();
-    const createdAt = new Date().toISOString();
+    const createdAt = Date.now();
 
     const reasoningEffortToStore =
       input.reasoningEffort === undefined ? DEFAULT_AGENT_REASONING_EFFORT : input.reasoningEffort;
@@ -328,7 +359,7 @@ export class HiBossDatabase {
    */
   updateAgentLastSeen(name: string): void {
     const stmt = this.db.prepare("UPDATE agents SET last_seen_at = ? WHERE name = ?");
-    stmt.run(new Date().toISOString(), name);
+    stmt.run(Date.now(), name);
   }
 
   /**
@@ -544,9 +575,7 @@ export class HiBossDatabase {
       try {
         const raw = JSON.parse(row.session_policy) as unknown;
         if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-          const normalized = { ...(raw as Record<string, unknown>) } as any;
-          delete normalized.maxTokens;
-          sessionPolicy = normalized as SessionPolicyConfig;
+          sessionPolicy = raw as SessionPolicyConfig;
         }
       } catch {
         // ignore invalid JSON
@@ -556,9 +585,6 @@ export class HiBossDatabase {
     let autoLevel: Agent["autoLevel"] | undefined;
     if (row.auto_level === "medium" || row.auto_level === "high") {
       autoLevel = row.auto_level;
-    } else if (row.auto_level === "low") {
-      // Back-compat fallback; low is migrated to medium in runMigrations().
-      autoLevel = "medium";
     }
 
     return {
@@ -585,7 +611,7 @@ export class HiBossDatabase {
    */
   createEnvelope(input: CreateEnvelopeInput): Envelope {
     const id = generateUUID();
-    const createdAt = new Date().toISOString();
+    const createdAt = Date.now();
 
     const stmt = this.db.prepare(`
       INSERT INTO envelopes (id, "from", "to", from_boss, content_text, content_attachments, deliver_at, status, created_at, metadata)
@@ -639,9 +665,9 @@ export class HiBossDatabase {
     }
 
     if (dueOnly) {
-      const nowIso = new Date().toISOString();
+      const nowMs = Date.now();
       sql += " AND (deliver_at IS NULL OR deliver_at <= ?)";
-      params.push(nowIso);
+      params.push(nowMs);
     }
 
     sql += " ORDER BY created_at DESC";
@@ -675,9 +701,9 @@ export class HiBossDatabase {
     const params: (string | number)[] = [from, to, status];
 
     if (dueOnly) {
-      const nowIso = new Date().toISOString();
+      const nowMs = Date.now();
       sql += " AND (deliver_at IS NULL OR deliver_at <= ?)";
-      params.push(nowIso);
+      params.push(nowMs);
     }
 
     sql += " ORDER BY created_at DESC LIMIT ?";
@@ -731,7 +757,7 @@ export class HiBossDatabase {
    */
   createCronSchedule(input: CreateCronScheduleInput): CronSchedule {
     const id = generateUUID();
-    const createdAt = new Date().toISOString();
+    const createdAt = Date.now();
 
     const enabled = input.enabled ?? true;
     const timezone =
@@ -840,7 +866,7 @@ export class HiBossDatabase {
    * Update cron schedule enabled flag.
    */
   updateCronScheduleEnabled(id: string, enabled: boolean): void {
-    const updatedAt = new Date().toISOString();
+    const updatedAt = Date.now();
     const stmt = this.db.prepare("UPDATE cron_schedules SET enabled = ?, updated_at = ? WHERE id = ?");
     stmt.run(enabled ? 1 : 0, updatedAt, id);
   }
@@ -849,7 +875,7 @@ export class HiBossDatabase {
    * Update cron schedule pending envelope id.
    */
   updateCronSchedulePendingEnvelopeId(id: string, pendingEnvelopeId: string | null): void {
-    const updatedAt = new Date().toISOString();
+    const updatedAt = Date.now();
     const stmt = this.db.prepare(
       "UPDATE cron_schedules SET pending_envelope_id = ?, updated_at = ? WHERE id = ?"
     );
@@ -888,7 +914,7 @@ export class HiBossDatabase {
         ? (row.pending_status as EnvelopeStatus)
         : undefined;
     const nextDeliverAt =
-      pendingEnvelopeId && typeof row.pending_deliver_at === "string"
+      pendingEnvelopeId && typeof row.pending_deliver_at === "number"
         ? row.pending_deliver_at
         : undefined;
 
@@ -919,7 +945,7 @@ export class HiBossDatabase {
    */
   createBinding(agentName: string, adapterType: string, adapterToken: string): AgentBinding {
     const id = generateUUID();
-    const createdAt = new Date().toISOString();
+    const createdAt = Date.now();
 
     const stmt = this.db.prepare(`
       INSERT INTO agent_bindings (id, agent_name, adapter_type, adapter_token, created_at)
@@ -1093,14 +1119,14 @@ export class HiBossDatabase {
    */
   countDuePendingEnvelopesForAgent(agentName: string): number {
     const address = `agent:${agentName}`;
-    const nowIso = new Date().toISOString();
+    const nowMs = Date.now();
     const stmt = this.db.prepare(`
       SELECT COUNT(*) AS n
       FROM envelopes
       WHERE "to" = ? AND status = 'pending'
         AND (deliver_at IS NULL OR deliver_at <= ?)
     `);
-    const row = stmt.get(address, nowIso) as { n: number } | undefined;
+    const row = stmt.get(address, nowMs) as { n: number } | undefined;
     return row?.n ?? 0;
   }
 
@@ -1123,7 +1149,7 @@ export class HiBossDatabase {
    */
   getPendingEnvelopesForAgent(agentName: string, limit: number): Envelope[] {
     const address = `agent:${agentName}`;
-    const nowIso = new Date().toISOString();
+    const nowMs = Date.now();
     const stmt = this.db.prepare(`
       SELECT * FROM envelopes
       WHERE "to" = ? AND status = 'pending'
@@ -1131,7 +1157,7 @@ export class HiBossDatabase {
       ORDER BY COALESCE(deliver_at, created_at) ASC, created_at ASC
       LIMIT ?
     `);
-    const rows = stmt.all(address, nowIso, limit) as EnvelopeRow[];
+    const rows = stmt.all(address, nowMs, limit) as EnvelopeRow[];
     return rows.map((row) => this.rowToEnvelope(row));
   }
 
@@ -1141,7 +1167,7 @@ export class HiBossDatabase {
   getSentToAddressesForAgentSince(
     agentName: string,
     toAddresses: string[],
-    sinceIso: string
+    sinceMs: number
   ): string[] {
     if (toAddresses.length === 0) return [];
 
@@ -1154,7 +1180,7 @@ export class HiBossDatabase {
         AND "to" IN (${placeholders})
         AND created_at >= ?
     `);
-    const rows = stmt.all(fromAddress, ...toAddresses, sinceIso) as Array<{ to_address: string }>;
+    const rows = stmt.all(fromAddress, ...toAddresses, sinceMs) as Array<{ to_address: string }>;
     return rows.map((r) => r.to_address);
   }
 
@@ -1164,7 +1190,7 @@ export class HiBossDatabase {
    * Includes immediate (deliver_at NULL) and scheduled (deliver_at <= now) envelopes.
    */
   listDueChannelEnvelopes(limit = 100): Envelope[] {
-    const nowIso = new Date().toISOString();
+    const nowMs = Date.now();
     const stmt = this.db.prepare(`
       SELECT * FROM envelopes
       WHERE "to" LIKE 'channel:%'
@@ -1173,7 +1199,7 @@ export class HiBossDatabase {
       ORDER BY COALESCE(deliver_at, created_at) ASC, created_at ASC
       LIMIT ?
     `);
-    const rows = stmt.all(nowIso, limit) as EnvelopeRow[];
+    const rows = stmt.all(nowMs, limit) as EnvelopeRow[];
     return rows.map((row) => this.rowToEnvelope(row));
   }
 
@@ -1181,7 +1207,7 @@ export class HiBossDatabase {
    * List agent names that have due pending envelopes.
    */
   listAgentNamesWithDueEnvelopes(): string[] {
-    const nowIso = new Date().toISOString();
+    const nowMs = Date.now();
     const stmt = this.db.prepare(`
       SELECT DISTINCT substr("to", 7) AS agent_name
       FROM envelopes
@@ -1189,7 +1215,7 @@ export class HiBossDatabase {
         AND status = 'pending'
         AND (deliver_at IS NULL OR deliver_at <= ?)
     `);
-    const rows = stmt.all(nowIso) as Array<{ agent_name: string }>;
+    const rows = stmt.all(nowMs) as Array<{ agent_name: string }>;
     return rows.map((r) => r.agent_name);
   }
 
@@ -1197,7 +1223,7 @@ export class HiBossDatabase {
    * Get the earliest pending scheduled envelope (deliver_at > now).
    */
   getNextScheduledEnvelope(): Envelope | null {
-    const nowIso = new Date().toISOString();
+    const nowMs = Date.now();
     const stmt = this.db.prepare(`
       SELECT * FROM envelopes
       WHERE status = 'pending'
@@ -1206,14 +1232,14 @@ export class HiBossDatabase {
       ORDER BY deliver_at ASC
       LIMIT 1
     `);
-    const row = stmt.get(nowIso) as EnvelopeRow | undefined;
+    const row = stmt.get(nowMs) as EnvelopeRow | undefined;
     return row ? this.rowToEnvelope(row) : null;
   }
 
   /**
    * Update deliver_at for an envelope.
    */
-  updateEnvelopeDeliverAt(id: string, deliverAt: string | null): void {
+  updateEnvelopeDeliverAt(id: string, deliverAt: number | null): void {
     const stmt = this.db.prepare("UPDATE envelopes SET deliver_at = ? WHERE id = ?");
     stmt.run(deliverAt, id);
   }
@@ -1262,10 +1288,10 @@ export class HiBossDatabase {
   setConfig(key: string, value: string): void {
     const stmt = this.db.prepare(`
       INSERT INTO config (key, value, created_at)
-      VALUES (?, ?, datetime('now'))
+      VALUES (?, ?, ?)
       ON CONFLICT(key) DO UPDATE SET value = excluded.value
     `);
-    stmt.run(key, value);
+    stmt.run(key, value, Date.now());
   }
 
   /**

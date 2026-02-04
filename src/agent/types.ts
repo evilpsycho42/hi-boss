@@ -23,8 +23,8 @@ export interface Agent {
   autoLevel?: 'medium' | 'high';
   permissionLevel?: AgentPermissionLevel;   // authorization level for CLI/RPC ops
   sessionPolicy?: SessionPolicyConfig;      // session refresh policy
-  createdAt: string;       // ISO 8601
-  lastSeenAt?: string;     // ISO 8601
+  createdAt: number;       // unix epoch ms (UTC)
+  lastSeenAt?: number;     // unix epoch ms (UTC)
   metadata?: Record<string, unknown>;       // extensible metadata (for future use)
 }
 

@@ -6,7 +6,7 @@ Cron schedules (`hiboss cron ...`) build on the same mechanism by materializing 
 
 Key files:
 
-- `src/shared/time.ts` — parses `--deliver-at` into a UTC timestamp
+- `src/shared/time.ts` — parses `--deliver-at` into a unix-ms UTC timestamp
 - `src/daemon/scheduler/envelope-scheduler.ts` — wake-up/tick logic
 - `src/daemon/db/database.ts` — “due” queries and ordering
 
@@ -20,7 +20,7 @@ Key files:
 - ISO 8601 with timezone: `2026-01-27T16:30:00+08:00` (or UTC `Z`)
 - ISO-like local datetime without timezone (interpreted as local time): `YYYY-MM-DDTHH:MM[:SS]` or `YYYY-MM-DD HH:MM[:SS]`
 
-The daemon parses the input and stores `deliver-at` as **UTC** ISO 8601 (`...Z`) in the `envelopes.deliver_at` column.
+The daemon parses the input and stores `deliver-at` as **unix epoch milliseconds (UTC)** in the `envelopes.deliver_at` column.
 
 ---
 
@@ -29,7 +29,7 @@ The daemon parses the input and stores `deliver-at` as **UTC** ISO 8601 (`...Z`)
 An envelope is considered due when:
 
 - `deliver_at` is `NULL`, or
-- `deliver_at <= now` (string compare in SQLite on ISO timestamps)
+- `deliver_at <= now` (numeric compare on unix-ms)
 
 This is enforced in queries like:
 

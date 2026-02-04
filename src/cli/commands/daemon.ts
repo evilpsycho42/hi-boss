@@ -6,12 +6,13 @@ import { getDefaultConfig, isDaemonRunning, getSocketPath } from "../../daemon/d
 import { IpcClient } from "../ipc-client.js";
 import { authorizeCliOperation } from "../authz.js";
 import { resolveToken } from "../token.js";
+import { formatUnixMsAsLocalOffset } from "../../shared/time.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 interface DaemonStatusResult {
   running: boolean;
-  startTime?: string;
+  startTimeMs?: number;
   adapters: string[];
   dataDir: string;
 }
@@ -303,7 +304,11 @@ export async function daemonStatus(options: DaemonStatusOptions = {}): Promise<v
     const status = await client.call<DaemonStatusResult>("daemon.status", { token });
 
     console.log(`running: ${status.running ? "true" : "false"}`);
-    console.log(`start-time: ${status.startTime ?? "(none)"}`);
+    console.log(
+      `start-time: ${
+        typeof status.startTimeMs === "number" ? formatUnixMsAsLocalOffset(status.startTimeMs) : "(none)"
+      }`
+    );
     console.log(`adapters: ${status.adapters.join(", ") || "(none)"}`);
     console.log(`data-dir: ${status.dataDir}`);
   } catch (err) {

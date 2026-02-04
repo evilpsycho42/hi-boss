@@ -1,4 +1,4 @@
-import { nowLocalIso } from "./time.js";
+import { formatUnixMsAsLocalOffset } from "./time.js";
 
 export type DaemonLogLevel = "info" | "warn" | "error";
 
@@ -59,7 +59,7 @@ function normalizeField(
 
 export function logEvent(level: DaemonLogLevel, event: string, fields?: Record<string, unknown>): void {
   const debug = debugEnabled;
-  const parts: string[] = [`ts=${nowLocalIso()}`, `level=${level}`, `event=${event}`];
+  const parts: string[] = [`ts=${formatUnixMsAsLocalOffset(Date.now())}`, `level=${level}`, `event=${event}`];
   const seenKeys = new Set(parts.map((p) => p.split("=")[0]));
 
   for (const [key, value] of Object.entries(fields ?? {})) {

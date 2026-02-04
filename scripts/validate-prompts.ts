@@ -31,7 +31,7 @@ function makeMockAgent(workspaceDir: string): Agent {
     model: "gpt-5.2",
     reasoningEffort: "medium",
     autoLevel: "high",
-    createdAt: new Date().toISOString(),
+    createdAt: Date.now(),
     metadata: { example: true },
   };
 }
@@ -43,7 +43,7 @@ function makeMockBindings(): AgentBinding[] {
       agentName: "nex",
       adapterType: "telegram",
       adapterToken: "telegram-bot-token-redacted",
-      createdAt: new Date().toISOString(),
+      createdAt: Date.now(),
     },
   ];
 }
@@ -60,7 +60,7 @@ function makeMockEnvelopes(): Envelope[] {
         attachments: [{ source: "/tmp/photo.jpg" }],
       },
       status: "pending",
-      createdAt: new Date().toISOString(),
+      createdAt: Date.now(),
       metadata: {
         platform: "telegram",
         channelMessageId: "2147483647",
@@ -75,7 +75,7 @@ function makeMockEnvelopes(): Envelope[] {
       fromBoss: true,
       content: { text: "(second message)", attachments: [] },
       status: "pending",
-      createdAt: new Date().toISOString(),
+      createdAt: Date.now(),
     },
   ];
 }
@@ -114,7 +114,7 @@ function validateTurnPrompt(): void {
   {
     const ctx = buildTurnPromptContext({
       agentName: "nex",
-      datetimeIso: new Date().toISOString(),
+      datetimeMs: Date.now(),
       envelopes: [],
     });
     const out = renderPrompt({ surface: "turn", template: "turn/turn.md", context: ctx }).trimEnd();
@@ -128,7 +128,7 @@ function validateTurnPrompt(): void {
   {
     const ctx = buildTurnPromptContext({
       agentName: "nex",
-      datetimeIso: new Date().toISOString(),
+      datetimeMs: Date.now(),
       envelopes: makeMockEnvelopes(),
     });
     const out = renderPrompt({ surface: "turn", template: "turn/turn.md", context: ctx }).trimEnd();
@@ -148,7 +148,7 @@ function validateTurnPrompt(): void {
       fromBoss: false,
       content: { text: "First message", attachments: [] },
       status: "pending",
-      createdAt: new Date().toISOString(),
+      createdAt: Date.now(),
       metadata: {
         platform: "telegram",
         channelMessageId: "2147483647",
@@ -163,7 +163,7 @@ function validateTurnPrompt(): void {
       fromBoss: true,
       content: { text: "Second message", attachments: [] },
       status: "pending",
-      createdAt: new Date().toISOString(),
+      createdAt: Date.now(),
       metadata: {
         platform: "telegram",
         channelMessageId: "2147483646",
@@ -178,12 +178,12 @@ function validateTurnPrompt(): void {
       fromBoss: false,
       content: { text: "Agent message", attachments: [] },
       status: "pending",
-      createdAt: new Date().toISOString(),
+      createdAt: Date.now(),
     };
 
     const ctx = buildTurnPromptContext({
       agentName: "nex",
-      datetimeIso: new Date().toISOString(),
+      datetimeMs: Date.now(),
       envelopes: [group1, group2, agentEnvelope],
     });
     const out = renderPrompt({ surface: "turn", template: "turn/turn.md", context: ctx }).trimEnd();
@@ -207,7 +207,7 @@ function validateCliEnvelopePrompt(): void {
     fromBoss: false,
     content: { text: "Hello", attachments: [] },
     status: "pending",
-    createdAt: new Date().toISOString(),
+    createdAt: Date.now(),
     metadata: {
       platform: "telegram",
       channelMessageId: "m-1",
@@ -231,7 +231,7 @@ function validateCliEnvelopePrompt(): void {
 
   // With deliver-at
   {
-    const withDeliverAt: Envelope = { ...baseEnvelope, deliverAt: new Date().toISOString() };
+    const withDeliverAt: Envelope = { ...baseEnvelope, deliverAt: Date.now() };
     const ctx = buildCliEnvelopePromptContext({ envelope: withDeliverAt });
     const out = renderPrompt({
       surface: "cli-envelope",

@@ -357,7 +357,7 @@ export interface MemorySearchResult {
     id: string;
     text: string;
     category: string;
-    createdAt: string;
+    createdAt: number;
     similarity?: number;
   }>;
 }
@@ -373,7 +373,7 @@ export interface MemoryListResult {
     id: string;
     text: string;
     category: string;
-    createdAt: string;
+    createdAt: number;
   }>;
 }
 
@@ -405,7 +405,7 @@ export interface MemoryGetResult {
     id: string;
     text: string;
     category: string;
-    createdAt: string;
+    createdAt: number;
   } | null;
 }
 

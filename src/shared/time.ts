@@ -2,6 +2,10 @@ function pad2(value: number): string {
   return String(value).padStart(2, "0");
 }
 
+function isFiniteUnixMs(ms: number): boolean {
+  return typeof ms === "number" && Number.isFinite(ms);
+}
+
 function daysInMonthLocal(year: number, monthIndex: number): number {
   return new Date(year, monthIndex + 1, 0).getDate();
 }
@@ -62,7 +66,7 @@ function addYearsClampedLocal(date: Date, deltaYears: number): Date {
   );
 }
 
-function parseRelativeTimeToUtcIso(input: string): string | null {
+function parseRelativeTimeToUnixMs(input: string): number | null {
   const trimmed = input.trim();
   if (!trimmed) return null;
 
@@ -127,18 +131,20 @@ function parseRelativeTimeToUtcIso(input: string): string | null {
     throw new Error(`Invalid deliver-at: ${input}`);
   }
 
-  return date.toISOString();
+  return date.getTime();
 }
 
 /**
- * Format a UTC ISO 8601 timestamp (with Z) as local time with offset.
+ * Format a unix epoch milliseconds timestamp as local time with offset (ISO 8601).
  *
- * Example output: 2026-01-27T16:30:00+08:00
+ * Example output: 2026-01-27T16:30:00-08:00
  */
-export function formatUtcIsoAsLocalOffset(utcIso: string): string {
-  const date = new Date(utcIso);
+export function formatUnixMsAsLocalOffset(ms: number): string {
+  if (!isFiniteUnixMs(ms)) return String(ms);
+
+  const date = new Date(ms);
   if (Number.isNaN(date.getTime())) {
-    return utcIso;
+    return String(ms);
   }
 
   const year = date.getFullYear();
@@ -158,16 +164,17 @@ export function formatUtcIsoAsLocalOffset(utcIso: string): string {
 }
 
 /**
- * Get current local time formatted as ISO 8601 with offset.
- *
- * Example output: 2026-01-27T16:30:00+08:00
+ * Format a unix epoch milliseconds timestamp as a UTC ISO 8601 string (with trailing Z).
  */
-export function nowLocalIso(): string {
-  return formatUtcIsoAsLocalOffset(new Date().toISOString());
+export function formatUnixMsAsUtcIso(ms: number): string {
+  if (!isFiniteUnixMs(ms)) return "";
+  const date = new Date(ms);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString();
 }
 
 /**
- * Parse a user-provided datetime string into a UTC ISO 8601 string (with Z).
+ * Parse a user-provided datetime string into a unix epoch milliseconds timestamp (UTC).
  *
  * Accepts:
  * - Relative offsets from now:
@@ -179,14 +186,14 @@ export function nowLocalIso(): string {
  *   - "YYYY-MM-DDTHH:MM[:SS[.mmm]]"
  *   - "YYYY-MM-DD HH:MM[:SS[.mmm]]"
  */
-export function parseDateTimeInputToUtcIso(input: string): string {
+export function parseDateTimeInputToUnixMs(input: string): number {
   const trimmed = input.trim();
   if (!trimmed) {
     throw new Error("Invalid deliver-at: empty value");
   }
 
-  const relative = parseRelativeTimeToUtcIso(trimmed);
-  if (relative) return relative;
+  const relative = parseRelativeTimeToUnixMs(trimmed);
+  if (typeof relative === "number") return relative;
 
   const hasTimezoneSuffix = /([zZ]|[+-]\d{2}:\d{2}|[+-]\d{4})$/.test(trimmed);
   if (hasTimezoneSuffix) {
@@ -194,7 +201,7 @@ export function parseDateTimeInputToUtcIso(input: string): string {
     if (Number.isNaN(date.getTime())) {
       throw new Error(`Invalid deliver-at: ${input}`);
     }
-    return date.toISOString();
+    return date.getTime();
   }
 
   const normalized = trimmed.replace(" ", "T");
@@ -223,24 +230,22 @@ export function parseDateTimeInputToUtcIso(input: string): string {
     throw new Error(`Invalid deliver-at: ${input}`);
   }
 
-  return date.toISOString();
+  return date.getTime();
 }
 
 /**
  * True if deliverAt is missing or due (<= now).
  */
-export function isDueUtcIso(deliverAt: string | undefined): boolean {
+export function isDueUnixMs(deliverAt: number | undefined): boolean {
   if (!deliverAt) return true;
-  const timestamp = Date.parse(deliverAt);
-  if (Number.isNaN(timestamp)) return true;
-  return timestamp <= Date.now();
+  if (!isFiniteUnixMs(deliverAt)) return true;
+  return deliverAt <= Date.now();
 }
 
 /**
  * Milliseconds until deliverAt (0 if due/invalid).
  */
-export function delayUntilUtcIso(deliverAt: string): number {
-  const timestamp = Date.parse(deliverAt);
-  if (Number.isNaN(timestamp)) return 0;
-  return Math.max(0, timestamp - Date.now());
+export function delayUntilUnixMs(deliverAt: number): number {
+  if (!isFiniteUnixMs(deliverAt)) return 0;
+  return Math.max(0, deliverAt - Date.now());
 }

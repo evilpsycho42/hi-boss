@@ -221,7 +221,7 @@ Table: `agent_bindings`
 | agent_name | TEXT | Foreign key to agents |
 | adapter_type | TEXT | e.g., "telegram" |
 | adapter_token | TEXT | Adapter authentication |
-| created_at | TEXT | ISO 8601 |
+| created_at | INTEGER | Unix epoch ms (UTC) |
 
 Constraints:
 - Unique on `(adapter_type, adapter_token)` - each adapter binds to one agent

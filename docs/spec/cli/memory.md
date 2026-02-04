@@ -34,7 +34,7 @@ Output (parseable):
 - then repeated blocks with:
   - `id:` (short id)
   - `category:`
-  - `created-at:`
+  - `created-at:` (local timezone offset)
   - `similarity:` (optional)
   - `text-json:`
 

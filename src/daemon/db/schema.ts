@@ -15,7 +15,7 @@ export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS config (
   key TEXT PRIMARY KEY,
   value TEXT NOT NULL,
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at INTEGER DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000)
 );
 
 	CREATE TABLE IF NOT EXISTS agents (
@@ -29,8 +29,8 @@ CREATE TABLE IF NOT EXISTS config (
   auto_level TEXT DEFAULT '${DEFAULT_AGENT_AUTO_LEVEL}',
   permission_level TEXT DEFAULT '${DEFAULT_AGENT_PERMISSION_LEVEL}',
   session_policy TEXT,           -- JSON blob for SessionPolicyConfig
-  created_at TEXT DEFAULT (datetime('now')),
-  last_seen_at TEXT,
+  created_at INTEGER DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000),
+  last_seen_at INTEGER,
   metadata TEXT
 );
 
@@ -41,9 +41,9 @@ CREATE TABLE IF NOT EXISTS envelopes (
   from_boss INTEGER DEFAULT 0,
   content_text TEXT,
   content_attachments TEXT,
-  deliver_at TEXT,            -- ISO 8601 UTC timestamp (not-before delivery)
+  deliver_at INTEGER,         -- unix epoch ms (UTC) (not-before delivery)
   status TEXT DEFAULT '${DEFAULT_ENVELOPE_STATUS}',
-  created_at TEXT DEFAULT (datetime('now')),
+  created_at INTEGER DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000),
   metadata TEXT
 );
 
@@ -58,8 +58,8 @@ CREATE TABLE IF NOT EXISTS cron_schedules (
   content_attachments TEXT,
   metadata TEXT,              -- JSON blob for envelope template metadata
   pending_envelope_id TEXT,   -- envelope id for the next scheduled occurrence (nullable)
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT,
+  created_at INTEGER DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000),
+  updated_at INTEGER,
   FOREIGN KEY (agent_name) REFERENCES agents(name) ON DELETE CASCADE
 );
 
@@ -68,7 +68,7 @@ CREATE TABLE IF NOT EXISTS agent_bindings (
   agent_name TEXT NOT NULL,    -- references agents(name)
   adapter_type TEXT NOT NULL,
   adapter_token TEXT NOT NULL,
-  created_at TEXT DEFAULT (datetime('now')),
+  created_at INTEGER DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000),
   UNIQUE(adapter_type, adapter_token),
   FOREIGN KEY (agent_name) REFERENCES agents(name) ON DELETE CASCADE
 );

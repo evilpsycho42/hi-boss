@@ -2,7 +2,7 @@ import type { Envelope } from "../../envelope/types.js";
 import type { HiBossDatabase } from "../db/database.js";
 import type { MessageRouter } from "../router/message-router.js";
 import type { AgentExecutor } from "../../agent/executor.js";
-import { delayUntilUtcIso } from "../../shared/time.js";
+import { delayUntilUnixMs } from "../../shared/time.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647; // setTimeout max (~24.8 days)
@@ -113,7 +113,7 @@ export class EnvelopeScheduler {
       return;
     }
 
-    const delay = delayUntilUtcIso(deliverAt);
+    const delay = delayUntilUnixMs(deliverAt);
     if (delay <= 0) {
       // "First tick after the instant" (best-effort): run on the next event loop tick.
       setImmediate(() => void this.tick("due-now"));

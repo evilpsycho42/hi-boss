@@ -87,7 +87,7 @@ export class Daemon {
   private memoryStore: MemoryStore | null = null;
   private adapters: Map<string, ChatAdapter> = new Map(); // token -> adapter
   private running = false;
-  private startTime: Date | null = null;
+  private startTimeMs: number | null = null;
   private pidLock: PidLock;
   private defaultPermissionPolicy: PermissionPolicyV1 = DEFAULT_PERMISSION_POLICY;
 
@@ -220,7 +220,7 @@ export class Daemon {
    * Create the DaemonContext for RPC handlers.
    */
   private createContext(): DaemonContext {
-    // Important: `running`/`startTime` must reflect live daemon state (daemon.status depends on it).
+    // Important: `running`/`startTimeMs` must reflect live daemon state (daemon.status depends on it).
     const daemon = this;
     return {
       db: this.db,
@@ -233,8 +233,8 @@ export class Daemon {
       get running() {
         return daemon.running;
       },
-      get startTime() {
-        return daemon.startTime;
+      get startTimeMs() {
+        return daemon.startTimeMs;
       },
       resolvePrincipal: (token) => this.resolvePrincipal(token),
       assertOperationAllowed: (op, principal) => this.assertOperationAllowed(op, principal),
@@ -268,7 +268,7 @@ export class Daemon {
 
       // Mark as running early so stop() can clean up partial startups.
       this.running = true;
-      this.startTime = new Date();
+      this.startTimeMs = Date.now();
 
       const daemonMode = (process.env.HIBOSS_DAEMON_MODE ?? "").trim().toLowerCase();
       const examplesMode = daemonMode === "examples";

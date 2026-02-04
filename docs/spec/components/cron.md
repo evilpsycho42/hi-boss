@@ -30,7 +30,7 @@ Important columns:
 - If `timezone` is set, it is interpreted as an **IANA timezone** (e.g., `Asia/Tokyo`).
 - If `timezone` is `NULL`, the schedule uses the daemon host’s **current local timezone** (as returned by `Intl.DateTimeFormat().resolvedOptions().timeZone`).
 
-The materialized envelope always stores `deliver-at` as a **UTC ISO 8601** timestamp (`...Z`).
+The materialized envelope always stores `deliver-at` as a **unix epoch milliseconds (UTC)** timestamp.
 
 ---
 
