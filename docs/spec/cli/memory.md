@@ -31,12 +31,14 @@ Flags:
 
 Output (parseable):
 - `count: <n>`
+- If `count > 0`, prints a blank line
 - then repeated blocks with:
   - `id:` (short id)
   - `category:`
   - `created-at:` (local timezone offset)
-  - `similarity:` (optional)
+  - `similarity:` (optional; `-1.000`..`1.000`, higher is more similar; printed with 3 decimal places)
   - `text-json:`
+- Blocks are separated by a blank line
 
 Default permission:
 - `restricted`
@@ -52,7 +54,9 @@ Flags:
 
 Output (parseable):
 - `count: <n>`
+- If `count > 0`, prints a blank line
 - then repeated blocks (same shape as `memory.search` but without `similarity:`)
+- Blocks are separated by a blank line
 
 Default permission:
 - `restricted`

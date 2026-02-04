@@ -115,7 +115,9 @@ function printMemoryItem(item: {
   console.log(`category: ${item.category}`);
   console.log(`created-at: ${formatUnixMsAsLocalOffset(item.createdAt)}`);
   if (typeof item.similarity === "number") {
-    console.log(`similarity: ${item.similarity}`);
+    const s = Number.isFinite(item.similarity) ? item.similarity : 0;
+    const normalized = Math.abs(s) < 0.0005 ? 0 : s;
+    console.log(`similarity: ${normalized.toFixed(3)}`);
   }
   console.log(`text-json: ${JSON.stringify(item.text)}`);
 }
@@ -155,8 +157,15 @@ export async function memorySearch(options: MemorySearchOptions): Promise<void> 
     });
 
     console.log(`count: ${result.memories.length}`);
-    for (const m of result.memories) {
+    if (result.memories.length > 0) {
+      console.log("");
+    }
+    for (let i = 0; i < result.memories.length; i++) {
+      const m = result.memories[i]!;
       printMemoryItem(m);
+      if (i !== result.memories.length - 1) {
+        console.log("");
+      }
     }
   } catch (err) {
     if (tryPrintAmbiguousIdPrefixError(err)) {
@@ -180,8 +189,15 @@ export async function memoryList(options: MemoryListOptions): Promise<void> {
     });
 
     console.log(`count: ${result.memories.length}`);
-    for (const m of result.memories) {
+    if (result.memories.length > 0) {
+      console.log("");
+    }
+    for (let i = 0; i < result.memories.length; i++) {
+      const m = result.memories[i]!;
       printMemoryItem(m);
+      if (i !== result.memories.length - 1) {
+        console.log("");
+      }
     }
   } catch (err) {
     console.error("error:", (err as Error).message);

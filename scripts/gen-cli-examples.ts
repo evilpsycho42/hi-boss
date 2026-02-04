@@ -107,8 +107,19 @@ async function main(): Promise<void> {
       }),
     });
 
+    writeDoc({
+      filename: "memory_search.DOC.md",
+      title: "hiboss memory search",
+      command: 'hiboss memory search --query "Project X weekly update due Friday 5pm" --limit 2',
+      output: await runOrThrow({
+        homeDir: fixture.homeDir,
+        token: fixture.agentToken,
+        args: ["memory", "search", "--query", "Project X weekly update due Friday 5pm", "--limit", "2"],
+      }),
+    });
+
     console.log("\n---");
-    console.log("Generated 5 CLI output examples");
+    console.log("Generated 6 CLI output examples");
   } finally {
     await handle.stop().catch(() => undefined);
     fixture.cleanup();

@@ -12,6 +12,7 @@ import { SCHEMA_SQL } from "../../src/daemon/db/schema.js";
 import { hashToken } from "../../src/agent/auth.js";
 import { Daemon } from "../../src/daemon/daemon.js";
 import { isSocketAcceptingConnections } from "../../src/daemon/pid-lock.js";
+import { embedTextForExamples } from "../../src/shared/examples-memory-embed.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -357,14 +358,14 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     {
       id: "c3f9b2b1-4b64-4e67-b25f-92a1d3b4c5d6",
       text: "Project X uses Node.js 22.",
-      vector: [1, 0, 0],
+      vector: embedTextForExamples("Project X uses Node.js 22.", dims),
       category: "fact",
       createdAt: String(Date.parse("2026-01-05T12:00:00.000Z")),
     },
     {
       id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
       text: "Weekly update is due every Friday 5pm PT.",
-      vector: [0, 1, 0],
+      vector: embedTextForExamples("Weekly update is due every Friday 5pm PT.", dims),
       category: "process",
       createdAt: String(Date.parse("2026-01-06T09:00:00.000Z")),
     },

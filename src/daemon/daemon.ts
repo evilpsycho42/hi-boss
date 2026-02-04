@@ -185,7 +185,15 @@ export class Daemon {
     }
 
     try {
-      this.memoryService = await MemoryService.create({ dataDir: this.config.dataDir, modelPath });
+      const daemonMode = (process.env.HIBOSS_DAEMON_MODE ?? "").trim().toLowerCase();
+      const examplesMode = daemonMode === "examples";
+      const dims = Number((this.db.getConfig("memory_model_dims") ?? "").trim() || "0");
+      this.memoryService = await MemoryService.create({
+        dataDir: this.config.dataDir,
+        modelPath,
+        mode: examplesMode ? "examples" : "default",
+        dims: examplesMode ? dims : undefined,
+      });
       return this.memoryService;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
