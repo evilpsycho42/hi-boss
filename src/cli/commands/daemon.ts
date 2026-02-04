@@ -106,13 +106,16 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<voi
   if (!fs.existsSync(config.dataDir)) {
     fs.mkdirSync(config.dataDir, { recursive: true });
   }
+  if (!fs.existsSync(config.daemonDir)) {
+    fs.mkdirSync(config.daemonDir, { recursive: true });
+  }
 
   if (await isDaemonRunning(config)) {
     console.log("Daemon is already running");
     return;
   }
 
-  rotateDaemonLogOnStart(config.dataDir);
+  rotateDaemonLogOnStart(config.daemonDir);
 
   // Find the daemon entry script
   // When running with tsx, use .ts files; when running compiled, use .js files
@@ -139,7 +142,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<voi
     process.exit(1);
   }
 
-  const logPath = path.join(config.dataDir, "daemon.log");
+  const logPath = path.join(config.daemonDir, "daemon.log");
   const logFile = fs.openSync(logPath, "a");
 
   let child: ReturnType<typeof spawn>;
@@ -186,7 +189,7 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<voi
  */
 export async function stopDaemon(options: StopDaemonOptions = {}): Promise<void> {
   const config = getDefaultConfig();
-  const pidPath = path.join(config.dataDir, "daemon.pid");
+  const pidPath = path.join(config.daemonDir, "daemon.pid");
 
   try {
     const token = resolveToken(options.token);

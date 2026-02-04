@@ -1,6 +1,6 @@
 # Routing & Envelope Flow
 
-Hi-Boss routes all messages as **envelopes** through the daemon. The daemon owns persistence and delivery guarantees via SQLite (`~/.hiboss/hiboss.db`).
+Hi-Boss routes all messages as **envelopes** through the daemon. The daemon owns persistence and delivery guarantees via SQLite (`~/hiboss/.daemon/hiboss.db`).
 
 Key implementation files:
 
@@ -19,7 +19,7 @@ Key implementation files:
 The daemon owns:
 
 - **DB**: agents, bindings, envelopes, agent run audit
-- **IPC**: local JSON-RPC over `~/.hiboss/daemon.sock` (used by `hiboss` CLI)
+- **IPC**: local JSON-RPC over `~/hiboss/.daemon/daemon.sock` (used by `hiboss` CLI)
 - **Adapters**: e.g. Telegram bots
 - **Routing**: `MessageRouter`
 - **Channel bridge**: `ChannelBridge`

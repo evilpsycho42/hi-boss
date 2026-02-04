@@ -1,6 +1,6 @@
 {
   "name": "hiboss",
-  "version": "1.0.0",
+  "version": "2026.2.4",
   "type": "module",
   "bin": {
     "hiboss": "./dist/bin/hiboss.js"

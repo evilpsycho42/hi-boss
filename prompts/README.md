@@ -37,8 +37,8 @@ Templates are optimized for:
 - Entrypoint: `prompts/system/base.md`
 - Rendered by: `src/agent/instruction-generator.ts`
 - Written to:
-  - `~/.hiboss/agents/<agent-name>/codex_home/AGENTS.md`
-  - `~/.hiboss/agents/<agent-name>/claude_home/CLAUDE.md`
+  - `~/hiboss/agents/<agent-name>/codex_home/AGENTS.md`
+  - `~/hiboss/agents/<agent-name>/claude_home/CLAUDE.md`
 
 Note: system instructions are regenerated when a new session is created (e.g. after `/new` or session refresh policies).
 
@@ -101,10 +101,10 @@ See `prompts/VARIABLES.md` for the authoritative variable catalog per surface.
 
 ## Customization (Hi-Boss Files)
 
-Hi-Boss stores optional agent files under its state directory (default `~/.hiboss`):
+Hi-Boss stores optional agent files under its state directory (default `~/hiboss`):
 
-- `~/.hiboss/BOSS.md` — boss profile placeholder (created empty by setup; not rendered in the minimal system prompt)
-- `~/.hiboss/agents/<agent-name>/SOUL.md` — persona placeholder (created empty; not rendered in the minimal system prompt)
-- `~/.hiboss/agents/<agent-name>/internal_space/MEMORY.md` — auto-injected long-term memory (truncated; default max 36,000 chars; rendered as fenced text when non-empty)
+- `~/hiboss/BOSS.md` — boss profile placeholder (created empty by setup; not rendered in the minimal system prompt)
+- `~/hiboss/agents/<agent-name>/SOUL.md` — persona placeholder (created empty; not rendered in the minimal system prompt)
+- `~/hiboss/agents/<agent-name>/internal_space/MEMORY.md` — auto-injected long-term memory (truncated; default max 36,000 chars; rendered as fenced text when non-empty)
 
 Note: the system prompt is intentionally minimal; most guidance should live in CLI `--help` output and semantic memory.

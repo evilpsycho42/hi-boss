@@ -197,7 +197,10 @@ function evaluatePathExpression(
 
   if (ts.isPropertyAccessExpression(unwrapped)) {
     if (unwrapped.name.text === "dataDir") {
-      return { text: "~/.hiboss", usedDefaultDataDir: true, usedDefaultHiBossDir: false };
+      return { text: "~/hiboss", usedDefaultDataDir: true, usedDefaultHiBossDir: false };
+    }
+    if (unwrapped.name.text === "daemonDir") {
+      return { text: "~/hiboss/.daemon", usedDefaultDataDir: true, usedDefaultHiBossDir: false };
     }
     const raw = unwrapped.getText(sourceFile);
     return { text: makePlaceholder(raw), usedDefaultDataDir: false, usedDefaultHiBossDir: false };
@@ -240,10 +243,10 @@ function evaluatePathExpression(
     if (ts.isIdentifier(callee)) {
       const fn = callee.text;
       if (fn === "getHiBossDir") {
-        return { text: "~/.hiboss", usedDefaultDataDir: false, usedDefaultHiBossDir: true };
+        return { text: "~/hiboss", usedDefaultDataDir: false, usedDefaultHiBossDir: true };
       }
       if (fn === "getSocketPath") {
-        return { text: "~/.hiboss/daemon.sock", usedDefaultDataDir: true, usedDefaultHiBossDir: false };
+        return { text: "~/hiboss/.daemon/daemon.sock", usedDefaultDataDir: true, usedDefaultHiBossDir: false };
       }
       if (fn === "getAgentDir") {
         const agentNameExpr = unwrapped.arguments[0];
@@ -251,7 +254,7 @@ function evaluatePathExpression(
           ? evaluatePathExpression(checker, agentNameExpr, sourceFile, depth + 1, seen)?.text ?? "<agent-name>"
           : "<agent-name>";
         return {
-          text: joinPosix(["~/.hiboss", "agents", agentName]),
+          text: joinPosix(["~/hiboss", "agents", agentName]),
           usedDefaultDataDir: false,
           usedDefaultHiBossDir: true,
         };
@@ -262,7 +265,7 @@ function evaluatePathExpression(
           ? evaluatePathExpression(checker, agentNameExpr, sourceFile, depth + 1, seen)?.text ?? "<agent-name>"
           : "<agent-name>";
         return {
-          text: joinPosix(["~/.hiboss", "agents", agentName, "codex_home"]),
+          text: joinPosix(["~/hiboss", "agents", agentName, "codex_home"]),
           usedDefaultDataDir: false,
           usedDefaultHiBossDir: true,
         };
@@ -273,7 +276,7 @@ function evaluatePathExpression(
           ? evaluatePathExpression(checker, agentNameExpr, sourceFile, depth + 1, seen)?.text ?? "<agent-name>"
           : "<agent-name>";
         return {
-          text: joinPosix(["~/.hiboss", "agents", agentName, "claude_home"]),
+          text: joinPosix(["~/hiboss", "agents", agentName, "claude_home"]),
           usedDefaultDataDir: false,
           usedDefaultHiBossDir: true,
         };
@@ -300,7 +303,7 @@ function evaluatePathExpression(
 
 function isInterestingRuntimePath(p: string): boolean {
   const lower = p.toLowerCase();
-  if (p.startsWith("~/.hiboss")) return true;
+  if (p.startsWith("~/hiboss")) return true;
   if (p.startsWith("~/.codex")) return true;
   if (p.startsWith("~/.claude")) return true;
   if (lower.includes("log_history") || lower.endsWith("/log_history")) return true;
@@ -327,14 +330,15 @@ function describeEnvVar(name: string): string {
 }
 
 function describePath(p: string, usedDefaultDataDir: boolean): string {
-  const dataDirNote = usedDefaultDataDir ? " (under dataDir; default `~/.hiboss`)" : "";
-  if (p === "~/.hiboss") return "Hi-Boss state directory (default)";
-  if (p.startsWith("~/.hiboss/")) {
-    if (p.endsWith("/hiboss.db")) return `SQLite database file${dataDirNote}`;
-    if (p.endsWith("/daemon.sock")) return `IPC socket file${dataDirNote}`;
-    if (p.endsWith("/daemon.pid")) return `daemon PID file${dataDirNote}`;
-    if (p.endsWith("/daemon.log")) return `daemon log file${dataDirNote}`;
-    if (p.endsWith("/log_history")) return `daemon log history directory${dataDirNote}`;
+  const dataDirNote = usedDefaultDataDir ? " (under dataDir; default `~/hiboss`)" : "";
+  if (p === "~/hiboss") return "Hi-Boss state directory (default)";
+  if (p.startsWith("~/hiboss/")) {
+    if (p.endsWith("/.daemon")) return `daemon internal directory${dataDirNote}`;
+    if (p.endsWith("/.daemon/hiboss.db")) return `SQLite database file${dataDirNote}`;
+    if (p.endsWith("/.daemon/daemon.sock")) return `IPC socket file${dataDirNote}`;
+    if (p.endsWith("/.daemon/daemon.pid")) return `daemon PID file${dataDirNote}`;
+    if (p.endsWith("/.daemon/daemon.log")) return `daemon log file${dataDirNote}`;
+    if (p.endsWith("/.daemon/log_history")) return `daemon log history directory${dataDirNote}`;
     if (p.endsWith("/media")) return "Telegram media download directory";
     if (p.includes("/agents/") && p.includes("/codex_home")) return "agent Codex home directory";
     if (p.includes("/agents/") && p.includes("/claude_home")) return "agent Claude home directory";
@@ -666,7 +670,7 @@ function main(): void {
     .sort((a, b) => a.key.localeCompare(b.key));
 
   const pathGroups: Array<{ title: string; predicate: (p: string) => boolean }> = [
-    { title: "`~/.hiboss` (default state dir)", predicate: (p) => p.startsWith("~/.hiboss") },
+    { title: "`~/hiboss` (default state dir)", predicate: (p) => p.startsWith("~/hiboss") },
     { title: "`~/.codex`", predicate: (p) => p.startsWith("~/.codex") },
     { title: "`~/.claude`", predicate: (p) => p.startsWith("~/.claude") },
     { title: "`prompts/` (repo templates)", predicate: (p) => p === "prompts" || p.toLowerCase().includes("/prompts") },

@@ -66,7 +66,7 @@ export class MemoryService {
   private constructor() {}
 
   static async create(params: {
-    dataDir: string;
+    daemonDir: string;
     modelPath: string;
     dims?: number;
     mode?: "default" | "examples";
@@ -84,7 +84,7 @@ export class MemoryService {
         throw new Error("Missing memory model dims (examples mode)");
       }
 
-      const db = await lancedb.connect(path.join(params.dataDir, "memory.lance"));
+      const db = await lancedb.connect(path.join(params.daemonDir, "memory.lance"));
       const service = new MemoryService();
       service.db = db;
       service.embeddingMode = "examples";
@@ -108,7 +108,7 @@ export class MemoryService {
     let embeddingContext: LlamaEmbeddingContext | null = null;
 
     try {
-      db = await lancedb.connect(path.join(params.dataDir, "memory.lance"));
+      db = await lancedb.connect(path.join(params.daemonDir, "memory.lance"));
 
       const llama = await getLlama({ gpu: "auto" });
       model = await llama.loadModel({

@@ -324,11 +324,11 @@ export async function memorySetup(options: MemorySetupOptions): Promise<void> {
     const memory =
       wantsDefault
         ? await resolveAndValidateMemoryModel({
-            hibossDir: config.dataDir,
+            daemonDir: config.daemonDir,
             mode: "default",
           })
         : await resolveAndValidateMemoryModel({
-            hibossDir: config.dataDir,
+            daemonDir: config.daemonDir,
             mode: "local",
             modelPath: path.resolve(process.cwd(), options.modelPath!.trim()),
           });

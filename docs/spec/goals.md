@@ -13,7 +13,7 @@ It aims to support customizable, long-running assistants that can:
 
 - A hosted SaaS (Hi-Boss runs locally).
 - A general-purpose chat application (it routes messages; it does not replace your chat client).
-- Hard multi-tenant security boundaries (protect your local machine and `~/.hiboss`).
+- Hard multi-tenant security boundaries (protect your local machine and `~/hiboss`).
 - A workflow engine or scheduler for arbitrary jobs (scheduling is for envelope delivery).
 
 ## Principles

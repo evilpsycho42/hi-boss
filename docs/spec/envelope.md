@@ -6,7 +6,7 @@ An **envelope** is Hi-Boss’s internal message record. Every message between:
 - an **agent** and another **agent**, or
 - an **agent** and a **channel**
 
-is represented as an envelope stored in SQLite (`~/.hiboss/hiboss.db`, table: `envelopes`).
+is represented as an envelope stored in SQLite (`~/hiboss/.daemon/hiboss.db`, table: `envelopes`).
 
 ---
 

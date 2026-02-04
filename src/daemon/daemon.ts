@@ -16,7 +16,8 @@ import type { RpcMethodRegistry } from "./ipc/types.js";
 import { RPC_ERRORS } from "./ipc/types.js";
 import type { ChatAdapter } from "../adapters/types.js";
 import { TelegramAdapter } from "../adapters/telegram.adapter.js";
-import { DEFAULT_AGENT_PERMISSION_LEVEL, getDefaultHiBossDir } from "../shared/defaults.js";
+import { DEFAULT_AGENT_PERMISSION_LEVEL } from "../shared/defaults.js";
+import { getHiBossPaths } from "../shared/hiboss-paths.js";
 import {
   DEFAULT_PERMISSION_POLICY,
   type PermissionLevel,
@@ -50,7 +51,18 @@ export { isDaemonRunning, isSocketAcceptingConnections };
  * Hi-Boss daemon configuration.
  */
 export interface DaemonConfig {
+  /**
+   * Hi-Boss root directory (user-facing).
+   *
+   * Default: `~/hiboss` (override via `HIBOSS_DIR`).
+   */
   dataDir: string;
+  /**
+   * Internal daemon directory (hidden).
+   *
+   * Default: `{{dataDir}}/.daemon`.
+   */
+  daemonDir: string;
   boss?: {
     telegram?: string;
   };
@@ -60,8 +72,10 @@ export interface DaemonConfig {
  * Default configuration paths.
  */
 export function getDefaultConfig(): DaemonConfig {
+  const paths = getHiBossPaths();
   return {
-    dataDir: getDefaultHiBossDir(),
+    dataDir: paths.rootDir,
+    daemonDir: paths.daemonDir,
   };
 }
 
@@ -69,7 +83,7 @@ export function getDefaultConfig(): DaemonConfig {
  * Get socket path for IPC client.
  */
 export function getSocketPath(config: DaemonConfig = getDefaultConfig()): string {
-  return path.join(config.dataDir, "daemon.sock");
+  return path.join(config.daemonDir, "daemon.sock");
 }
 
 /**
@@ -92,10 +106,10 @@ export class Daemon {
   private defaultPermissionPolicy: PermissionPolicyV1 = DEFAULT_PERMISSION_POLICY;
 
   constructor(private config: DaemonConfig = getDefaultConfig()) {
-    const dbPath = path.join(config.dataDir, "hiboss.db");
-    const socketPath = path.join(config.dataDir, "daemon.sock");
+    const dbPath = path.join(config.daemonDir, "hiboss.db");
+    const socketPath = path.join(config.daemonDir, "daemon.sock");
 
-    this.pidLock = new PidLock({ dataDir: config.dataDir });
+    this.pidLock = new PidLock({ daemonDir: config.daemonDir });
 
     this.db = new HiBossDatabase(dbPath);
     this.ipc = new IpcServer(socketPath);
@@ -189,7 +203,7 @@ export class Daemon {
       const examplesMode = daemonMode === "examples";
       const dims = Number((this.db.getConfig("memory_model_dims") ?? "").trim() || "0");
       this.memoryService = await MemoryService.create({
-        dataDir: this.config.dataDir,
+        daemonDir: this.config.daemonDir,
         modelPath,
         mode: examplesMode ? "examples" : "default",
         dims: examplesMode ? dims : undefined,
@@ -215,7 +229,7 @@ export class Daemon {
     }
 
     try {
-      this.memoryStore = await MemoryStore.create({ dataDir: this.config.dataDir });
+      this.memoryStore = await MemoryStore.create({ daemonDir: this.config.daemonDir });
       return this.memoryStore;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

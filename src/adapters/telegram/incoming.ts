@@ -81,7 +81,7 @@ function getUniqueFilePath(dir: string, filename: string): string {
 /**
  * Download Telegram file and store locally.
  *
- * Downloads the file to ~/.hiboss/media/ using the original filename when
+ * Downloads the file to ~/hiboss/media/ using the original filename when
  * available, with incremental suffix for duplicates. The original file_id
  * is preserved for efficient re-sending via Telegram API.
  */
@@ -187,4 +187,3 @@ export async function buildTelegramChannelMessage(params: {
     raw: telegramMsg,
   };
 }
-

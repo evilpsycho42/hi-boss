@@ -37,7 +37,8 @@ export async function runInteractiveSetup(): Promise<void> {
   }
   if (isComplete) {
     console.log("✅ Setup is already complete!");
-    console.log("\nTo start over: hiboss daemon stop && rm -rf ~/.hiboss && hiboss setup\n");
+    console.log("\nTo start over: hiboss daemon stop && rm -rf ~/hiboss && hiboss setup\n");
+    console.log("(Advanced: override the Hi-Boss dir with HIBOSS_DIR.)\n");
     return;
   }
 
@@ -244,7 +245,7 @@ export async function runInteractiveSetup(): Promise<void> {
   if (memoryMode === "default") {
     console.log("\nDownloading and validating the default embedding model...\n");
     memory = await resolveAndValidateMemoryModel({
-      hibossDir: daemonConfig.dataDir,
+      daemonDir: daemonConfig.daemonDir,
       mode: "default",
     });
   } else {
@@ -262,7 +263,7 @@ export async function runInteractiveSetup(): Promise<void> {
 
     console.log("\nValidating local embedding model...\n");
     memory = await resolveAndValidateMemoryModel({
-      hibossDir: daemonConfig.dataDir,
+      daemonDir: daemonConfig.daemonDir,
       mode: "local",
       modelPath,
     });

@@ -1,50 +1,128 @@
 # Hi-Boss
 
-Hi-Boss is a local daemon + `hiboss` CLI for routing messages (“envelopes”) between your agents and chat channels (e.g., Telegram), so autonomous assistants can work for you 24x7.
+在 Telegram 上指挥基于 Codex / Claude Code 的 agents——它们不止会帮你做事，也会彼此协作。
+
+Highlights:
+- 基于底层 provider（Codex / Claude Code）执行 → 追求最好可用的真实执行效果
+- agent↔human、agent↔agent 的“收发件箱”式通信（Telegram 等 adapters ↔ 本地 daemon ↔ agents）
+- 支持延时投递与 cron 调度任务（durable、可追溯）
+
+## Providers: Claude Code + Codex
+
+Hi-Boss runs agent turns through the unified agent SDK with either:
+
+- **Claude Code (Anthropic)** via `@anthropic-ai/claude-agent-sdk`
+- **Codex (OpenAI)** via `@openai/codex-sdk`
+
+When you run `hiboss setup` / `hiboss agent register`, Hi-Boss imports your provider auth/settings from `~/.claude/` or `~/.codex/`.
+
+You can also override the import source home:
+- Setup: via the interactive wizard, or `hiboss setup --config-file <path>` (`provider-source-home`)
+- Agents: `hiboss agent register|set --provider-source-home <path>`
 
 ## Install
 
+Via npm (coming soon):
+
 ```bash
 npm i -g hiboss
+```
+
+Dev/from source: see `docs/index.md` and `docs/guide/quickstart.md`.
+
+## Setup
+
+1) Run the interactive setup wizard:
+
+```bash
 hiboss setup
-# Save the printed boss-token and agent-token (they are only shown once)
+```
+
+Setup:
+- initializes local state (SQLite + per-agent homes)
+- prompts for your boss name and timezone
+- creates your first agent
+- configures a Telegram bot + boss Telegram username for that first agent
+- prints `boss-token:` and `agent-token:` **once** (save them somewhere safe)
+
+2) Start the daemon:
+
+```bash
 hiboss daemon start --token <boss-token>
 ```
 
-## Quickstart
+Stop the daemon:
 
 ```bash
-# Send a message to an agent (use the agent token printed by setup/register)
-hiboss envelope send --to agent:<agent-name> --token <agent-token> --text "hello"
-
-# List pending messages from an address (ACKs what it returns)
-hiboss envelope list --token <agent-token> --from <address> --status pending -n 10
+hiboss daemon stop --token <boss-token>
 ```
+
+Tip: most commands accept `--token <token>` or read `HIBOSS_TOKEN` when `--token` is omitted.
+
+## Telegram
+
+Hi-Boss connects an agent to Telegram via a bot.
+
+1) Create a Telegram bot token via @BotFather.
+
+2) Bind the bot to an agent (the first agent is bound during `hiboss setup`; use this for additional agents):
+
+```bash
+hiboss agent set --token <boss-token> --name <agent-name> --bind-adapter-type telegram --bind-adapter-token <telegram-bot-token>
+```
+
+3) Talk to your agent by messaging the bot in Telegram.
+
+Boss-only Telegram commands:
+- `/status` — show `hiboss agent status` for the bound agent
+- `/new` — request a session refresh for the bound agent
+
+## Agents (create / set / remove)
+
+Create/register a new agent:
+
+```bash
+hiboss agent register --token <boss-token> --name nex --description "AI assistant" --workspace "$PWD"
+```
+
+Update an agent:
+
+```bash
+hiboss agent set --token <boss-token> --name nex --provider codex --auto-level medium --permission-level privileged
+```
+
+Remove an agent:
+
+```bash
+hiboss agent delete --token <boss-token> --name nex
+```
+
+List / status:
+
+```bash
+hiboss agent list --token <boss-token>
+hiboss agent status --token <boss-token> --name nex
+```
+
+## Boss permission level (let an agent administer Hi-Boss)
+
+Hi-Boss separates:
+- **Boss-marked messages** (`fromBoss` / `[boss]` in prompts) — this is adapter identity (e.g., your Telegram username), and
+- **Authorization** (`permission-level`) — what a token is allowed to do via CLI/RPC.
+
+If you want an agent to be able to do all Hi-Boss admin operations just by chatting with it (register agents, rebind adapters, etc.), you can grant it `permission-level: boss`:
+
+```bash
+hiboss agent set --token <boss-token> --name <agent-name> --permission-level boss
+```
+
+This is powerful: a boss-level agent token can perform any boss-privileged CLI operations. Only do this for an agent you fully trust.
 
 ## Memory
 
-Hi-Boss provides two persistence mechanisms: **semantic memory** and **internal space**.
+Each agent has a long-term memory file at:
 
-### Semantic memory (vector search)
-
-Semantic memory is stored in LanceDB at:
-
-- `~/.hiboss/memory.lance/`
-
-Manage it via:
-
-- `hiboss memory add/search/list/categories/get/delete/delete-category/clear`
-- `hiboss memory setup --default` (download default embedding model)
-- `hiboss memory setup --model-path <absolute-path-to-gguf>`
-
-### Internal space (private files)
-
-Each agent has a private working directory that is added to the agent’s workspace:
-
-- `~/.hiboss/agents/<agent-name>/internal_space/`
-
-Special file:
-- `MEMORY.md` — auto-injected long-term memory file (truncated).
+- `~/hiboss/agents/<agent-name>/internal_space/MEMORY.md` (or `{{HIBOSS_DIR}}/agents/<agent-name>/internal_space/MEMORY.md` when overridden)
 
 ## Docs
 

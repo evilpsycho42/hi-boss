@@ -29,7 +29,7 @@ const program = new Command();
 program
   .name("hiboss")
   .description("Hi-Boss: Agent-to-agent and agent-to-human communication daemon")
-  .version("1.0.0");
+  .version("2026.2.4");
 program.helpCommand(false);
 
 // Daemon commands

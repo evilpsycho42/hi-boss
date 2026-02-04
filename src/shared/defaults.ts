@@ -4,7 +4,8 @@ import type { PermissionPolicyV1 } from "./permissions.js";
 
 // ==================== Hi-Boss Paths ====================
 
-export const DEFAULT_HIBOSS_DIRNAME = ".hiboss";
+export const DEFAULT_HIBOSS_DIRNAME = "hiboss";
+export const DEFAULT_DAEMON_DIRNAME = ".daemon";
 export const DEFAULT_DB_FILENAME = "hiboss.db";
 export const DEFAULT_SOCKET_FILENAME = "daemon.sock";
 export const DEFAULT_PID_FILENAME = "daemon.pid";
@@ -21,7 +22,7 @@ export function getDefaultMediaDir(): string {
 }
 
 export function getDefaultModelsDir(): string {
-  return path.join(getDefaultHiBossDir(), DEFAULT_MODELS_DIRNAME);
+  return path.join(getDefaultHiBossDir(), DEFAULT_DAEMON_DIRNAME, DEFAULT_MODELS_DIRNAME);
 }
 
 // ==================== Memory Defaults ====================

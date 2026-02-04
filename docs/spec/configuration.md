@@ -6,8 +6,8 @@ Hi-Boss configuration comes from four places:
 
 1. **CLI flags** (`hiboss ... --flag`)
 2. **Environment variables** (`HIBOSS_TOKEN`, …)
-3. **SQLite state** in `~/.hiboss/hiboss.db` (tables: `config`, `agents`, `agent_bindings`, `envelopes`, …)
-4. **Per-agent provider homes** under `~/.hiboss/agents/<agent-name>/` (Codex/Claude settings + session state)
+3. **SQLite state** in `~/hiboss/.daemon/hiboss.db` (tables: `config`, `agents`, `agent_bindings`, `envelopes`, …)
+4. **Per-agent provider homes** under `~/hiboss/agents/<agent-name>/` (Codex/Claude settings + session state)
 
 ## Defaults
 
@@ -21,26 +21,29 @@ Built-in (code) defaults are centralized in:
 
 By default Hi-Boss stores all state under:
 
-- `~/.hiboss/`
+- `~/hiboss/` (override via `HIBOSS_DIR`)
 
 Contents (common):
 
-- `~/.hiboss/hiboss.db` — SQLite database (agents, bindings, envelopes, runs, config)
-- `~/.hiboss/memory.lance/` — LanceDB storage for semantic memory (created when memory is enabled)
-- `~/.hiboss/models/` — downloaded embedding models (used by semantic memory when configured in default mode)
-- `~/.hiboss/daemon.sock` — local IPC socket used by the `hiboss` CLI
-- `~/.hiboss/daemon.lock` — daemon single-instance lock file
-- `~/.hiboss/daemon.pid` — daemon PID file (informational; not used for locking)
-- `~/.hiboss/daemon.log` — daemon stdout/stderr log (when started via `hiboss daemon start`; rotated on each start)
-- `~/.hiboss/log_history/` — archived `daemon.log` files from prior starts (timestamped)
-- `~/.hiboss/BOSS.md` — boss profile placeholder (created empty by setup; not rendered in the minimal system prompt)
-- `~/.hiboss/media/` — Telegram downloads (attachments are saved here for agents to read)
-- `~/.hiboss/agents/<agent-name>/SOUL.md` — persona placeholder (created empty by setup/registration; not rendered in the minimal system prompt)
-- `~/.hiboss/agents/<agent-name>/internal_space/MEMORY.md` — per-agent long-term memory auto-injected into system instructions (may be truncated; default max 36,000 chars)
-- `~/.hiboss/agents/<agent-name>/codex_home/` — provider home for Codex (used as `CODEX_HOME`; includes `skills/`)
-- `~/.hiboss/agents/<agent-name>/claude_home/` — provider home for Claude Code (used as `CLAUDE_CONFIG_DIR`; includes `skills/`)
+- `~/hiboss/BOSS.md` — boss profile placeholder (created empty by setup; not rendered in the minimal system prompt)
+- `~/hiboss/media/` — Telegram downloads (attachments are saved here for agents to read)
+- `~/hiboss/agents/<agent-name>/SOUL.md` — persona placeholder (created empty by setup/registration; not rendered in the minimal system prompt)
+- `~/hiboss/agents/<agent-name>/internal_space/MEMORY.md` — per-agent long-term memory auto-injected into system instructions (may be truncated; default max 36,000 chars)
+- `~/hiboss/agents/<agent-name>/codex_home/` — provider home for Codex (used as `CODEX_HOME`; includes `skills/`)
+- `~/hiboss/agents/<agent-name>/claude_home/` — provider home for Claude Code (used as `CLAUDE_CONFIG_DIR`; includes `skills/`)
 
-Note: the CLI currently always uses the default location (there is no `--data-dir` flag).
+Internal (do not touch):
+
+- `~/hiboss/.daemon/hiboss.db` — SQLite database (agents, bindings, envelopes, runs, config)
+- `~/hiboss/.daemon/memory.lance/` — LanceDB storage for semantic memory (created when memory is enabled)
+- `~/hiboss/.daemon/models/` — downloaded embedding models (used by semantic memory when configured in default mode)
+- `~/hiboss/.daemon/daemon.sock` — local IPC socket used by the `hiboss` CLI
+- `~/hiboss/.daemon/daemon.lock` — daemon single-instance lock file
+- `~/hiboss/.daemon/daemon.pid` — daemon PID file (informational; not used for locking)
+- `~/hiboss/.daemon/daemon.log` — daemon stdout/stderr log (when started via `hiboss daemon start`; rotated on each start)
+- `~/hiboss/.daemon/log_history/` — archived `daemon.log` files from prior starts (timestamped)
+
+Note: there is no `--data-dir` flag; override the default root via `HIBOSS_DIR`.
 
 ---
 
@@ -62,6 +65,15 @@ Example:
 export HIBOSS_TOKEN="<agent-token>"
 hiboss envelope list --from channel:telegram:<chat-id> --status pending
 ```
+
+### `HIBOSS_DIR`
+
+Override the Hi-Boss root directory (default: `~/hiboss`).
+
+Notes:
+- Must be an absolute path, or start with `~`.
+- The daemon stores internal files under `{{HIBOSS_DIR}}/.daemon/`.
+- Useful for advanced setups (multiple Hi-Boss instances), or keeping the Hi-Boss root in an alternate location (including a dot-folder like `~/.hiboss`) **after** migrating to the `.daemon/` layout.
 
 ---
 
@@ -95,7 +107,7 @@ The setup config JSON fields are persisted as:
 
 All persisted settings are stored in:
 
-- `~/.hiboss/hiboss.db`
+- `~/hiboss/.daemon/hiboss.db` (or `{{HIBOSS_DIR}}/.daemon/hiboss.db` when overridden)
 
 ### `config` table
 
@@ -232,7 +244,7 @@ Some settings exist in the database/schema but do not yet have dedicated CLI set
 
 - Updating `boss_name`, `default_provider`, `adapter_boss_id_<type>` after setup
 - Editing `config.permission_policy`
-- Changing the default data directory from `~/.hiboss/`
+- Changing the default data directory from `~/hiboss/` (override via `HIBOSS_DIR`)
 
 Today, changing those requires a reset + re-setup, or direct DB edits.
 

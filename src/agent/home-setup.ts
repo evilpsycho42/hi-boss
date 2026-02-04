@@ -2,15 +2,15 @@
  * Home directory setup for agent providers.
  *
  * Creates isolated home directories for each agent with provider-specific configs:
- * - ~/.hiboss/agents/{name}/codex_home/  - CODEX_HOME with config.toml
- * - ~/.hiboss/agents/{name}/claude_home/ - CLAUDE_CONFIG_DIR with settings.json
+ * - ~/hiboss/agents/{name}/codex_home/  - CODEX_HOME with config.toml
+ * - ~/hiboss/agents/{name}/claude_home/ - CLAUDE_CONFIG_DIR with settings.json
  */
 
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 import { assertValidAgentName } from "../shared/validation.js";
-import { getDefaultHiBossDir } from "../shared/defaults.js";
+import { getHiBossRootDir } from "../shared/hiboss-paths.js";
 import { ensureAgentInternalSpaceLayout } from "../shared/internal-space.js";
 
 export interface SetupAgentHomeOptions {
@@ -22,7 +22,7 @@ export interface SetupAgentHomeOptions {
  * Get the default hi-boss directory path.
  */
 export function getHiBossDir(): string {
-  return getDefaultHiBossDir();
+  return getHiBossRootDir();
 }
 
 /**
@@ -122,7 +122,7 @@ function resolveProviderSourceHome(options: SetupAgentHomeOptions): string | und
  * behavior of importing configs for both providers from their default homes.
  *
  * @param agentName - The agent's name
- * @param hibossDir - Optional custom hiboss directory (defaults to ~/.hiboss)
+ * @param hibossDir - Optional custom hiboss directory (defaults to ~/hiboss; override via HIBOSS_DIR)
  * @param options - Optional provider import settings
  */
 export async function setupAgentHome(

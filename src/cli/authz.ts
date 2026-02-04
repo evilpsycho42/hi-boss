@@ -16,7 +16,7 @@ export type Principal =
 
 export function authorizeCliOperation(operation: string, token: string): Principal {
   const config = getDefaultConfig();
-  const dbPath = path.join(config.dataDir, "hiboss.db");
+  const dbPath = path.join(config.daemonDir, "hiboss.db");
   const db = new HiBossDatabase(dbPath);
 
   try {

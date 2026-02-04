@@ -13,7 +13,7 @@ Notes:
 
 | Variable | Type | Meaning |
 |---------|------|---------|
-| `hiboss.dir` | string | Hi-Boss state directory (default `~/.hiboss`) |
+| `hiboss.dir` | string | Hi-Boss state directory (default `~/hiboss`) |
 | `hiboss.tokenEnvVar` | string | Environment variable name for the agent token (`HIBOSS_TOKEN`) |
 | `hiboss.additionalContext` | string | Optional extra context appended by code (usually empty) |
 | `hiboss.files.boss` | string | Contents of `{{hiboss.dir}}/BOSS.md` (or empty; legacy, not rendered in minimal system prompt) |

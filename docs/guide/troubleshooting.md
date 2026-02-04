@@ -21,13 +21,42 @@ hiboss agent list --token <boss-token>
 
 | Item | Path |
 |------|------|
-| Daemon log | `~/.hiboss/daemon.log` |
-| Archived daemon logs | `~/.hiboss/log_history/` |
+| Daemon log | `~/hiboss/.daemon/daemon.log` |
+| Archived daemon logs | `~/hiboss/.daemon/log_history/` |
+
+## Migrating from legacy `~/.hiboss`
+
+Older versions used `~/.hiboss/` with internal files directly in that directory.
+
+New versions use `~/hiboss/` with internal files under `~/hiboss/.daemon/`.
+
+Migration (preserve state):
+
+```bash
+# Stop the daemon first (use the boss token you saved)
+hiboss daemon stop --token <boss-token>
+
+# Move the old root into the new root location
+mv ~/.hiboss ~/hiboss
+
+# Create the new internal directory and move internal state into it
+mkdir -p ~/hiboss/.daemon
+mv ~/hiboss/hiboss.db* ~/hiboss/.daemon/
+mv ~/hiboss/daemon.* ~/hiboss/.daemon/
+mv ~/hiboss/log_history ~/hiboss/.daemon/ || true
+mv ~/hiboss/models ~/hiboss/.daemon/ || true
+mv ~/hiboss/memory.lance ~/hiboss/.daemon/ || true
+
+# Start again
+hiboss daemon start --token <boss-token>
+```
 
 Full reset (wipes local state):
 
 ```bash
 hiboss daemon stop --token <boss-token>
-rm -rf ~/.hiboss
+rm -rf ~/hiboss
 hiboss setup
 ```
+
+Advanced: if you set `HIBOSS_DIR`, reset that directory instead.

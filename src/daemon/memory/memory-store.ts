@@ -28,9 +28,9 @@ export class MemoryStore {
 
   private constructor() {}
 
-  static async create(params: { dataDir: string }): Promise<MemoryStore> {
+  static async create(params: { daemonDir: string }): Promise<MemoryStore> {
     const store = new MemoryStore();
-    store.db = await lancedb.connect(path.join(params.dataDir, "memory.lance"));
+    store.db = await lancedb.connect(path.join(params.daemonDir, "memory.lance"));
     return store;
   }
 

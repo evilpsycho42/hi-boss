@@ -7,8 +7,8 @@ This document specifies `hiboss daemon ...`.
 Starts the local daemon process in the background.
 
 Log behavior:
-- If `~/.hiboss/daemon.log` exists and is non-empty, it is moved to `~/.hiboss/log_history/` with a timestamped suffix.
-- A new empty `~/.hiboss/daemon.log` is created for the new daemon process.
+- If `~/hiboss/.daemon/daemon.log` exists and is non-empty, it is moved to `~/hiboss/.daemon/log_history/` with a timestamped suffix.
+- A new empty `~/hiboss/.daemon/daemon.log` is created for the new daemon process.
 
 Flags:
 - `--debug`: Include debug-only fields in `daemon.log` (IDs + token usage).
@@ -44,8 +44,9 @@ Shows daemon status as parseable keys:
 - `data-dir: <path>`
 
 Meaning of `data-dir`:
-- The daemon’s state directory (where it stores `hiboss.db`, `memory.lance/`, `models/`, `daemon.sock`, `daemon.lock`, `daemon.pid` (informational), `daemon.log`, `media/`, and per-agent homes).
-- In the current implementation this is always the default `~/.hiboss/` (there is no `--data-dir` flag).
+- The daemon’s root directory (default `~/hiboss/`, override via `HIBOSS_DIR`).
+- Internal daemon files are stored under `{{data-dir}}/.daemon/` (DB/socket/logs/models/memory).
+- User-facing files are stored under `{{data-dir}}/` (agents, media, BOSS.md).
 
 Default permission:
 - `boss`

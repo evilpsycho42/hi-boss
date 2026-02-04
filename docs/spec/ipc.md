@@ -13,7 +13,7 @@ Key files:
 
 ## Transport
 
-- Socket path: `~/.hiboss/daemon.sock` (under the data dir)
+- Socket path: `~/hiboss/.daemon/daemon.sock` (or `{{HIBOSS_DIR}}/.daemon/daemon.sock` when overridden)
 - Protocol: JSON-RPC 2.0
 
 ---

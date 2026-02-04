@@ -214,7 +214,7 @@ export class HiBossDatabase {
       if (info.length === 0) {
         throw new Error(
           `Unsupported database schema: missing table ${table}. ` +
-            `Reset your local state by deleting ~/.hiboss.`
+            `Reset your local state by deleting your Hi-Boss directory (default ~/hiboss; override via $HIBOSS_DIR).`
         );
       }
       const names = new Set(info.map((c) => c.name));
@@ -222,7 +222,7 @@ export class HiBossDatabase {
         if (!names.has(col)) {
           throw new Error(
             `Unsupported database schema: missing ${table}.${col}. ` +
-              `Reset your local state by deleting ~/.hiboss.`
+              `Reset your local state by deleting your Hi-Boss directory (default ~/hiboss; override via $HIBOSS_DIR).`
           );
         }
       }
@@ -241,7 +241,7 @@ export class HiBossDatabase {
       if (!isInteger) {
         throw new Error(
           `Unsupported database schema: expected ${spec.table}.${spec.column} to be INTEGER (unix-ms), got '${col.type}'. ` +
-            `Reset your local state by deleting ~/.hiboss.`
+            `Reset your local state by deleting your Hi-Boss directory (default ~/hiboss; override via $HIBOSS_DIR).`
         );
       }
     }

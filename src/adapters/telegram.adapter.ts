@@ -7,7 +7,7 @@ import type {
   ChannelCommand,
   SendMessageOptions,
 } from "./types.js";
-import { getDefaultMediaDir } from "../shared/defaults.js";
+import { getHiBossPaths } from "../shared/hiboss-paths.js";
 import { parseTelegramMessageId } from "../shared/telegram-message-id.js";
 import { buildTelegramChannelMessage, type MessageContext } from "./telegram/incoming.js";
 import { sendTelegramMessage } from "./telegram/outgoing.js";
@@ -39,7 +39,7 @@ export class TelegramAdapter implements ChatAdapter {
 
   constructor(token: string) {
     this.bot = new Telegraf(token);
-    this.mediaDir = getDefaultMediaDir();
+    this.mediaDir = getHiBossPaths().mediaDir;
     this.setupListeners();
   }
 

@@ -89,7 +89,7 @@ Output (parseable):
 
 Deletes an agent.
 
-This removes the agent record, its bindings, its cron schedules, and its home directory under `~/.hiboss/agents/<agent-name>/`. It does **not** delete historical envelopes or agent runs (audit log).
+This removes the agent record, its bindings, its cron schedules, and its home directory under `~/hiboss/agents/<agent-name>/` (or `{{HIBOSS_DIR}}/agents/<agent-name>/` when overridden). It does **not** delete historical envelopes or agent runs (audit log).
 
 Flags:
 - `--name <name>` (required)

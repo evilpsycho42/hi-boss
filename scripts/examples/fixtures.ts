@@ -39,10 +39,11 @@ export async function startExamplesDaemon(hibossDir: string): Promise<ExamplesDa
   const prev = process.env.HIBOSS_DAEMON_MODE;
   process.env.HIBOSS_DAEMON_MODE = "examples";
 
-  const daemon = new Daemon({ dataDir: hibossDir });
+  const daemonDir = path.join(hibossDir, ".daemon");
+  const daemon = new Daemon({ dataDir: hibossDir, daemonDir });
   await daemon.start();
 
-  const socketPath = path.join(hibossDir, "daemon.sock");
+  const socketPath = path.join(daemonDir, "daemon.sock");
   const deadline = Date.now() + 5_000;
   let ok = false;
   while (Date.now() < deadline) {
@@ -108,8 +109,9 @@ export function runHibossCli(params: {
 
 export async function createExampleFixture(): Promise<ExampleFixture> {
   const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), "hiboss-examples-"));
-  const hibossDir = path.join(homeDir, ".hiboss");
-  fs.mkdirSync(hibossDir, { recursive: true });
+  const hibossDir = path.join(homeDir, "hiboss");
+  const daemonDir = path.join(hibossDir, ".daemon");
+  fs.mkdirSync(daemonDir, { recursive: true });
 
   const bossToken = "boss_example_token_for_docs";
   const agentToken = "agt_example_token_for_docs";
@@ -137,13 +139,13 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
   );
 
   // Memory model stub file: the daemon checks model-path is set; we avoid loading it in examples.
-  const modelsDir = path.join(hibossDir, "models");
+  const modelsDir = path.join(daemonDir, "models");
   fs.mkdirSync(modelsDir, { recursive: true });
   const modelPath = path.join(modelsDir, "example.gguf");
   fs.writeFileSync(modelPath, "", "utf-8");
 
   // Seed SQLite
-  const dbPath = path.join(hibossDir, "hiboss.db");
+  const dbPath = path.join(daemonDir, "hiboss.db");
   const db = new Database(dbPath);
   db.exec(SCHEMA_SQL);
 
@@ -416,7 +418,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     new Field("category", new Utf8(), false),
     new Field("createdAt", new Utf8(), false),
   ]);
-  const mem = await lancedb.connect(path.join(hibossDir, "memory.lance"));
+  const mem = await lancedb.connect(path.join(daemonDir, "memory.lance"));
   const tableName = "memories__nex";
   const names = await mem.tableNames();
   if (!names.includes(tableName)) {

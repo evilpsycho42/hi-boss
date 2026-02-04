@@ -53,7 +53,7 @@ async function main(): Promise<void> {
   }
 
   const fixture = await createExampleFixture();
-  const db = new HiBossDatabase(path.join(fixture.hibossDir, "hiboss.db"));
+  const db = new HiBossDatabase(path.join(fixture.hibossDir, ".daemon", "hiboss.db"));
 
   try {
     const agent = db.getAgentByName("nex");

@@ -3,7 +3,7 @@
 This folder contains stable `hiboss setup --config-file ...` config templates + a repeatable manual test flow for verifying that agents can send envelopes at the supported `auto-level` settings (`medium` and `high`).
 
 Notes:
-- `auto-level: low` is no longer supported because it can block access to the local Hi-Boss IPC socket (`~/.hiboss/daemon.sock`), preventing agents from using `hiboss envelope send`.
+- `auto-level: low` is no longer supported because it can block access to the local Hi-Boss IPC socket (`~/hiboss/.daemon/daemon.sock`), preventing agents from using `hiboss envelope send`.
 - This test makes **real** provider calls (costs money). Ensure your local Codex/Claude credentials are configured.
 
 ## Reset + setup (from scratch)
@@ -15,7 +15,7 @@ npm i
 npm run build && npm link
 ```
 
-1) Stop the daemon (must be done **before** deleting `~/.hiboss`):
+1) Stop the daemon (must be done **before** deleting `~/hiboss`):
 
 ```bash
 hiboss daemon stop --token "<boss-token>" || true
@@ -24,7 +24,7 @@ hiboss daemon stop --token "<boss-token>" || true
 2) Delete all Hi-Boss state:
 
 ```bash
-rm -rf ~/.hiboss
+rm -rf ~/hiboss
 ```
 
 3) Run setup using one of the templates:
@@ -61,7 +61,7 @@ Save the printed `token:` values — there is no “show token” command.
 
 ## Optional: test both providers in one run
 
-If you want to validate **both** providers (Codex + Claude) against the Hi-Boss envelope system in the same `~/.hiboss` instance:
+If you want to validate **both** providers (Codex + Claude) against the Hi-Boss envelope system in the same `~/hiboss` instance:
 
 1) Run setup with the Codex template (creates `test-high` as Codex/high).
 2) Register Claude agents:

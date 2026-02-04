@@ -11,10 +11,10 @@ See also:
 Runs the interactive first-time setup wizard (default).
 
 Behavior:
-- Initializes the SQLite database at `~/.hiboss/hiboss.db` (WAL sidecars like `hiboss.db-wal` / `hiboss.db-shm` may appear)
-- Creates the agent home directories under `~/.hiboss/agents/<agent-name>/`
-- Creates an empty `~/.hiboss/BOSS.md` placeholder (best-effort; not rendered in minimal system prompt)
-- Creates an empty `~/.hiboss/agents/<agent-name>/SOUL.md` placeholder (best-effort)
+- Initializes the SQLite database at `~/hiboss/.daemon/hiboss.db` (WAL sidecars like `hiboss.db-wal` / `hiboss.db-shm` may appear)
+- Creates the agent home directories under `~/hiboss/agents/<agent-name>/`
+- Creates an empty `~/hiboss/BOSS.md` placeholder (best-effort; not rendered in minimal system prompt)
+- Creates an empty `~/hiboss/agents/<agent-name>/SOUL.md` placeholder (best-effort)
 - Imports provider config files for the chosen provider into the agent’s provider home
 - Creates the first agent and prints `agent-token:` once (no “show token” command)
 - Prints `boss-token:` once

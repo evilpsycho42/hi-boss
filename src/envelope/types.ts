@@ -4,7 +4,7 @@ import type { Address } from "../adapters/types.js";
  * Attachment format for envelopes.
  */
 export interface EnvelopeAttachment {
-  source: string;           // Local file path (for Telegram media, downloaded to ~/.hiboss/media/)
+  source: string;           // Local file path (for Telegram media, downloaded to ~/hiboss/media/)
   filename?: string;        // Helps with type detection and display
   telegramFileId?: string;  // Preserved for efficient re-sending via Telegram API
 }

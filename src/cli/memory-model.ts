@@ -56,27 +56,27 @@ async function validateEmbeddingModel(modelPath: string): Promise<number> {
 }
 
 export async function resolveAndValidateMemoryModel(params: {
-  hibossDir: string;
+  daemonDir: string;
   mode: MemoryModelMode;
   modelPath?: string;
 }): Promise<ResolvedMemoryModelConfig> {
-  const hibossDir = params.hibossDir.trim();
+  const daemonDir = params.daemonDir.trim();
   const mode = params.mode;
 
-  if (!hibossDir) {
+  if (!daemonDir) {
     return {
       enabled: false,
       mode,
       modelPath: "",
       modelUri: "",
       dims: 0,
-      lastError: "Invalid hibossDir",
+      lastError: "Invalid daemonDir",
     };
   }
 
   if (mode === "default") {
     const modelUri = DEFAULT_MEMORY_MODEL_URL;
-    const modelsDir = path.join(hibossDir, DEFAULT_MODELS_DIRNAME);
+    const modelsDir = path.join(daemonDir, DEFAULT_MODELS_DIRNAME);
     ensureDir(modelsDir);
 
     try {

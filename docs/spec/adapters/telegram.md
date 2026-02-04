@@ -73,7 +73,7 @@ channel:telegram:<chat-id>
 
 ## Media Storage
 
-Downloaded attachments are saved to `~/.hiboss/media/` with:
+Downloaded attachments are saved to `~/hiboss/media/` with:
 - Original filename when available
 - Incremental suffix for duplicates (`file.jpg`, `file_1.jpg`, `file_2.jpg`)
 - Original `telegramFileId` preserved for efficient re-sending
@@ -111,7 +111,7 @@ interface ChannelMessage {
 
 ```typescript
 interface Attachment {
-  source: string;           // Local file path (e.g., ~/.hiboss/media/photo.jpg)
+  source: string;           // Local file path (e.g., ~/hiboss/media/photo.jpg)
   filename?: string;        // Original filename for display/type detection
   telegramFileId?: string;  // Telegram file_id for efficient re-sending
 }

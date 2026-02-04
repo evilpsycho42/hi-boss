@@ -37,7 +37,10 @@ export async function checkSetupStatus(): Promise<boolean> {
 
     // Daemon not running, check database directly
     const config = getDefaultConfig();
-    const dbPath = path.join(config.dataDir, "hiboss.db");
+    if (!fs.existsSync(config.daemonDir)) {
+      return false;
+    }
+    const dbPath = path.join(config.daemonDir, "hiboss.db");
     const db = new HiBossDatabase(dbPath);
     try {
       return db.isSetupComplete();
@@ -108,7 +111,9 @@ function ensureBossProfileFile(hibossDir: string): void {
  */
 async function executeSetupDirect(config: SetupConfig): Promise<string> {
   const daemonConfig = getDefaultConfig();
-  const dbPath = path.join(daemonConfig.dataDir, "hiboss.db");
+  fs.mkdirSync(daemonConfig.dataDir, { recursive: true });
+  fs.mkdirSync(daemonConfig.daemonDir, { recursive: true });
+  const dbPath = path.join(daemonConfig.daemonDir, "hiboss.db");
   const db = new HiBossDatabase(dbPath);
 
   try {

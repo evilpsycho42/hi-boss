@@ -41,7 +41,7 @@ export function formatChannelAddress(adapter: string, chatId: string): Address {
  * Type is inferred from file extension.
  */
 export interface Attachment {
-  source: string;           // Local file path (for Telegram media, downloaded to ~/.hiboss/media/)
+  source: string;           // Local file path (for Telegram media, downloaded to ~/hiboss/media/)
   filename?: string;        // Helps with type detection and display
   telegramFileId?: string;  // Preserved for efficient re-sending via Telegram API
 }

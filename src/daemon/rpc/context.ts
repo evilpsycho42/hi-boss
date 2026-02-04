@@ -16,6 +16,7 @@ import type { Agent } from "../../agent/types.js";
 import type { RpcMethodHandler, RpcMethodRegistry } from "../ipc/types.js";
 import { RPC_ERRORS } from "../ipc/types.js";
 import type { PermissionLevel, PermissionPolicyV1 } from "../../shared/permissions.js";
+import type { DaemonConfig } from "../daemon.js";
 
 /**
  * Principal type representing the authenticated caller.
@@ -37,7 +38,7 @@ export interface DaemonContext {
   readonly adapters: Map<string, ChatAdapter>;
 
   // Configuration
-  readonly config: { dataDir: string };
+  readonly config: Pick<DaemonConfig, "dataDir" | "daemonDir">;
   readonly running: boolean;
   readonly startTimeMs: number | null;
 

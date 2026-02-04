@@ -22,7 +22,7 @@ Start here: `docs/index.md`, `docs/spec/goals.md`, `docs/spec/architecture.md`, 
 ## Core architecture (mental model)
 
 - Daemon owns state and routing; CLI is a thin JSON-RPC client (`docs/spec/ipc.md`).
-- SQLite is the durable queue + audit log (`~/.hiboss/hiboss.db`).
+- SQLite is the durable queue + audit log (`~/hiboss/.daemon/hiboss.db`).
 - Scheduler wakes due `deliver-at` envelopes (`docs/spec/components/scheduler.md`).
 - Agent executor runs provider sessions and marks envelopes done (`docs/spec/components/agent.md`, `docs/spec/components/session.md`).
 - Adapters bridge chat apps ↔ envelopes (e.g. Telegram: `docs/spec/adapters/telegram.md`).
@@ -62,7 +62,7 @@ Short IDs (must follow):
 - `HIBOSS_TOKEN` is used when `--token` is omitted (`docs/spec/configuration.md`).
 - Sending to `channel:<adapter>:...` is only allowed if the sending agent is bound to that adapter type.
 - `--deliver-at` supports relative (`+2h`, `+1Y2M3D`) and ISO 8601; units are case-sensitive (`Y/M/D/h/m/s`).
-- Security: agent tokens are stored plaintext in `~/.hiboss/hiboss.db`; protect `~/.hiboss/`.
+- Security: agent tokens are stored plaintext in `~/hiboss/.daemon/hiboss.db`; protect `~/hiboss/`.
 
 ## Dev workflow
 
@@ -108,19 +108,19 @@ Useful checks (run when relevant):
 
 ## State & debugging
 
-Default data dir: `~/.hiboss/` (no `--data-dir` flag today)
+Default data dir: `~/hiboss/` (override via `HIBOSS_DIR`; no `--data-dir` flag today)
 
 | Item | Path |
 |------|------|
-| DB | `~/.hiboss/hiboss.db` |
-| IPC socket | `~/.hiboss/daemon.sock` |
-| Daemon PID | `~/.hiboss/daemon.pid` |
-| Daemon log | `~/.hiboss/daemon.log` |
-| Media downloads | `~/.hiboss/media/` |
-| Boss profile (optional) | `~/.hiboss/BOSS.md` |
-| Per-agent homes | `~/.hiboss/agents/<agent-name>/` |
+| DB | `~/hiboss/.daemon/hiboss.db` |
+| IPC socket | `~/hiboss/.daemon/daemon.sock` |
+| Daemon PID | `~/hiboss/.daemon/daemon.pid` |
+| Daemon log | `~/hiboss/.daemon/daemon.log` |
+| Media downloads | `~/hiboss/media/` |
+| Boss profile (optional) | `~/hiboss/BOSS.md` |
+| Per-agent homes | `~/hiboss/agents/<agent-name>/` |
 
 Reset:
 ```bash
-hiboss daemon stop --token <boss-token> && rm -rf ~/.hiboss && hiboss setup
+hiboss daemon stop --token <boss-token> && rm -rf ~/hiboss && hiboss setup
 ```

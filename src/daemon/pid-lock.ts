@@ -10,7 +10,7 @@ import * as net from "net";
 import * as path from "path";
 import * as lockfile from "proper-lockfile";
 import type { DaemonConfig } from "./daemon.js";
-import { getDefaultHiBossDir } from "../shared/defaults.js";
+import { getHiBossPaths } from "../shared/hiboss-paths.js";
 
 /**
  * PID lock manager using flock-based locking.
@@ -21,10 +21,10 @@ export class PidLock {
   private socketPath: string;
   private releaseFn: (() => Promise<void>) | null = null;
 
-  constructor(config: { dataDir: string }) {
-    this.lockPath = path.join(config.dataDir, "daemon.lock");
-    this.pidPath = path.join(config.dataDir, "daemon.pid");
-    this.socketPath = path.join(config.dataDir, "daemon.sock");
+  constructor(config: { daemonDir: string }) {
+    this.lockPath = path.join(config.daemonDir, "daemon.lock");
+    this.pidPath = path.join(config.daemonDir, "daemon.pid");
+    this.socketPath = path.join(config.daemonDir, "daemon.sock");
   }
 
   /**
@@ -114,10 +114,10 @@ export class PidLock {
  * Check if daemon is running (socket-first, PID fallback).
  */
 export async function isDaemonRunning(
-  config: { dataDir: string } = { dataDir: getDefaultHiBossDir() }
+  config: Pick<DaemonConfig, "daemonDir"> = { daemonDir: getHiBossPaths().daemonDir }
 ): Promise<boolean> {
-  const pidPath = path.join(config.dataDir, "daemon.pid");
-  const socketPath = path.join(config.dataDir, "daemon.sock");
+  const pidPath = path.join(config.daemonDir, "daemon.pid");
+  const socketPath = path.join(config.daemonDir, "daemon.sock");
 
   // Prefer checking the socket directly; PID files can be stale or missing.
   if (await isSocketAcceptingConnections(socketPath)) {

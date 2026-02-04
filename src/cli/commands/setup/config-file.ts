@@ -320,7 +320,8 @@ export async function runConfigFileSetup(options: ConfigFileSetupOptions): Promi
   }
   if (isComplete) {
     console.log("✅ Setup is already complete!");
-    console.log("\nTo start over: hiboss daemon stop && rm -rf ~/.hiboss && hiboss setup\n");
+    console.log("\nTo start over: hiboss daemon stop && rm -rf ~/hiboss && hiboss setup\n");
+    console.log("(Advanced: override the Hi-Boss dir with HIBOSS_DIR.)\n");
     return;
   }
 
@@ -345,7 +346,7 @@ export async function runConfigFileSetup(options: ConfigFileSetupOptions): Promi
   const daemonConfig = getDefaultConfig();
   const sel = config.memorySelection ?? { mode: "default" as const };
   config.memory = await resolveAndValidateMemoryModel({
-    hibossDir: daemonConfig.dataDir,
+    daemonDir: daemonConfig.daemonDir,
     mode: sel.mode,
     modelPath: sel.modelPath,
   });

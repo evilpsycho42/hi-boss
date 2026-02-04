@@ -70,7 +70,7 @@ interface AgentSession {
 
 ### Persistent (Survives Restart)
 
-- **Database** (`~/.hiboss/hiboss.db`): Agent metadata, envelope queue, bindings, session policies
+- **Database** (`~/hiboss/.daemon/hiboss.db`): Agent metadata, envelope queue, bindings, session policies
 - **Home directories**: Provider configs and instruction files (see [Agents](agent.md#home-directories))
 
 Session resume uses a small record stored in `agents.metadata.sessionHandle`:

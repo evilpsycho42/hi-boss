@@ -135,7 +135,7 @@ created-at: 2026-01-28T20:08:45+08:00
 
 Hello!
 attachments:
-- [image] photo.jpg (/Users/kky/.hiboss/media/photo.jpg)
+- [image] photo.jpg (/Users/kky/hiboss/media/photo.jpg)
 ```
 
 ### Example: Envelope instruction (direct message)
@@ -148,7 +148,7 @@ created-at: 2026-01-28T20:08:45+08:00
 
 Hello!
 attachments:
-- [image] photo.jpg (/Users/kky/.hiboss/media/photo.jpg)
+- [image] photo.jpg (/Users/kky/hiboss/media/photo.jpg)
 ```
 
 ---
@@ -157,7 +157,7 @@ attachments:
 
 An agent is an AI assistant registered with Hi-Boss.
 
-Security note: agent tokens are stored as plaintext in the local SQLite database (not hashed). Protect your `~/.hiboss` directory accordingly.
+Security note: agent tokens are stored as plaintext in the local SQLite database (not hashed). Protect your `~/hiboss` directory accordingly.
 
 ### Storage (Code ↔ SQLite)
 
