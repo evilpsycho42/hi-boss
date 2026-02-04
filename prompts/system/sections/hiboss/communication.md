@@ -4,10 +4,17 @@
 Your plain text output is **not** delivered to users. To send a message, you MUST use:
 
 ```bash
-hiboss envelope send --to <address> --text "your message"
+# Recommended: pass text via stdin to avoid shell quoting/escaping issues.
+hiboss envelope send --to <address> --parse-mode plain --text - <<'EOF'
+your message
+EOF
 ```
 
 Token: `${{ hiboss.tokenEnvVar }}` is set automatically, so `--token` is usually optional.
+
+Notes:
+- Prefer `--text -` (stdin) or `--text-file` for multi-line / formatted messages. Avoid building complex `--text "..."` strings in the shell.
+- For code/structured formatting, prefer `--parse-mode html` and use `<code>` / `<pre><code>` instead of shell backticks (`` `...` ``), which trigger command substitution in many shells (bash/zsh).
 
 **Address formats:**
 - `agent:<name>`
