@@ -55,6 +55,10 @@ Table: `envelopes` (see `src/daemon/db/schema.ts`)
 | `envelope.createdAt` | `created_at` | Unix epoch ms (UTC) |
 | `envelope.metadata` | `metadata` | JSON (nullable); used for channel semantics |
 
+Status semantics:
+- `pending` means “not yet fully processed”: either waiting for `deliver-at`, waiting for agent read, or waiting for channel delivery attempt.
+- `done` means “terminal”: the envelope will not be processed again. `done` can represent a successful delivery/read, or a terminal delivery failure (with details recorded via `last-delivery-error-*` when available).
+
 ### CLI
 
 Command flags:
@@ -79,7 +83,7 @@ Command flags:
 - `in-reply-to-text:` (multiline)
   - Note: adapters may truncate `in-reply-to-text` for safety/size. The Telegram adapter truncates at 1200 characters and appends `\n\n[...truncated...]\n`.
 
-**Delivery error keys** (only when a channel delivery attempt failed)
+**Delivery error keys** (only when a delivery attempt failed or the daemon terminalized an undeliverable envelope)
 - `last-delivery-error-at:` (boss timezone offset)
 - `last-delivery-error-kind:`
 - `last-delivery-error-message:`

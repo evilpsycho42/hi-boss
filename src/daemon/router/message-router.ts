@@ -86,7 +86,22 @@ export class MessageRouter {
    * Deliver an envelope to its destination.
    */
   async deliverEnvelope(envelope: Envelope): Promise<void> {
-    const destination = parseAddress(envelope.to);
+    let destination: ReturnType<typeof parseAddress>;
+    try {
+      destination = parseAddress(envelope.to);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Invalid address format";
+      this.recordDeliveryError(envelope, {
+        kind: "invalid-address",
+        message: msg,
+      });
+      this.markEnvelopeDoneBestEffort(envelope);
+      this.throwDeliveryFailed(msg, {
+        envelopeId: envelope.id,
+        to: envelope.to,
+        reason: "invalid-address",
+      });
+    }
 
     if (destination.type === "agent") {
       await this.deliverToAgent(envelope, destination.agentName);
@@ -122,14 +137,55 @@ export class MessageRouter {
     chatId: string
   ): Promise<void> {
     // Find the sender's agent name
-    const sender = parseAddress(envelope.from);
-    if (sender.type !== "agent") {
+    let sender: ReturnType<typeof parseAddress>;
+    try {
+      sender = parseAddress(envelope.from);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Invalid from";
       logEvent("error", "router-invalid-channel-sender", {
         "envelope-id": envelope.id,
         from: envelope.from,
         to: envelope.to,
+        error: msg,
       });
-      return;
+      this.recordDeliveryError(envelope, {
+        kind: "invalid-sender-address",
+        message: msg,
+        adapterType,
+        chatId,
+      });
+      this.markEnvelopeDoneBestEffort(envelope);
+      this.throwDeliveryFailed(msg, {
+        envelopeId: envelope.id,
+        adapterType,
+        chatId,
+        from: envelope.from,
+        reason: "invalid-sender-address",
+      });
+    }
+
+    if (sender.type !== "agent") {
+      const msg = "Channel destinations require from=agent:<name>";
+      logEvent("error", "router-invalid-channel-sender", {
+        "envelope-id": envelope.id,
+        from: envelope.from,
+        to: envelope.to,
+        error: msg,
+      });
+      this.recordDeliveryError(envelope, {
+        kind: "invalid-sender",
+        message: msg,
+        adapterType,
+        chatId,
+      });
+      this.markEnvelopeDoneBestEffort(envelope);
+      this.throwDeliveryFailed(msg, {
+        envelopeId: envelope.id,
+        adapterType,
+        chatId,
+        from: envelope.from,
+        reason: "invalid-sender",
+      });
     }
 
     // Get the sender's binding for this adapter type
@@ -143,6 +199,7 @@ export class MessageRouter {
         chatId,
         senderAgentName: sender.agentName,
       });
+      this.markEnvelopeDoneBestEffort(envelope);
       this.throwDeliveryFailed(msg, {
         envelopeId: envelope.id,
         adapterType,
@@ -163,6 +220,7 @@ export class MessageRouter {
         chatId,
         senderAgentName: sender.agentName,
       });
+      this.markEnvelopeDoneBestEffort(envelope);
       this.throwDeliveryFailed(msg, {
         envelopeId: envelope.id,
         adapterType,
@@ -217,6 +275,7 @@ export class MessageRouter {
         senderAgentName: sender.agentName,
         details,
       });
+      this.markEnvelopeDoneBestEffort(envelope);
       this.throwDeliveryFailed(msg, {
         envelopeId: envelope.id,
         adapterType,
@@ -226,6 +285,17 @@ export class MessageRouter {
         replyToMessageId: replyToMessageId ?? "",
         adapterError: details,
         reason: "send-failed",
+      });
+    }
+  }
+
+  private markEnvelopeDoneBestEffort(envelope: Envelope): void {
+    try {
+      this.db.updateEnvelopeStatus(envelope.id, "done");
+    } catch (err) {
+      logEvent("error", "envelope-status-update-failed", {
+        "envelope-id": envelope.id,
+        error: errorMessage(err),
       });
     }
   }

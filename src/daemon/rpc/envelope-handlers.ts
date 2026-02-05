@@ -34,9 +34,11 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
       rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to");
     }
 
+    const toInput = p.to.trim();
+
     let destination: ReturnType<typeof parseAddress>;
     try {
-      destination = parseAddress(p.to);
+      destination = parseAddress(toInput);
     } catch (err) {
       rpcError(RPC_ERRORS.INVALID_PARAMS, err instanceof Error ? err.message : "Invalid to");
     }
@@ -52,6 +54,16 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
     const agent = principal.agent;
     ctx.db.updateAgentLastSeen(agent.name);
     from = formatAgentAddress(agent.name);
+
+    const to = (() => {
+      if (destination.type !== "agent") return toInput;
+
+      const destAgent = ctx.db.getAgentByNameCaseInsensitive(destination.agentName);
+      if (!destAgent) {
+        rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
+      }
+      return formatAgentAddress(destAgent.name);
+    })();
 
     // Check binding for channel destinations (agent sender only)
     if (destination.type === "channel") {
@@ -121,7 +133,7 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
     try {
       const envelope = await ctx.router.routeEnvelope({
         from,
-        to: p.to,
+        to,
         fromBoss,
         content: {
           text: p.text,

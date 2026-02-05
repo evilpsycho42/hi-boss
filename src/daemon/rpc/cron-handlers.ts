@@ -13,7 +13,7 @@ import type {
 import { RPC_ERRORS } from "../ipc/types.js";
 import type { DaemonContext } from "./context.js";
 import { requireToken, rpcError } from "./context.js";
-import { parseAddress } from "../../adapters/types.js";
+import { formatAgentAddress, parseAddress } from "../../adapters/types.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 import { isValidIanaTimeZone } from "../../shared/timezone.js";
 import {
@@ -98,9 +98,11 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
       rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to");
     }
 
+    const toInput = p.to.trim();
+
     let destination: ReturnType<typeof parseAddress>;
     try {
-      destination = parseAddress(p.to);
+      destination = parseAddress(toInput);
     } catch (err) {
       rpcError(RPC_ERRORS.INVALID_PARAMS, err instanceof Error ? err.message : "Invalid to");
     }
@@ -142,6 +144,15 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
       }
     }
 
+    const to = (() => {
+      if (destination.type !== "agent") return toInput;
+      const destAgent = ctx.db.getAgentByNameCaseInsensitive(destination.agentName);
+      if (!destAgent) {
+        rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
+      }
+      return formatAgentAddress(destAgent.name);
+    })();
+
     let timezone: string | undefined;
     if (p.timezone !== undefined) {
       if (typeof p.timezone !== "string") {
@@ -168,7 +179,7 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
         agentName: agent.name,
         cron: p.cron.trim(),
         timezone,
-        to: p.to.trim(),
+        to,
         content: {
           text: p.text,
           attachments: p.attachments,
