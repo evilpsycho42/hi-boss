@@ -20,7 +20,9 @@ type TelegramOutgoingApi = {
   callApi: (method: string, payload: unknown) => Promise<unknown>;
 };
 
-function resolveSource(attachment: Attachment): string | { source: fs.ReadStream; filename?: string } {
+function resolveSource(
+  attachment: Attachment
+): string | { source: fs.ReadStream; filename?: string } | { url: string; filename?: string } {
   // If we have the original Telegram file_id, use it directly (efficient, no re-upload)
   if (attachment.telegramFileId) {
     return attachment.telegramFileId;
@@ -30,7 +32,17 @@ function resolveSource(attachment: Attachment): string | { source: fs.ReadStream
 
   // URL
   if (/^https?:\/\//i.test(source)) {
-    return source;
+    try {
+      const url = new URL(source);
+      const base = path.basename(url.pathname);
+      const derivedFilename = base && base !== "/" ? base : undefined;
+      return {
+        url: source,
+        filename: attachment.filename ?? derivedFilename,
+      };
+    } catch {
+      return source;
+    }
   }
 
   // Local file path (absolute or relative)
