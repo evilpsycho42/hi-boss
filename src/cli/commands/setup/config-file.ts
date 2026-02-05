@@ -10,7 +10,7 @@ import {
   DEFAULT_SETUP_PERMISSION_LEVEL,
   DEFAULT_SETUP_PROVIDER,
   DEFAULT_SETUP_REASONING_EFFORT,
-  getDefaultSetupAgentDescription,
+  getDefaultAgentDescription,
   getDefaultSetupBossName,
   getDefaultSetupWorkspace,
 } from "../../../shared/defaults.js";
@@ -133,7 +133,7 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
   const agentDescription =
     typeof agentDescriptionRaw === "string"
       ? agentDescriptionRaw
-      : getDefaultSetupAgentDescription(agentName);
+      : getDefaultAgentDescription(agentName);
 
   const workspaceRaw = agentRaw.workspace;
   const workspace =

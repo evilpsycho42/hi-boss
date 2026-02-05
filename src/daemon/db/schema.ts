@@ -6,7 +6,6 @@ import {
   DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
-  DEFAULT_AGENT_REASONING_EFFORT,
   DEFAULT_AGENT_RUN_STATUS,
   DEFAULT_ENVELOPE_STATUS,
 } from "../../shared/defaults.js";
@@ -25,7 +24,7 @@ CREATE TABLE IF NOT EXISTS config (
 	  workspace TEXT,
 	  provider TEXT DEFAULT '${DEFAULT_AGENT_PROVIDER}',
   model TEXT,
-  reasoning_effort TEXT DEFAULT '${DEFAULT_AGENT_REASONING_EFFORT}',
+  reasoning_effort TEXT,
   auto_level TEXT DEFAULT '${DEFAULT_AGENT_AUTO_LEVEL}',
   permission_level TEXT DEFAULT '${DEFAULT_AGENT_PERMISSION_LEVEL}',
   session_policy TEXT,           -- JSON blob for SessionPolicyConfig

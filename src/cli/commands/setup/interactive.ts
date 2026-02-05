@@ -10,7 +10,7 @@ import {
   DEFAULT_SETUP_MODEL_BY_PROVIDER,
   DEFAULT_SETUP_REASONING_EFFORT,
   SETUP_MODEL_CHOICES_BY_PROVIDER,
-  getDefaultSetupAgentDescription,
+  getDefaultAgentDescription,
   getDefaultSetupBossName,
   getDefaultSetupWorkspace,
 } from "../../../shared/defaults.js";
@@ -128,7 +128,7 @@ export async function runInteractiveSetup(): Promise<void> {
     })
   ).trim();
 
-  const defaultAgentDescription = getDefaultSetupAgentDescription(agentName);
+  const defaultAgentDescription = getDefaultAgentDescription(agentName);
   const agentDescriptionInput = await input({
     message: `Agent description: (Default: ${defaultAgentDescription})`,
   });
