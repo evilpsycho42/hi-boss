@@ -10,7 +10,7 @@ import {
   DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
-  DEFAULT_AGENT_REASONING_EFFORT,
+  getDefaultAgentDescription,
 } from "../../shared/defaults.js";
 import { generateToken, hashToken, verifyToken } from "../../agent/auth.js";
 import { generateUUID } from "../../shared/uuid.js";
@@ -290,9 +290,6 @@ export class HiBossDatabase {
     const token = generateToken();
     const createdAt = Date.now();
 
-    const reasoningEffortToStore =
-      input.reasoningEffort === undefined ? DEFAULT_AGENT_REASONING_EFFORT : input.reasoningEffort;
-
     const stmt = this.db.prepare(`
       INSERT INTO agents (name, token, description, workspace, provider, model, reasoning_effort, auto_level, permission_level, session_policy, created_at, metadata)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -301,11 +298,11 @@ export class HiBossDatabase {
     stmt.run(
       input.name,
       token,  // store raw token directly
-      input.description ?? null,
+      input.description ?? getDefaultAgentDescription(input.name),
       input.workspace ?? null,
       input.provider ?? DEFAULT_AGENT_PROVIDER,
       input.model ?? null,
-      reasoningEffortToStore,
+      input.reasoningEffort ?? null,
       input.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL,
       input.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL,
       input.sessionPolicy ? JSON.stringify(input.sessionPolicy) : null,

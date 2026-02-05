@@ -70,7 +70,7 @@ export const SETUP_MODEL_CHOICES_BY_PROVIDER = {
   codex: ["gpt-5.2", "gpt-5.2-codex"],
 } as const;
 
-export function getDefaultSetupAgentDescription(agentName: string): string {
+export function getDefaultAgentDescription(agentName: string): string {
   void agentName; // reserved for future personalization
   return "A reliable and collaborative professional who delivers results with clarity and respect for others, and consistently makes teamwork more effective and enjoyable.";
 }
