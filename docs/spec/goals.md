@@ -21,6 +21,8 @@ It aims to support customizable, long-running assistants that can:
 - **Local-first**: the daemon is the source of truth and runs on your machine.
 - **Envelopes as the interface**: messages are persisted as envelopes and routed reliably.
 - **Predictable automation**: stable CLI flags/output and instruction formats.
+- **Simple mental model**: keep user-facing concepts minimal; hide complexity inside the product.
+- **First-principles design**: avoid accidental complexity; prefer the simplest design that preserves correctness and operator safety.
 - **Extensibility**: adapters are pluggable; new channels should fit the same bridge/router model.
 - **Operator-friendly**: debuggable via logs and a single state directory.
 
