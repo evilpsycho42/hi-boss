@@ -1,5 +1,4 @@
 import { Command } from "commander";
-import { createRequire } from "node:module";
 import {
   startDaemon,
   stopDaemon,
@@ -26,20 +25,11 @@ import {
 import { registerAgentCommands } from "./cli-agent.js";
 
 const program = new Command();
-const require = createRequire(import.meta.url);
-const hibossVersion = (() => {
-  try {
-    const pkg = require("../../../package.json") as { version?: string };
-    return typeof pkg.version === "string" && pkg.version.trim() ? pkg.version.trim() : "0.0.0";
-  } catch {
-    return "0.0.0";
-  }
-})();
 
 program
   .name("hiboss")
   .description("Hi-Boss: Agent-to-agent and agent-to-human communication daemon")
-  .version(hibossVersion);
+  .version("2026.2.4");
 program.helpCommand(false);
 
 // Daemon commands
