@@ -2,6 +2,10 @@
  * Address format for routing messages.
  * "agent:<name>" | "channel:<adapter>:<chat-id>"
  */
+import { isValidAgentName } from "../shared/validation.js";
+
+const ADAPTER_TYPE_REGEX = /^[a-z][a-z0-9-]*$/;
+
 export type Address = string;
 
 /**
@@ -10,13 +14,27 @@ export type Address = string;
 export function parseAddress(address: Address):
   | { type: "agent"; agentName: string }
   | { type: "channel"; adapter: string; chatId: string } {
-  if (address.startsWith("agent:")) {
-    return { type: "agent", agentName: address.slice(6) };
+  const trimmed = address.trim();
+
+  if (trimmed.startsWith("agent:")) {
+    const agentName = trimmed.slice(6);
+    if (!agentName || !isValidAgentName(agentName)) {
+      throw new Error(`Invalid address format: ${address}`);
+    }
+    return { type: "agent", agentName };
   }
-  if (address.startsWith("channel:")) {
-    const parts = address.slice(8).split(":");
+  if (trimmed.startsWith("channel:")) {
+    const parts = trimmed.slice(8).split(":");
     if (parts.length >= 2) {
-      return { type: "channel", adapter: parts[0], chatId: parts.slice(1).join(":") };
+      const adapter = parts[0];
+      const chatId = parts.slice(1).join(":").trim();
+      if (!adapter || !ADAPTER_TYPE_REGEX.test(adapter)) {
+        throw new Error(`Invalid address format: ${address}`);
+      }
+      if (!chatId) {
+        throw new Error(`Invalid address format: ${address}`);
+      }
+      return { type: "channel", adapter, chatId };
     }
   }
   throw new Error(`Invalid address format: ${address}`);

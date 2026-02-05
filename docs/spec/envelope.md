@@ -17,6 +17,12 @@ is represented as an envelope stored in SQLite (`~/hiboss/.daemon/hiboss.db`, ta
 | Agent | `agent:<name>` | `agent:nex` |
 | Channel | `channel:<adapter>:<chat-id>` | `channel:telegram:6447779930` |
 
+Validation rules:
+- `agent:<name>`: `<name>` must be non-empty and match the agent name rules (alphanumeric with hyphens; see `src/shared/validation.ts`).
+- `channel:<adapter>:<chat-id>`:
+  - `<adapter>` must be non-empty and match `^[a-z][a-z0-9-]*$`
+  - `<chat-id>` must be non-empty (trimmed)
+
 ---
 
 ## Envelope Fields
@@ -57,9 +63,9 @@ New envelopes are stored as `status = pending`.
 
 - **To an agent**: the daemon marks the envelope `done` immediately after it is read for an agent run (`src/agent/executor.ts`). This is **at-most-once**: if the agent run fails, the envelope will not be retried.
 - **To an agent (manual read)**: `hiboss envelope list --from <address> --status pending` is also treated as a read; listed envelopes are immediately marked `done` (at-most-once).
-- **To a channel**: the daemon marks the envelope as `done` after a successful adapter send (`src/daemon/router/message-router.ts`).
+- **To a channel**: the daemon marks the envelope as `done` after a successful adapter send (`src/daemon/router/message-router.ts`). If delivery fails, the envelope is also marked `done` (terminal) and the failure is recorded in `last-delivery-error-*`.
 
-If delivery to a **channel** fails, the envelope remains `pending` and will be retried by later triggers (new activity, scheduler tick, daemon restart recovery). If an **agent run** fails, already-read envelopes stay `done` (no retry).
+Hi-Boss does **not** auto-retry failed channel deliveries. If an **agent run** fails, already-read envelopes stay `done` (no retry).
 
 ---
 
