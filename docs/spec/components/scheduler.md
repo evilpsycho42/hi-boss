@@ -48,9 +48,11 @@ Each tick does:
 1. **Deliver due channel envelopes**
    - `db.listDueChannelEnvelopes(limit)` returns due envelopes where `to LIKE 'channel:%'`
    - The scheduler calls `router.deliverEnvelope(env)` for each
+   - If a channel delivery fails, the envelope is marked `done` (terminal) and `last-delivery-error-*` is recorded (no auto-retry)
 2. **Trigger agents with due envelopes**
    - `db.listAgentNamesWithDueEnvelopes()` returns agent names with due pending envelopes
    - The scheduler calls `executor.checkAndRun(agent, db)` (non-blocking)
+   - If an envelope is addressed to a missing/deleted agent (`to = agent:<name>` with no corresponding agent record), the scheduler marks those due pending envelopes `done` (terminal) and records `last-delivery-error-*` to prevent infinite pending loops
 
 The scheduler then computes the next wake time.
 

@@ -22,6 +22,7 @@ Flags:
 Notes:
 - Sender identity is derived from the authenticated **agent token**.
 - Boss tokens cannot send envelopes via `hiboss envelope send`; to message an agent as a human/boss, send via a channel adapter (e.g., Telegram).
+- Sending to `agent:<name>` fails fast if the agent does not exist (`NOT_FOUND`) or the address is invalid (`INVALID_PARAMS`).
 
 Output (parseable):
 
