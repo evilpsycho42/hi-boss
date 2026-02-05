@@ -20,6 +20,7 @@ Core (top-level):
 - `docs/spec/goals.md` — product goals, non-goals, principles
 - `docs/spec/architecture.md` — system architecture + invariants
 - `docs/spec/envelope.md` — envelope concept, lifecycle, and semantics
+- `docs/spec/skills.md` — built-in/global/agent-local skill layering
 - `docs/spec/definitions.md` — field mappings (TypeScript ↔ SQLite ↔ CLI output keys)
 - `docs/spec/cli.md` — CLI index (command summary + links to topic specs)
 - `docs/spec/ipc.md` — CLI ↔ daemon IPC (JSON-RPC over local socket)

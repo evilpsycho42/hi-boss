@@ -158,6 +158,21 @@ Each agent has a long-term memory file at:
 
 - `~/hiboss/agents/<agent-name>/internal_space/MEMORY.md` (or `{{HIBOSS_DIR}}/agents/<agent-name>/internal_space/MEMORY.md` when overridden)
 
+## Skills
+
+Hi-Boss supports a simple three-layer skill system:
+
+1) **Agent-local skills** (highest precedence): `{{HIBOSS_DIR}}/agents/<agent-name>/<provider>_home/skills/<skill-name>/`
+2) **Global skills** (shared by all agents): `{{HIBOSS_DIR}}/skills/<skill-name>/`
+3) **Built-in skills** (shipped with Hi-Boss; managed automatically)
+
+To add a skill, create a skill folder containing a `SKILL.md` file in either the global or agent-local location.
+
+Name conflicts: `agent-local > global > built-in`. Prefer unique skill names to avoid surprises.
+
+Built-in skills:
+- `agent-browser` — web browsing / page extraction workflow (source: vercel-labs/agent-browser)
+
 ## Docs
 
 - `docs/index.md` — docs hub (specs + user guides)
