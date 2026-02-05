@@ -20,7 +20,7 @@ type TelegramOutgoingApi = {
   callApi: (method: string, payload: unknown) => Promise<unknown>;
 };
 
-function resolveSource(attachment: Attachment): string | { source: fs.ReadStream } {
+function resolveSource(attachment: Attachment): string | { source: fs.ReadStream; filename?: string } {
   // If we have the original Telegram file_id, use it directly (efficient, no re-upload)
   if (attachment.telegramFileId) {
     return attachment.telegramFileId;
@@ -48,7 +48,12 @@ function resolveSource(attachment: Attachment): string | { source: fs.ReadStream
     if (!fs.existsSync(resolvedPath)) {
       throw new Error(`Telegram attachment source file not found: ${resolvedPath}`);
     }
-    return { source: fs.createReadStream(resolvedPath) };
+    // Telegraf uses the uploaded filename to set the Telegram document name.
+    // Without a filename, Telegram clients often show a generic name like `document.dat`.
+    return {
+      source: fs.createReadStream(resolvedPath),
+      filename: attachment.filename ?? path.basename(resolvedPath),
+    };
   }
 
   return source;
@@ -83,7 +88,7 @@ function resolveSourceForMediaGroup(attachment: Attachment): string | { source: 
     if (!fs.existsSync(resolvedPath)) {
       throw new Error(`Telegram attachment source file not found: ${resolvedPath}`);
     }
-    return { source: resolvedPath, filename: attachment.filename };
+    return { source: resolvedPath, filename: attachment.filename ?? path.basename(resolvedPath) };
   }
 
   // Fallback: treat as Telegram file_id
@@ -334,4 +339,3 @@ export async function sendTelegramMessage(
     });
   }
 }
-
