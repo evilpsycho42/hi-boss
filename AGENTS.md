@@ -5,8 +5,10 @@ Hi-Boss is a local daemon + `hiboss` CLI for routing durable messages (“envelo
 ## Global rules (source of truth)
 
 - `docs/spec/` is canonical. If behavior and spec disagree, update the spec first (or fix the code to match).
+- Prefer PRs as the normal development flow; avoid direct pushes to `main`.
 - Keep CLI flags, CLI output keys, and agent instruction keys **stable and parseable** (kebab-case).
 - If you change CLI surface/output/DB fields, update `docs/spec/cli.md`, the relevant `docs/spec/cli/*.md` topic doc(s), and `docs/spec/definitions.md` in the same PR.
+- Don’t bump the npm version ahead of today’s date. If there are multiple releases in one day, add suffix `.rev{n}`.
 - For each file,LOC should be less than 500 lines, split it if needed.
 
 Start here: `docs/index.md`, `docs/spec/goals.md`, `docs/spec/architecture.md`, `docs/spec/definitions.md`.
