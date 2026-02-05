@@ -90,6 +90,19 @@ Where `layer` is `builtin` or `global`.
 
 ## Lifecycle
 
+### When sync runs (and when it must not)
+
+Hi-Boss MUST sync skills only at session lifecycle boundaries, not per conversation turn.
+
+Required sync points:
+- **Daemon start**: seed global built-in skills into `${HIBOSS_DIR}/skills/.system`.
+- **Session create**: before opening a brand-new provider session for an agent, inject skills into the agent provider home.
+- **Session resume**: before resuming an existing provider session for an agent, inject skills into the agent provider home.
+- **Session refresh**: when a refresh is requested (e.g. Telegram `/new`) and a new session will be created, inject skills for the new session.
+
+Forbidden/avoid by default:
+- Sync on every agent turn / every envelope run. This increases I/O and surprises, and is not needed for correctness.
+
 ### 1) Daemon start: seed global built-in skills
 
 On daemon start, Hi-Boss seeds the global built-in skills directory:
@@ -161,4 +174,3 @@ Hi-Boss built-in skills are shipped with the npm package and maintained by the H
 | `agent-browser` | Web browsing / page extraction workflow | `https://github.com/vercel-labs/agent-browser/tree/main/skills/agent-browser` |
 
 Source links are advisory metadata for maintainers and may be absent for Hi-Boss-authored skills.
-

@@ -166,6 +166,9 @@ Hi-Boss supports a simple three-layer skill system:
 2) **Global skills** (shared by all agents): `{{HIBOSS_DIR}}/skills/<skill-name>/`
 3) **Built-in skills** (shipped with Hi-Boss; managed automatically)
 
+Agent-local skills are just the provider’s normal `skills/` directory (Claude Code / Codex) — no special Hi-Boss format.
+You can add them manually, or ask the agent to add/update skills in its own provider home.
+
 To add a skill, create a skill folder containing a `SKILL.md` file in either the global or agent-local location.
 
 Name conflicts: `agent-local > global > built-in`. Prefer unique skill names to avoid surprises.
