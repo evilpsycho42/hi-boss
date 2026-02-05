@@ -92,16 +92,16 @@ Where `layer` is `builtin` or `global`.
 
 ### When sync runs (and when it must not)
 
-Hi-Boss MUST sync skills only at session lifecycle boundaries, not per conversation turn.
+Hi-Boss MUST sync skills only when creating a brand-new provider session, not per conversation turn.
 
 Required sync points:
 - **Daemon start**: seed global built-in skills into `${HIBOSS_DIR}/skills/.system`.
 - **Session create**: before opening a brand-new provider session for an agent, inject skills into the agent provider home.
-- **Session resume**: before resuming an existing provider session for an agent, inject skills into the agent provider home.
 - **Session refresh**: when a refresh is requested (e.g. Telegram `/new`) and a new session will be created, inject skills for the new session.
 
 Forbidden/avoid by default:
 - Sync on every agent turn / every envelope run. This increases I/O and surprises, and is not needed for correctness.
+- Sync when attaching/resuming an existing provider session handle (resume/reload). This keeps the rule simple: only new sessions get a deterministic skill snapshot.
 
 ### 1) Daemon start: seed global built-in skills
 
@@ -132,9 +132,9 @@ Safety requirements:
   - rename/swap into place
   - remove old dir
 
-### 2) Session open/resume: inject global skills into agent provider home
+### 2) Session create/refresh: inject global skills into agent provider home
 
-Before opening or resuming a provider session for an agent, Hi-Boss performs skill injection into:
+Before opening a brand-new provider session for an agent (including session refresh that creates a new session), Hi-Boss performs skill injection into:
 
 ```
 ${HIBOSS_DIR}/agents/<agent-name>/<provider>_home/skills/
