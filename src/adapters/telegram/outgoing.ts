@@ -20,7 +20,13 @@ type TelegramOutgoingApi = {
   callApi: (method: string, payload: unknown) => Promise<unknown>;
 };
 
-function resolveSource(attachment: Attachment): string | { source: fs.ReadStream } {
+function resolveUploadFilename(candidate: string | undefined, fallbackPath: string): string {
+  const trimmed = candidate?.trim();
+  if (trimmed) return path.basename(trimmed);
+  return path.basename(fallbackPath);
+}
+
+function resolveSource(attachment: Attachment): string | { source: string; filename?: string } {
   // If we have the original Telegram file_id, use it directly (efficient, no re-upload)
   if (attachment.telegramFileId) {
     return attachment.telegramFileId;
@@ -48,7 +54,10 @@ function resolveSource(attachment: Attachment): string | { source: fs.ReadStream
     if (!fs.existsSync(resolvedPath)) {
       throw new Error(`Telegram attachment source file not found: ${resolvedPath}`);
     }
-    return { source: fs.createReadStream(resolvedPath) };
+    return {
+      source: resolvedPath,
+      filename: resolveUploadFilename(attachment.filename, resolvedPath),
+    };
   }
 
   return source;
@@ -83,7 +92,10 @@ function resolveSourceForMediaGroup(attachment: Attachment): string | { source: 
     if (!fs.existsSync(resolvedPath)) {
       throw new Error(`Telegram attachment source file not found: ${resolvedPath}`);
     }
-    return { source: resolvedPath, filename: attachment.filename };
+    return {
+      source: resolvedPath,
+      filename: resolveUploadFilename(attachment.filename, resolvedPath),
+    };
   }
 
   // Fallback: treat as Telegram file_id
@@ -334,4 +346,3 @@ export async function sendTelegramMessage(
     });
   }
 }
-
