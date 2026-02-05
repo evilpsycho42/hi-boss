@@ -8,7 +8,12 @@ Hi-Boss is a local daemon + `hiboss` CLI for routing durable messages (“envelo
 - Prefer PRs as the normal development flow; avoid direct pushes to `main`.
 - Keep CLI flags, CLI output keys, and agent instruction keys **stable and parseable** (kebab-case).
 - If you change CLI surface/output/DB fields, update `docs/spec/cli.md`, the relevant `docs/spec/cli/*.md` topic doc(s), and `docs/spec/definitions.md` in the same PR.
-- Don’t bump the npm version ahead of today’s date. If there are multiple releases in one day, add suffix `.rev{n}`.
+- Don’t bump the npm version ahead of today’s date (local time). Avoid zero-padded segments (use `2026.2.5`, not `2026.02.05`).
+- Npm version scheme (dist-tags; “option A”):
+  - Stable daily: `YYYY.M.D` (published with dist-tag `latest`)
+  - Preview daily: `YYYY.M.D-rc.N` (published with dist-tag `next`)
+  - Same-day follow-up stable: `YYYY.M.D-rev.N` (dist-tag `latest`)
+  - Same-day follow-up preview: `YYYY.M.D-rev.N-rc.N` (dist-tag `next`)
 - For each file,LOC should be less than 500 lines, split it if needed.
 
 Start here: `docs/index.md`, `docs/spec/goals.md`, `docs/spec/architecture.md`, `docs/spec/definitions.md`.
@@ -93,6 +98,22 @@ Useful checks (run when relevant):
 - `npm run defaults:check`
 - `npm run verify:token-usage:real` (talks to a real provider; use intentionally)
 - `npm run inventory:magic` (updates `docs/spec/generated/magic-inventory.md`; do not hand-edit that file)
+
+## Versioning & publishing
+
+Terminology:
+- `rc` = release candidate (preview build that may become stable)
+- Stable installs use `latest`; preview installs use `next`
+
+Routine:
+1. Update `CHANGELOG.md` for the version being published.
+2. Bump `package.json#version` (and `package-lock.json`) to the exact version string.
+3. Publish:
+   - Preview: `npm publish --tag next`
+   - Stable: `npm publish --tag latest`
+
+Suggestion helper:
+- `npm run version:suggest -- --type preview` (or `stable`) prints a suggested version based on `CHANGELOG.md` + today’s date.
 
 ## Repo layout (what lives where)
 
