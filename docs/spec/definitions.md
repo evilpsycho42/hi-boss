@@ -196,11 +196,20 @@ Command flags:
 
 Provider config import:
 - `--provider-source-home <path>` overrides the source directory used to import provider config files into the agent’s provider home.
+- `--provider-source-home` requires an explicit `--provider` on `hiboss agent register` / `hiboss agent set`.
+
+Agent defaults:
+- `hiboss agent register` requires `--provider` (`claude` or `codex`).
+- `agent.model` and `agent.reasoningEffort` are nullable overrides; `NULL` means provider defaults.
+- `agent.autoLevel` defaults to `medium` when not specified.
+- `agent.permissionLevel` defaults to `standard` when not specified.
+- On `hiboss agent set`, switching provider without passing `--model` / `--reasoning-effort` clears both overrides to `NULL`.
 
 Clearing nullable overrides:
 - `hiboss agent set --model default` sets `agent.model = NULL` (provider default model)
 - `hiboss agent set --reasoning-effort default` sets `agent.reasoningEffort = NULL` (provider default reasoning effort)
 - `hiboss agent register --reasoning-effort default` sets `agent.reasoningEffort = NULL` (provider default reasoning effort)
+- `hiboss agent register --model default` sets `agent.model = NULL` (provider default model)
 
 ### CLI Output Keys
 

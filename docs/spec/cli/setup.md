@@ -15,11 +15,27 @@ Behavior:
 - Creates the agent home directories under `~/hiboss/agents/<agent-name>/`
 - Creates an empty `~/hiboss/BOSS.md` placeholder (best-effort; not rendered in minimal system prompt)
 - Creates an empty `~/hiboss/agents/<agent-name>/SOUL.md` placeholder (best-effort)
-- Imports provider config files for the chosen provider into the agent’s provider home
+- Imports provider config files for the chosen provider into the agent’s provider home (`~/.claude` for Claude, `~/.codex` for Codex, unless overridden)
 - Creates the first agent and prints `agent-token:` once (no “show token” command)
 - Prints `boss-token:` once
 - Prompts for `boss-timezone` (IANA) used for all displayed timestamps; defaults to the daemon host timezone
 - Configures and binds a Telegram adapter for the first agent
+
+Interactive defaults (when you press Enter):
+- `provider`: no default; required input (`claude` or `codex`)
+- `provider-source-home`: provider-specific default (`~/.claude` or `~/.codex`)
+- `boss-name`: current OS username
+- `boss-timezone`: daemon host timezone (IANA)
+- `agent.name`: `nex`
+- `agent.description`: generated default description
+- `agent.workspace`: user home directory
+- `agent.model`: `null` (use provider default)
+- `agent.reasoning-effort`: `null` (use provider default)
+- `agent.auto-level`: `medium`
+- `agent.permission-level`: `standard`
+- `session-policy`: unset
+- `metadata`: unset
+- `memory.mode`: `default` (download default embedding model)
 
 ## `hiboss setup --config-file <path>`
 
@@ -33,6 +49,7 @@ Usage:
 Config file must include:
 - `version: 1`
 - `boss-token: <token>`
+- `provider: <claude|codex>`
 - `boss-timezone: <iana>` (optional; defaults to daemon host timezone)
 - `agent: { ... }`
 - `telegram: { adapter-token, adapter-boss-id }`
@@ -42,6 +59,19 @@ Optional:
   - `mode`: `default` (download the default embedding model) or `local` (use a local GGUF)
   - `model-path`: required when `mode: local` (absolute path to a `.gguf`)
 - `provider-source-home: <path>` (optional; imports provider config from this directory; defaults to `~/.codex/` or `~/.claude/` based on `provider`)
+
+Config-file defaults (when omitted):
+- `provider-source-home`: provider-specific default (`~/.claude` or `~/.codex`)
+- `boss-name`: current OS username
+- `boss-timezone`: daemon host timezone (IANA)
+- `agent.name`: `nex`
+- `agent.description`: generated default description
+- `agent.workspace`: user home directory
+- `agent.model`: `null` (use provider default)
+- `agent.reasoning-effort`: `null` (use provider default)
+- `agent.auto-level`: `medium`
+- `agent.permission-level`: `standard`
+- `memory.mode`: `default`
 
 Example (`setup.json`):
 
@@ -63,8 +93,8 @@ Example (`setup.json`):
     "workspace": "/absolute/path/to/workspace",
     "model": null,
     "reasoning-effort": null,
-    "auto-level": "high",
-    "permission-level": "privileged"
+    "auto-level": "medium",
+    "permission-level": "standard"
   },
   "telegram": {
     "adapter-token": "123456789:ABCdef...",
@@ -77,6 +107,9 @@ Notes:
 - `agent.model: null` means “use the provider default model”.
 - `agent.reasoning-effort: null` means “use the provider default reasoning effort”.
 - For parity with `hiboss agent set`, the string `"default"` is also accepted for both fields (treated as `null`).
+- Setup model choices are provider-specific plus `null` plus custom input:
+  - `codex`: `null`, `gpt-5.2`, `gpt-5.2-codex`, `gpt-5.3-codex`, custom model id
+  - `claude`: `null`, `haiku`, `sonnet`, `opus`, custom model id
 
 Output:
 - Setup prints tokens once, plus a small block of stable key/value lines (keys are kebab-case and may be indented in the human UI).

@@ -117,7 +117,7 @@ Keys:
 - `boss_name`: boss display name used in instructions/templates
 - `boss_timezone`: boss timezone (IANA) used for all displayed timestamps
 - `boss_token_hash`: hashed admin token (not currently surfaced via CLI commands beyond setup)
-- `default_provider`: `"claude"` or `"codex"` (used by setup as a default)
+- `default_provider`: `"claude"` or `"codex"` (written by setup; informational today and not used as an implicit default by `hiboss agent register`)
 - `permission_policy`: JSON permission policy mapping operations → required permission level
 - `adapter_boss_id_<adapter-type>`: boss identity on an adapter, e.g.:
   - `adapter_boss_id_telegram = "your_username"`
@@ -140,7 +140,7 @@ Per-agent settings:
 | `provider` | TEXT | `'claude'` | `"claude"` or `"codex"` |
 | `model` | TEXT | `NULL` | Optional model name. `NULL` means “use the provider default model”. |
 | `reasoning_effort` | TEXT | `'medium'` | `"none"`, `"low"`, `"medium"`, `"high"`, or `"xhigh"`. `NULL` means “use the provider default reasoning effort”. |
-| `auto_level` | TEXT | `'high'` | `"medium"` or `"high"`. Note: unified-agent-sdk also supports `"low"`, but Hi-Boss disallows it because it can prevent the agent from running `hiboss` commands. |
+| `auto_level` | TEXT | `'medium'` | `"medium"` or `"high"`. Note: unified-agent-sdk also supports `"low"`, but Hi-Boss disallows it because it can prevent the agent from running `hiboss` commands. |
 | `permission_level` | TEXT | `'standard'` | `"restricted"`, `"standard"`, `"privileged"`, or `"boss"` |
 | `session_policy` | TEXT | `NULL` | JSON blob for SessionPolicyConfig |
 | `created_at` | INTEGER | `CAST(strftime('%s','now') AS INTEGER) * 1000` | Unix epoch ms (UTC) |

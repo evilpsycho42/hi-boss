@@ -14,7 +14,7 @@ Flags:
 - `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
 - `--description <description>` (optional)
 - `--workspace <path>` (optional)
-- `--provider <claude|codex>` (optional)
+- `--provider <claude|codex>` (required)
 - `--provider-source-home <path>` (optional; when used with `--provider`, imports provider config from this directory)
 - `--model <model>` (optional)
 - `--reasoning-effort <default|none|low|medium|high|xhigh>` (optional; use `default` to clear and use provider default)
@@ -29,11 +29,27 @@ Flags:
   - `--session-idle-timeout <duration>` (units: `d/h/m/s`)
   - `--session-max-context-length <n>`
 
+Defaults (when flags are omitted):
+- `provider`: none (required)
+- `model`: provider default (`NULL` override)
+- `reasoning-effort`: provider default (`NULL` override)
+- `auto-level`: `medium`
+- `permission-level`: `standard`
+- `description`: generated default description
+- `workspace`: unset (`NULL`)
+- `session-policy`: unset
+- `metadata`: unset
+
+Notes:
+- `--model default` on register clears the model override to provider default (`NULL`).
+- `--reasoning-effort default` on register clears the reasoning-effort override to provider default (`NULL`).
+
 Provider config import:
-- When `--provider` is provided, Hi-Boss imports provider config files into the agent’s provider home.
+- Hi-Boss imports provider config files into the agent’s provider home for the effective provider.
 - If `--provider-source-home` is omitted, Hi-Boss uses the provider default source home:
   - `codex` → `~/.codex/`
   - `claude` → `~/.claude/`
+- `--provider-source-home` requires `--provider`.
 
 Output (parseable):
 - `name:`
@@ -72,6 +88,7 @@ Notes:
 - Updating `--provider`, `--model`, or `--reasoning-effort` does **not** force a session refresh. Existing/resumed sessions may continue using the previous session config until a refresh (`/new`) or policy refresh opens a new session.
 - When switching providers without specifying `--model` / `--reasoning-effort`, Hi-Boss clears these overrides so the new provider can use its defaults when a fresh session is eventually opened.
 - `--clear-metadata` clears user metadata but preserves the internal session resume handle (`metadata.sessionHandle`). The `sessionHandle` key is reserved and is ignored if provided via `--metadata-*`.
+- `--provider-source-home` requires `--provider`.
 
 Provider config import:
 - When `--provider` is provided, Hi-Boss imports provider config files into the agent’s provider home.

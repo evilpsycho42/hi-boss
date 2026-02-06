@@ -18,10 +18,10 @@ export function registerAgentCommands(program: Command): void {
     .command("register")
     .description("Register a new agent")
     .requiredOption("--name <name>", "Agent name (alphanumeric with hyphens)")
+    .requiredOption("--provider <provider>", "Provider (claude or codex)")
     .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
     .option("--description <description>", "Agent description")
     .option("--workspace <path>", "Workspace path for unified-agent-sdk")
-    .option("--provider <provider>", "Provider (claude or codex)")
     .option(
       "--provider-source-home <path>",
       "Provider source home to import config from (default: ~/.codex or ~/.claude)"

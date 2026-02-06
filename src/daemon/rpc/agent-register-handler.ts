@@ -6,7 +6,6 @@ import type { Agent } from "../../agent/types.js";
 import { isValidAgentName, AGENT_NAME_ERROR_MESSAGE } from "../../shared/validation.js";
 import { parseDailyResetAt, parseDurationToMs } from "../../shared/session-policy.js";
 import { setupAgentHome } from "../../agent/home-setup.js";
-import { DEFAULT_AGENT_PROVIDER } from "../../shared/defaults.js";
 import { isPermissionLevel } from "../../shared/permissions.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 
@@ -31,13 +30,10 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
         rpcError(RPC_ERRORS.ALREADY_EXISTS, "Agent already exists");
       }
 
-      let provider: "claude" | "codex" | undefined;
-      if (p.provider !== undefined) {
-        if (p.provider !== "claude" && p.provider !== "codex") {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid provider (expected claude or codex)");
-        }
-        provider = p.provider;
+      if (p.provider !== "claude" && p.provider !== "codex") {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid provider (expected claude or codex)");
       }
+      const provider: "claude" | "codex" = p.provider;
 
       let reasoningEffort: Agent["reasoningEffort"] | null | undefined;
       if (p.reasoningEffort !== undefined) {
@@ -140,10 +136,9 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
         providerSourceHome = p.providerSourceHome.trim();
       }
 
-      const effectiveProvider = provider ?? DEFAULT_AGENT_PROVIDER;
       try {
         await setupAgentHome(p.name, ctx.config.dataDir, {
-          provider: effectiveProvider,
+          provider,
           providerSourceHome,
         });
       } catch (err) {
@@ -244,4 +239,3 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
     }
   };
 }
-

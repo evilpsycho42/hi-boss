@@ -7,8 +7,6 @@ import {
   DEFAULT_SETUP_AGENT_NAME,
   DEFAULT_SETUP_AUTO_LEVEL,
   DEFAULT_SETUP_PERMISSION_LEVEL,
-  DEFAULT_SETUP_MODEL_BY_PROVIDER,
-  DEFAULT_SETUP_REASONING_EFFORT,
   SETUP_MODEL_CHOICES_BY_PROVIDER,
   getDefaultAgentDescription,
   getDefaultSetupBossName,
@@ -42,14 +40,18 @@ export async function runInteractiveSetup(): Promise<void> {
     return;
   }
 
-  // Step 1: Choose provider
-  const provider = await select<"claude" | "codex">({
-    message: "Choose your default AI provider:",
-    choices: [
-      { value: "claude", name: "Claude Code (Anthropic)" },
-      { value: "codex", name: "Codex (OpenAI)" },
-    ],
+  // Step 1: Choose provider (required; no implicit default)
+  const providerInput = await input({
+    message: "Choose provider (claude or codex):",
+    validate: (value) => {
+      const normalized = value.trim().toLowerCase();
+      if (normalized !== "claude" && normalized !== "codex") {
+        return "Please enter either 'claude' or 'codex'";
+      }
+      return true;
+    },
   });
+  const provider = providerInput.trim().toLowerCase() as "claude" | "codex";
 
   const PROVIDER_SOURCE_HOME_CUSTOM = "__custom__";
   const defaultProviderHome = provider === "codex" ? "~/.codex" : "~/.claude";
@@ -153,7 +155,7 @@ export async function runInteractiveSetup(): Promise<void> {
   const modelChoice = await select<string>({
     message: "Select model:",
     choices: [
-      { value: MODEL_PROVIDER_DEFAULT, name: "default (use provider default; do not override)" },
+      { value: MODEL_PROVIDER_DEFAULT, name: "null (use provider default; do not override)" },
       ...(provider === "claude"
         ? SETUP_MODEL_CHOICES_BY_PROVIDER.claude.map((value) => ({
             value,
@@ -165,7 +167,7 @@ export async function runInteractiveSetup(): Promise<void> {
           }))),
       { value: MODEL_CUSTOM, name: "Custom model id..." },
     ],
-    default: DEFAULT_SETUP_MODEL_BY_PROVIDER[provider],
+    default: MODEL_PROVIDER_DEFAULT,
   });
 
   let model: string | null;
@@ -200,7 +202,7 @@ export async function runInteractiveSetup(): Promise<void> {
       { value: "high", name: "High - Thorough analysis" },
       { value: "xhigh", name: "XHigh - Extra thorough (slowest)" },
     ],
-    default: DEFAULT_SETUP_REASONING_EFFORT,
+    default: "default",
   });
   const reasoningEffort: SetupConfig["agent"]["reasoningEffort"] =
     reasoningEffortChoice === "default" ? null : reasoningEffortChoice;
@@ -218,12 +220,13 @@ export async function runInteractiveSetup(): Promise<void> {
     default: DEFAULT_SETUP_AUTO_LEVEL,
   });
 
-  const permissionLevel = await select<"restricted" | "standard" | "privileged">({
+  const permissionLevel = await select<"restricted" | "standard" | "privileged" | "boss">({
     message: "Agent permission level:",
     choices: [
       { value: "restricted", name: "Restricted" },
-      { value: "standard", name: "Standard" },
-      { value: "privileged", name: "Privileged (recommended)" },
+      { value: "standard", name: "Standard (recommended)" },
+      { value: "privileged", name: "Privileged" },
+      { value: "boss", name: "Boss" },
     ],
     default: DEFAULT_SETUP_PERMISSION_LEVEL,
   });

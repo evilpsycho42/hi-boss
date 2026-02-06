@@ -17,7 +17,7 @@ Setup prints `boss-token:` and `agent-token:` once. Save them somewhere safe.
 If setup already created one agent for you, you can skip this.
 
 ```bash
-hiboss agent register --token <boss-token> --name nex --description "AI assistant" --workspace "$PWD"
+hiboss agent register --token <boss-token> --name nex --provider codex --description "AI assistant" --workspace "$PWD"
 ```
 
 This prints `token: ...` once. Save it.
