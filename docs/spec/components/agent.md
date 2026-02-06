@@ -96,16 +96,43 @@ Each agent has provider-specific home directories for configuration and state.
 ├── internal_space/      # Agent's private space, automatically added into additional directories
 │   └── MEMORY.md        # Agent long-term memory (auto-injected into system prompt; truncated; default max 36,000 chars)
 ├── codex_home/
-│   ├── skills/          # Optional provider-home skills
+│   ├── .hiboss/
+│   │   └── skills-managed.json  # Managed skills manifest (daemon-owned)
+│   ├── skills/          # Provider-private skills (highest precedence)
 │   ├── config.toml      # Imported from provider source home (default: ~/.codex/config.toml)
 │   ├── auth.json        # Imported from provider source home (default: ~/.codex/auth.json)
 │   └── AGENTS.md        # Generated system instructions
 └── claude_home/
-    ├── skills/          # Optional provider-home skills
+    ├── .hiboss/
+    │   └── skills-managed.json  # Managed skills manifest (daemon-owned)
+    ├── skills/          # Provider-private skills (highest precedence)
     ├── settings.json    # Imported from provider source home (default: ~/.claude/settings.json)
     ├── .claude.json     # Imported from provider source home (default: ~/.claude/.claude.json)
     └── CLAUDE.md        # Generated system instructions
 ```
+
+Shared skill roots under Hi-Boss data directory:
+
+```
+~/hiboss/skills/
+├── .system/             # Built-in skills (project-managed; refreshed from package assets)
+└── <name>/              # Global skills (user-managed)
+```
+
+Packaged built-in source path:
+
+- `<package-root>/skills/.system/` (published via `package.json#files` including `skills/`)
+- On each new session, Hi-Boss re-seeds `~/hiboss/skills/.system/` from this packaged source.
+- If the packaged source is missing/corrupted, Hi-Boss logs a warning and continues session creation.
+
+Built-in source metadata convention:
+
+- Record upstream metadata in this codebase (not in user runtime state): `docs/spec/skills/builtin-sources.json`.
+- This file tracks `source-repo`, `source-path`, `source-ref`, and `source-commit` so built-ins can be refreshed from upstream deliberately.
+
+Precedence when names conflict:
+
+`provider-private > global > built-in`
 
 ### Setup Functions
 

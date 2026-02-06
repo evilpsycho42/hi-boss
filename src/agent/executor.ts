@@ -33,6 +33,7 @@ import { getTriggerFields } from "./executor-triggers.js";
 import { openOrResumeUnifiedSession } from "./session-resume.js";
 import { countDuePendingEnvelopesForAgent } from "./executor-db.js";
 import { executeUnifiedTurn } from "./executor-turn.js";
+import { syncProviderSkillsForNewSession } from "./skills-sync.js";
 
 /**
  * Maximum number of pending envelopes to process in a single turn.
@@ -343,6 +344,21 @@ export class AgentExecutor {
           hibossDir: this.hibossDir,
           boss,
         });
+
+        const skillSync = syncProviderSkillsForNewSession({
+          hibossDir: this.hibossDir,
+          agentName: agent.name,
+          provider,
+          providerHomePath: homePath,
+        });
+        if (skillSync.warnings.length > 0) {
+          logEvent("warn", "skills-sync-provider-warning", {
+            "agent-name": agent.name,
+            provider,
+            warnings: skillSync.warnings,
+          });
+        }
+
         await writeInstructionFiles(agent.name, instructions, { hibossDir: this.hibossDir });
 
         // Create runtime with provider-specific configuration
