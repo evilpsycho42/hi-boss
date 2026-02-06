@@ -13,6 +13,7 @@
   "files": [
     "dist/",
     "prompts/",
+    "skills/",
     "default_setup.json",
     "README.md",
     "LICENSE"

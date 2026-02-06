@@ -15,11 +15,12 @@ Envelope delivery remains the priority: if session resume fails (missing/expired
 Sessions are created on-demand when an agent needs to process envelopes:
 
 1. `AgentExecutor.getOrCreateSession()` checks if a session exists in memory
-2. If not (or if refresh is needed), generates fresh instruction files (AGENTS.md/CLAUDE.md) in the agent home directory (including an injected `internal_space/MEMORY.md` snapshot)
-3. Creates a new `UnifiedAgentRuntime` with home path pointing to instruction files
-4. If the agent has a persisted `sessionHandle` and session policy allows it, attempts `runtime.resumeSession(handle)`
-5. If resume is not possible or fails, opens a new session via `runtime.openSession({})`
-6. Caches the session in memory by agent name
+2. If not (or if refresh is needed), syncs skills for the effective provider (built-ins + globals) into the provider home skills directory
+3. Generates fresh instruction files (AGENTS.md/CLAUDE.md) in the agent home directory (including an injected `internal_space/MEMORY.md` snapshot)
+4. Creates a new `UnifiedAgentRuntime` with home path pointing to instruction files
+5. If the agent has a persisted `sessionHandle` and session policy allows it, attempts `runtime.resumeSession(handle)`
+6. If resume is not possible or fails, opens a new session via `runtime.openSession({})`
+7. Caches the session in memory by agent name
 
 ### Reuse
 

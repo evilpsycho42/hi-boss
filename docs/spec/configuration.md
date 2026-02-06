@@ -26,11 +26,13 @@ By default Hi-Boss stores all state under:
 Contents (common):
 
 - `~/hiboss/BOSS.md` — boss profile placeholder (created empty by setup; not rendered in the minimal system prompt)
+- `~/hiboss/skills/.system/` — built-in skills (project-managed; refreshed from packaged assets during new-session sync)
+- `~/hiboss/skills/<name>/` — global user-managed skills
 - `~/hiboss/media/` — Telegram downloads (attachments are saved here for agents to read)
 - `~/hiboss/agents/<agent-name>/SOUL.md` — persona placeholder (created empty by setup/registration; not rendered in the minimal system prompt)
 - `~/hiboss/agents/<agent-name>/internal_space/MEMORY.md` — per-agent long-term memory auto-injected into system instructions (may be truncated; default max 36,000 chars)
-- `~/hiboss/agents/<agent-name>/codex_home/` — provider home for Codex (used as `CODEX_HOME`; includes `skills/`)
-- `~/hiboss/agents/<agent-name>/claude_home/` — provider home for Claude Code (used as `CLAUDE_CONFIG_DIR`; includes `skills/`)
+- `~/hiboss/agents/<agent-name>/codex_home/` — provider home for Codex (used as `CODEX_HOME`; includes `skills/` + `.hiboss/skills-managed.json`)
+- `~/hiboss/agents/<agent-name>/claude_home/` — provider home for Claude Code (used as `CLAUDE_CONFIG_DIR`; includes `skills/` + `.hiboss/skills-managed.json`)
 
 Internal (do not touch):
 

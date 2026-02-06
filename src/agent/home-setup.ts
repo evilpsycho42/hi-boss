@@ -12,6 +12,7 @@ import * as os from "os";
 import { assertValidAgentName } from "../shared/validation.js";
 import { getHiBossRootDir } from "../shared/hiboss-paths.js";
 import { ensureAgentInternalSpaceLayout } from "../shared/internal-space.js";
+import { getProviderStateDir } from "../shared/skills-paths.js";
 
 export interface SetupAgentHomeOptions {
   provider?: "claude" | "codex";
@@ -140,6 +141,8 @@ export async function setupAgentHome(
   fs.mkdirSync(claudeHome, { recursive: true });
   fs.mkdirSync(path.join(codexHome, "skills"), { recursive: true });
   fs.mkdirSync(path.join(claudeHome, "skills"), { recursive: true });
+  fs.mkdirSync(getProviderStateDir(codexHome), { recursive: true });
+  fs.mkdirSync(getProviderStateDir(claudeHome), { recursive: true });
 
   // Optional customization placeholders (created empty once; never overwritten).
   try {

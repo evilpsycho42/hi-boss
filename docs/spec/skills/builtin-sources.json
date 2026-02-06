@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "builtins": [
+    {
+      "name": "agent-browser",
+      "source-type": "git",
+      "source-repo": "https://github.com/vercel-labs/agent-browser",
+      "source-path": "skills/agent-browser",
+      "source-ref": "main",
+      "source-commit": "76c30690f5539dcb515663b0dec99c0a7c24e0ff",
+      "sync-date": "2026-02-06"
+    }
+  ]
+}
