@@ -228,11 +228,17 @@ Clearing nullable overrides:
   - `agent-health:` (`ok|error|unknown`)
   - `pending-count:` (counts due pending envelopes)
   - `current-run-id:` / `current-run-started-at:` (optional)
+  - `last-run-status:` (`completed|failed|cancelled|none`)
   - `last-run-*:` fields (optional; see `docs/spec/cli/agents.md`)
 - In `hiboss agent status`, session policy is printed as:
   - `session-daily-reset-at:`
   - `session-idle-timeout:`
   - `session-max-context-length:`
+- `hiboss agent abort` prints:
+  - `success: true|false`
+  - `agent-name:`
+  - `cancelled-run: true|false`
+  - `cleared-pending-count: <n>`
 
 ---
 

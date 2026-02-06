@@ -2,7 +2,7 @@
  * Agent management RPC handlers.
  *
  * Handles: agent.register, agent.list, agent.bind, agent.unbind,
- * agent.refresh, agent.self, agent.session-policy.set, agent.status
+ * agent.refresh, agent.abort, agent.self, agent.session-policy.set, agent.status
  */
 
 import type {
@@ -10,6 +10,8 @@ import type {
   AgentBindParams,
   AgentUnbindParams,
   AgentRefreshParams,
+  AgentAbortParams,
+  AgentAbortResult,
   AgentSelfParams,
   AgentStatusParams,
   AgentStatusResult,
@@ -138,7 +140,12 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
                 id: lastRun.id,
                 startedAt: lastRun.startedAt,
                 ...(typeof lastRun.completedAt === "number" ? { completedAt: lastRun.completedAt } : {}),
-                status: lastRun.status === "failed" ? "failed" : "completed",
+                status:
+                  lastRun.status === "failed"
+                    ? "failed"
+                    : lastRun.status === "cancelled"
+                      ? "cancelled"
+                      : "completed",
                 ...(lastRun.error ? { error: lastRun.error } : {}),
                 ...(typeof lastRun.contextLength === "number"
                   ? { contextLength: lastRun.contextLength }
@@ -147,6 +154,38 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
             }
             : {}),
         },
+      };
+
+      return result;
+    },
+
+    "agent.abort": async (params) => {
+      const p = params as unknown as AgentAbortParams;
+      const token = requireToken(p.token);
+      const principal = ctx.resolvePrincipal(token);
+      ctx.assertOperationAllowed("agent.abort", principal);
+
+      if (typeof p.agentName !== "string" || !isValidAgentName(p.agentName)) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, AGENT_NAME_ERROR_MESSAGE);
+      }
+
+      if (principal.kind === "agent" && principal.agent.name !== p.agentName) {
+        rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+      }
+
+      const agent = ctx.db.getAgentByNameCaseInsensitive(p.agentName);
+      if (!agent) {
+        rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
+      }
+
+      const cancelledRun = ctx.executor.abortCurrentRun(agent.name, "rpc:agent.abort");
+      const clearedPendingCount = ctx.db.markDuePendingNonCronEnvelopesDoneForAgent(agent.name);
+
+      const result: AgentAbortResult = {
+        success: true,
+        agentName: agent.name,
+        cancelledRun,
+        clearedPendingCount,
       };
 
       return result;

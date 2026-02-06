@@ -178,6 +178,18 @@ export interface AgentStatusParams {
   agentName: string;
 }
 
+export interface AgentAbortParams {
+  token: string;
+  agentName: string;
+}
+
+export interface AgentAbortResult {
+  success: boolean;
+  agentName: string;
+  cancelledRun: boolean;
+  clearedPendingCount: number;
+}
+
 export interface AgentStatusResult {
   agent: {
     name: string;
@@ -213,7 +225,7 @@ export interface AgentStatusResult {
       id: string;
       startedAt: number;
       completedAt?: number;
-      status: "completed" | "failed";
+      status: "completed" | "failed" | "cancelled";
       error?: string;
       contextLength?: number;
     };

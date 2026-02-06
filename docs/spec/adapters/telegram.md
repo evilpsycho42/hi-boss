@@ -51,6 +51,7 @@ The Telegram adapter connects Hi-Boss to Telegram bots, enabling agents to commu
 |---------|-------------|
 | `/new` | Refresh the bound agent session (boss-only) |
 | `/status` | Show `hiboss agent status` for the bound agent (boss-only) |
+| `/abort` | Cancel current run + clear due pending inbox for the bound agent (boss-only) |
 
 Commands are boss-only: non-boss users get no reply.
 

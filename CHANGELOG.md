@@ -6,6 +6,32 @@ This project uses date-based npm versions (see `AGENTS.md`).
 
 ## [Unreleased]
 
+## [2026.2.6-rev.3] - 2026-02-06
+
+### Added
+- Boss-only `hiboss agent abort` CLI command and `agent.abort` RPC method to cancel an in-flight run and clear due pending non-cron inbox items.
+- Telegram boss command `/abort` mapped to the bound agent abort flow.
+
+### Changed
+- Agent runs now support a terminal `cancelled` status in storage and status surfaces.
+- Session bootstrap logic extracted from the executor into `src/agent/executor-session.ts`.
+
+### Docs
+- Updated CLI, IPC, configuration, agent component, definitions, and Telegram adapter specs for abort behavior and cancelled-run semantics.
+
+## [2026.2.6-rev.3-rc.1] - 2026-02-06
+
+### Added
+- Boss-only `hiboss agent abort` CLI command and `agent.abort` RPC method to cancel an in-flight run and clear due pending non-cron inbox items.
+- Telegram boss command `/abort` mapped to the bound agent abort flow.
+
+### Changed
+- Agent runs now support a terminal `cancelled` status in storage and status surfaces.
+- Session bootstrap logic extracted from the executor into `src/agent/executor-session.ts`.
+
+### Docs
+- Updated CLI, IPC, configuration, agent component, definitions, and Telegram adapter specs for abort behavior and cancelled-run semantics.
+
 ## [2026.2.6-rev.2] - 2026-02-06
 
 ### Changed

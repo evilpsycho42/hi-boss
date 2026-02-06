@@ -279,8 +279,16 @@ All agent executions are recorded in the `agent_runs` table.
 | envelope_ids | TEXT | JSON array of processed envelope IDs |
 | final_response | TEXT | Full agent response text |
 | context_length | INTEGER | Context length (tokens) for the run when available |
-| status | TEXT | `running`, `completed`, `failed` |
-| error | TEXT | Error message if failed |
+| status | TEXT | `running`, `completed`, `failed`, `cancelled` |
+| error | TEXT | Error message when `failed` or `cancelled` |
+
+### Cancellation
+
+An agent run can be cancelled by the boss (for example via Telegram `/abort` or `hiboss agent abort`).
+
+Semantics:
+- A cancelled run is terminal and is recorded as `status = cancelled`.
+- Already-read envelopes remain `done` (at-most-once); cancelled runs do not retry.
 
 ### Querying Runs
 

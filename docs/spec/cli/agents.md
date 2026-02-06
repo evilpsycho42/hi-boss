@@ -161,7 +161,7 @@ Notes:
 - Requires a token (agent or boss). The output must not include secrets (agent token, adapter token).
 - When called with an agent token, only `--name <self>` is allowed (agents cannot query other agents).
 - `agent-state` is a **busy-ness** signal: `running` means the daemon currently has a queued or in-flight task for this agent (so replies may be delayed).
-- `agent-health` is derived from the most recent finished run: `ok` (last run completed), `error` (last run failed), `unknown` (no finished runs yet).
+- `agent-health` is derived from the most recent finished run: `ok` (last run completed or cancelled), `error` (last run failed), `unknown` (no finished runs yet).
 - `pending-count` counts **due** pending envelopes (`status=pending` and `deliver_at` is missing or `<= now`).
 
 Flags:
@@ -214,8 +214,28 @@ Output (parseable):
 - `current-run-id:` (optional; short id; when `agent-state=running` and a run record exists)
 - `current-run-started-at:` (optional; boss timezone offset)
 - `last-run-id:` (optional; short id)
-- `last-run-status:` (`completed|failed|none`)
+- `last-run-status:` (`completed|failed|cancelled|none`)
 - `last-run-started-at:` (optional; boss timezone offset)
 - `last-run-completed-at:` (optional; boss timezone offset)
 - `last-run-context-length:` (optional; integer, when available)
-- `last-run-error:` (optional; only when `last-run-status=failed`)
+- `last-run-error:` (optional; only when `last-run-status=failed|cancelled`)
+
+---
+
+## `hiboss agent abort`
+
+Cancels the current in-flight run for an agent (best-effort) and clears the agent’s **due** pending inbox.
+
+Notes:
+- Intended for operator “stop what you’re doing” moments.
+- Cron-generated and future scheduled envelopes are not cancelled.
+
+Flags:
+- `--name <name>` (required)
+- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`; boss token required)
+
+Output (parseable):
+- `success: true|false`
+- `agent-name:`
+- `cancelled-run: true|false`
+- `cleared-pending-count: <n>`
