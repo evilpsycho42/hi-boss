@@ -120,7 +120,7 @@ Remove an agent:
 hiboss agent delete --token <boss-token> --name nex
 ```
 
-List / status / abort:
+List / status:
 
 ```bash
 hiboss agent list --token <boss-token>
