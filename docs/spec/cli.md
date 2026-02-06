@@ -90,6 +90,7 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | `hiboss agent set` | Update agent settings and bindings | Yes (agent/boss token) | privileged |
 | `hiboss agent list` | List agents | Yes (agent/boss token) | restricted |
 | `hiboss agent status` | Show agent state/health | Yes (agent/boss token) | restricted |
+| `hiboss agent abort` | Cancel current run + clear pending inbox | Yes (boss token) | boss |
 | `hiboss agent delete` | Delete an agent | Yes (boss-privileged token) | boss |
 
 ---

@@ -75,6 +75,7 @@ Agents:
 - `agent.bind`
 - `agent.unbind`
 - `agent.refresh` (requests a session refresh)
+- `agent.abort` (cancels current run + clears due pending non-cron envelopes)
 - `agent.self` (resolve `token` → current agent config)
 - `agent.session-policy.set`
 - `agent.status`

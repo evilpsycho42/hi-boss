@@ -73,7 +73,15 @@ function buildAgentStatusText(params: { db: HiBossDatabase; executor: AgentExecu
   }
 
   lines.push(`last-run-id: ${formatShortId(lastRun.id)}`);
-  lines.push(`last-run-status: ${lastRun.status === "failed" ? "failed" : "completed"}`);
+  lines.push(
+    `last-run-status: ${
+      lastRun.status === "failed"
+        ? "failed"
+        : lastRun.status === "cancelled"
+          ? "cancelled"
+          : "completed"
+    }`
+  );
   lines.push(`last-run-started-at: ${formatUnixMsAsTimeZoneOffset(lastRun.startedAt, bossTz)}`);
   if (typeof lastRun.completedAt === "number") {
     lines.push(`last-run-completed-at: ${formatUnixMsAsTimeZoneOffset(lastRun.completedAt, bossTz)}`);
@@ -81,7 +89,7 @@ function buildAgentStatusText(params: { db: HiBossDatabase; executor: AgentExecu
   if (typeof lastRun.contextLength === "number") {
     lines.push(`last-run-context-length: ${lastRun.contextLength}`);
   }
-  if (lastRun.status === "failed" && lastRun.error) {
+  if ((lastRun.status === "failed" || lastRun.status === "cancelled") && lastRun.error) {
     lines.push(`last-run-error: ${lastRun.error}`);
   }
 
@@ -103,6 +111,18 @@ export function createChannelCommandHandler(params: {
 
     if (c.command === "status" && typeof c.agentName === "string" && c.agentName) {
       return { text: buildAgentStatusText({ db: params.db, executor: params.executor, agentName: c.agentName }) };
+    }
+
+    if (c.command === "abort" && typeof c.agentName === "string" && c.agentName) {
+      const cancelledRun = params.executor.abortCurrentRun(c.agentName, "telegram:/abort");
+      const clearedPendingCount = params.db.markDuePendingNonCronEnvelopesDoneForAgent(c.agentName);
+      const lines = [
+        "abort: ok",
+        `agent-name: ${c.agentName}`,
+        `cancelled-run: ${cancelledRun ? "true" : "false"}`,
+        `cleared-pending-count: ${clearedPendingCount}`,
+      ];
+      return { text: lines.join("\n") };
     }
   };
 }

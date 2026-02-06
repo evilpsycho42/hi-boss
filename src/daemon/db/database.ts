@@ -108,7 +108,7 @@ export interface AgentRun {
   envelopeIds: string[];
   finalResponse?: string;
   contextLength?: number;
-  status: "running" | "completed" | "failed";
+  status: "running" | "completed" | "failed" | "cancelled";
   error?: string;
 }
 
@@ -1088,6 +1088,18 @@ export class HiBossDatabase {
   }
 
   /**
+   * Cancel an agent run (best-effort).
+   */
+  cancelAgentRun(id: string, reason: string): void {
+    const stmt = this.db.prepare(`
+      UPDATE agent_runs
+      SET status = 'cancelled', completed_at = ?, error = ?, context_length = NULL
+      WHERE id = ?
+    `);
+    stmt.run(Date.now(), reason, id);
+  }
+
+  /**
    * Get the current running run for an agent (if any).
    */
   getCurrentRunningAgentRun(agentName: string): AgentRun | null {
@@ -1107,7 +1119,7 @@ export class HiBossDatabase {
   getLastFinishedAgentRun(agentName: string): AgentRun | null {
     const stmt = this.db.prepare(`
       SELECT * FROM agent_runs
-      WHERE agent_name = ? AND status IN ('completed', 'failed')
+      WHERE agent_name = ? AND status IN ('completed', 'failed', 'cancelled')
       ORDER BY started_at DESC
       LIMIT 1
     `);
@@ -1260,6 +1272,26 @@ export class HiBossDatabase {
     stmt.run(...envelopeIds);
   }
 
+  /**
+   * Mark due pending non-cron envelopes for an agent as done.
+   *
+   * Used by operator abort flows to clear the agent's inbox immediately.
+   */
+  markDuePendingNonCronEnvelopesDoneForAgent(agentName: string): number {
+    const address = `agent:${agentName}`;
+    const nowMs = Date.now();
+    const stmt = this.db.prepare(`
+      UPDATE envelopes
+      SET status = 'done'
+      WHERE "to" = ?
+        AND status = 'pending'
+        AND (deliver_at IS NULL OR deliver_at <= ?)
+        AND json_type(metadata, '$.cronScheduleId') IS NULL
+    `);
+    const result = stmt.run(address, nowMs);
+    return result.changes;
+  }
+
   private rowToAgentRun(row: AgentRunRow): AgentRun {
     return {
       id: row.id,
@@ -1269,7 +1301,7 @@ export class HiBossDatabase {
       envelopeIds: row.envelope_ids ? JSON.parse(row.envelope_ids) : [],
       finalResponse: row.final_response ?? undefined,
       contextLength: typeof row.context_length === "number" ? row.context_length : undefined,
-      status: row.status as "running" | "completed" | "failed",
+      status: row.status as "running" | "completed" | "failed" | "cancelled",
       error: row.error ?? undefined,
     };
   }

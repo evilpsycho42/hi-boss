@@ -124,6 +124,7 @@ export const DEFAULT_PERMISSION_POLICY: PermissionPolicyV1 = {
     "agent.bind": "privileged",
     "agent.unbind": "privileged",
     "agent.refresh": "boss",
+    "agent.abort": "boss",
     "agent.delete": "boss",
     "agent.set": "privileged",
     "agent.session-policy.set": "privileged",

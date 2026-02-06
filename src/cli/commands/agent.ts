@@ -1,7 +1,7 @@
 import { getDefaultConfig, getSocketPath } from "../../daemon/daemon.js";
 import { IpcClient } from "../ipc-client.js";
 import type { Agent } from "../../agent/types.js";
-import type { AgentStatusResult } from "../../daemon/ipc/types.js";
+import type { AgentAbortResult, AgentStatusResult } from "../../daemon/ipc/types.js";
 import { formatShortId } from "../../shared/id-format.js";
 import { formatUnixMsAsTimeZoneOffset } from "../../shared/time.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../shared/validation.js";
@@ -66,6 +66,11 @@ export interface DeleteAgentOptions {
 }
 
 export interface AgentStatusOptions {
+  token?: string;
+  name: string;
+}
+
+export interface AgentAbortOptions {
   token?: string;
   name: string;
 }
@@ -362,9 +367,40 @@ export async function agentStatus(options: AgentStatusOptions): Promise<void> {
     if (typeof result.status.lastRun.contextLength === "number") {
       console.log(`last-run-context-length: ${result.status.lastRun.contextLength}`);
     }
-    if (result.status.lastRun.status === "failed" && result.status.lastRun.error) {
+    if (
+      (result.status.lastRun.status === "failed" || result.status.lastRun.status === "cancelled") &&
+      result.status.lastRun.error
+    ) {
       console.log(`last-run-error: ${result.status.lastRun.error}`);
     }
+  } catch (err) {
+    console.error("error:", (err as Error).message);
+    process.exit(1);
+  }
+}
+
+/**
+ * Cancel the current in-flight run and clear due pending inbox for an agent.
+ */
+export async function abortAgent(options: AgentAbortOptions): Promise<void> {
+  if (!isValidAgentName(options.name)) {
+    console.error("error:", AGENT_NAME_ERROR_MESSAGE);
+    process.exit(1);
+  }
+
+  const config = getDefaultConfig();
+  const client = new IpcClient(getSocketPath(config));
+
+  try {
+    const result = await client.call<AgentAbortResult>("agent.abort", {
+      token: resolveToken(options.token),
+      agentName: options.name,
+    });
+
+    console.log(`success: ${result.success ? "true" : "false"}`);
+    console.log(`agent-name: ${result.agentName}`);
+    console.log(`cancelled-run: ${result.cancelledRun ? "true" : "false"}`);
+    console.log(`cleared-pending-count: ${result.clearedPendingCount}`);
   } catch (err) {
     console.error("error:", (err as Error).message);
     process.exit(1);

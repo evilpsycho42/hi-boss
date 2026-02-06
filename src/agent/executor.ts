@@ -1,46 +1,38 @@
 /**
  * Agent executor for running agent sessions with the unified agent SDK.
  */
-import * as path from "node:path";
-import { createRuntime } from "@unified-agent-sdk/runtime";
+import type { RunHandle } from "@unified-agent-sdk/runtime";
 import type { Agent } from "./types.js";
 import type { HiBossDatabase } from "../daemon/db/database.js";
-import { getAgentHomePath, getAgentInternalSpaceDir, getHiBossDir } from "./home-setup.js";
-import {
-  generateSystemInstructions,
-  writeInstructionFiles,
-} from "./instruction-generator.js";
+import { getHiBossDir } from "./home-setup.js";
 import { buildTurnInput } from "./turn-input.js";
-import { HIBOSS_TOKEN_ENV } from "../shared/env.js";
 import {
   parseSessionPolicyConfig,
 } from "../shared/session-policy.js";
-import {
-  DEFAULT_AGENT_AUTO_LEVEL,
-  DEFAULT_AGENT_PROVIDER,
-  DEFAULT_DAEMON_DIRNAME,
-} from "../shared/defaults.js";
 import { errorMessage, logEvent } from "../shared/daemon-log.js";
 import {
-  getBossInfo,
-  getRefreshReasonForPolicy,
   queueAgentTask,
   type AgentSession,
   type SessionRefreshRequest,
-  type TurnTokenUsage,
 } from "./executor-support.js";
-import { readPersistedAgentSession, writePersistedAgentSession } from "./persisted-session.js";
+import { writePersistedAgentSession } from "./persisted-session.js";
 import type { AgentRunTrigger } from "./executor-triggers.js";
 import { getTriggerFields } from "./executor-triggers.js";
-import { openOrResumeUnifiedSession } from "./session-resume.js";
 import { countDuePendingEnvelopesForAgent } from "./executor-db.js";
 import { executeUnifiedTurn } from "./executor-turn.js";
-import { syncProviderSkillsForNewSession } from "./skills-sync.js";
+import { getOrCreateAgentSession } from "./executor-session.js";
 
 /**
  * Maximum number of pending envelopes to process in a single turn.
  */
 const MAX_ENVELOPES_PER_TURN = 10;
+
+type InFlightAgentRun = {
+  runRecordId: string;
+  abortController: AbortController;
+  runHandle: RunHandle | null;
+  abortReason?: string;
+};
 
 /**
  * Agent executor manages agent sessions and runs.
@@ -48,6 +40,7 @@ const MAX_ENVELOPES_PER_TURN = 10;
 export class AgentExecutor {
   private sessions: Map<string, AgentSession> = new Map();
   private agentLocks: Map<string, Promise<void>> = new Map();
+  private inFlightRuns: Map<string, InFlightAgentRun> = new Map();
   private pendingSessionRefresh: Map<string, SessionRefreshRequest> = new Map();
   private db: HiBossDatabase | null;
   private hibossDir: string;
@@ -72,6 +65,34 @@ export class AgentExecutor {
    */
   isAgentBusy(agentName: string): boolean {
     return this.agentLocks.has(agentName);
+  }
+
+  /**
+   * Cancel the current in-flight run for an agent (best-effort).
+   *
+   * Note: this does not clear pending envelopes. Callers should clear the inbox
+   * separately (e.g., via an operator abort RPC).
+   */
+  abortCurrentRun(agentName: string, reason: string): boolean {
+    const inFlight = this.inFlightRuns.get(agentName);
+    if (!inFlight) return false;
+
+    if (!inFlight.abortReason) {
+      inFlight.abortReason = reason;
+    }
+
+    inFlight.abortController.abort();
+
+    if (inFlight.runHandle) {
+      inFlight.runHandle.cancel().catch((err) => {
+        logEvent("warn", "agent-run-cancel-failed", {
+          "agent-name": agentName,
+          error: errorMessage(err),
+        });
+      });
+    }
+
+    return true;
   }
 
   /**
@@ -198,7 +219,28 @@ export class AgentExecutor {
     const triggerFields = getTriggerFields(trigger);
     let runStartedAtMs: number | null = null;
 
+    const inFlight: InFlightAgentRun = {
+      runRecordId: run.id,
+      abortController: new AbortController(),
+      runHandle: null,
+    };
+    this.inFlightRuns.set(agent.name, inFlight);
+
     try {
+      if (inFlight.abortController.signal.aborted) {
+        const reason = inFlight.abortReason ?? "abort-requested";
+        db.cancelAgentRun(run.id, reason);
+        logEvent("info", "agent-run-complete", {
+          "agent-name": agent.name,
+          "agent-run-id": run.id,
+          state: "cancelled",
+          "duration-ms": 0,
+          "context-length": null,
+          reason,
+        });
+        return envelopeIds.length;
+      }
+
       // Get or create session
       const session = await this.getOrCreateSession(agent, db, trigger);
 
@@ -222,7 +264,27 @@ export class AgentExecutor {
       runStartedAtMs = Date.now();
 
       // Execute the turn
-      const turn = await executeUnifiedTurn(session, turnInput);
+      const turn = await executeUnifiedTurn(session, turnInput, {
+        signal: inFlight.abortController.signal,
+        onRunHandle: (handle) => {
+          inFlight.runHandle = handle;
+        },
+      });
+
+      if (turn.status === "cancelled") {
+        const reason = inFlight.abortReason ?? "run-cancelled";
+        db.cancelAgentRun(run.id, reason);
+        logEvent("info", "agent-run-complete", {
+          "agent-name": agent.name,
+          "agent-run-id": run.id,
+          state: "cancelled",
+          "duration-ms": runStartedAtMs ? Date.now() - runStartedAtMs : 0,
+          "context-length": null,
+          reason,
+        });
+        return envelopeIds.length;
+      }
+
       const response = turn.finalText;
       session.lastRunCompletedAtMs = Date.now();
 
@@ -287,6 +349,11 @@ export class AgentExecutor {
         error: errorMessage,
       });
       throw error;
+    } finally {
+      const existing = this.inFlightRuns.get(agent.name);
+      if (existing && existing.runRecordId === run.id) {
+        this.inFlightRuns.delete(agent.name);
+      }
     }
   }
 
@@ -298,168 +365,17 @@ export class AgentExecutor {
     db: HiBossDatabase,
     trigger?: AgentRunTrigger
   ): Promise<AgentSession> {
-    // Apply any pending refresh request at the first safe point (before a run).
-    const pendingRefreshReasons = await this.applyPendingSessionRefresh(agent.name);
-    const triggerFields = getTriggerFields(trigger);
-
-    let session = this.sessions.get(agent.name);
-    let policyRefreshReason: string | null = null;
-
-    // Apply policy-based refreshes before starting a new run.
-    if (session) {
-      const policy = this.getSessionPolicy(agent);
-      const reason = getRefreshReasonForPolicy(session, policy, new Date());
-      if (reason) {
-        policyRefreshReason = reason;
-        await this.refreshSession(agent.name);
-        session = undefined;
-      }
-    }
-
-    if (!session) {
-      // Get agent token from database
-      const agentRecord = db.getAgentByName(agent.name);
-      if (!agentRecord) {
-        throw new Error(`Agent ${agent.name} not found in database`);
-      }
-
-      const desiredProvider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
-      const persisted = readPersistedAgentSession(agentRecord);
-      // Experiment: if a resumable session handle exists, prefer its provider even if the agent's provider changed.
-      const provider =
-        persisted?.handle.sessionId && (persisted.provider === "claude" || persisted.provider === "codex")
-          ? persisted.provider
-          : desiredProvider;
-      const homePath = getAgentHomePath(agent.name, provider, this.hibossDir);
-      const workspace = agent.workspace ?? process.cwd();
-      const internalSpaceDir = getAgentInternalSpaceDir(agent.name, this.hibossDir);
-      const daemonDir = path.join(this.hibossDir, DEFAULT_DAEMON_DIRNAME);
-
-      try {
-        // Generate and write instruction files for new session
-        const bindings = db.getBindingsByAgentName(agent.name);
-        const boss = getBossInfo(db, bindings);
-        const instructions = generateSystemInstructions({
-          agent,
-          agentToken: agentRecord.token,
-          bindings,
-          bossTimezone: db.getBossTimezone(),
-          hibossDir: this.hibossDir,
-          boss,
-        });
-
-        const skillSync = syncProviderSkillsForNewSession({
-          hibossDir: this.hibossDir,
-          agentName: agent.name,
-          provider,
-          providerHomePath: homePath,
-        });
-        if (skillSync.warnings.length > 0) {
-          logEvent("warn", "skills-sync-provider-warning", {
-            "agent-name": agent.name,
-            provider,
-            warnings: skillSync.warnings,
-          });
-        }
-
-        await writeInstructionFiles(agent.name, instructions, { hibossDir: this.hibossDir });
-
-        // Create runtime with provider-specific configuration
-        const defaultOpts: Record<string, unknown> = {
-          workspace: { cwd: workspace, additionalDirs: [internalSpaceDir, daemonDir] },
-          access: { auto: this.mapAccessLevel(agent.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL) },
-        };
-        if (agent.model !== undefined) {
-          defaultOpts.model = agent.model;
-        }
-        if (agent.reasoningEffort !== undefined) {
-          defaultOpts.reasoningEffort = agent.reasoningEffort;
-        }
-
-        const runtime =
-          provider === "claude"
-            ? createRuntime({
-              provider: "@anthropic-ai/claude-agent-sdk",
-              home: homePath,
-              env: { [HIBOSS_TOKEN_ENV]: agentRecord.token },
-              defaultOpts,
-            })
-            : createRuntime({
-              provider: "@openai/codex-sdk",
-              home: homePath,
-              env: { [HIBOSS_TOKEN_ENV]: agentRecord.token },
-              defaultOpts,
-            });
-
-        const openSessionOpts =
-          provider === "claude"
-            ? {
-              config: {
-                provider: {
-                  // Allow the agent to send envelopes via the Hi-Boss CLI without permission prompts.
-                  allowedTools: [
-                    // Claude Code often permission-gates Bash at the command-prefix level (e.g. `git diff`).
-                    // Hi-Boss replies are sent via `hiboss envelope send`, so allow the full prefix and a
-                    // couple of best-effort fallbacks for prefix extractors that truncate.
-                    "Bash(hiboss envelope send:*)",
-                    "Bash(hiboss envelope:*)",
-                    "Bash(hiboss:*)",
-                  ],
-                  // Only use project settings, not user settings from ~/.claude which may conflict
-                  // with the agent's CLAUDE_CONFIG_DIR settings (e.g., different ANTHROPIC_BASE_URL).
-                  settingSources: ["project", "user"],
-                },
-              },
-            }
-            : {};
-
-        const { unifiedSession, createdAtMs, lastRunCompletedAtMs, openMode, openReason } =
-          await openOrResumeUnifiedSession({
-            agent,
-            agentRecord,
-            provider,
-            runtime,
-            db,
-            policy: this.getSessionPolicy(agent),
-            openSessionOpts,
-          });
-
-        session = {
-          runtime,
-          session: unifiedSession,
-          agentToken: agentRecord.token,
-          provider,
-          homePath,
-          createdAtMs,
-          ...(lastRunCompletedAtMs !== undefined ? { lastRunCompletedAtMs } : {}),
-        };
-        this.sessions.set(agent.name, session);
-
-        const refreshReasons = [...pendingRefreshReasons, ...(policyRefreshReason ? [policyRefreshReason] : [])];
-        const event = openMode === "resume" ? "agent-session-load" : "agent-session-create";
-        logEvent("info", event, {
-          "agent-name": agent.name,
-          provider,
-          ...(provider !== desiredProvider ? { "desired-provider": desiredProvider } : {}),
-          state: "success",
-          ...triggerFields,
-          "open-mode": openMode,
-          "open-reason": openReason,
-          "refresh-reasons": refreshReasons.length > 0 ? refreshReasons.join(",") : undefined,
-        });
-      } catch (err) {
-        const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
-        logEvent("info", "agent-session-create", {
-          "agent-name": agent.name,
-          provider,
-          state: "failed",
-          ...triggerFields,
-          error: errorMessage(err),
-        });
-        throw err;
-      }
-    }
-    return session;
+    return await getOrCreateAgentSession({
+      agent,
+      db,
+      hibossDir: this.hibossDir,
+      sessions: this.sessions,
+      applyPendingSessionRefresh: (name) => this.applyPendingSessionRefresh(name),
+      refreshSession: (name, reason) => this.refreshSession(name, reason),
+      getSessionPolicy: (a) => this.getSessionPolicy(a),
+      mapAccessLevel: (level) => this.mapAccessLevel(level),
+      trigger,
+    });
   }
 
   /**
