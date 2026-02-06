@@ -6,10 +6,7 @@ import { parseDailyResetAt, parseDurationToMs } from "../../../shared/session-po
 import {
   DEFAULT_SETUP_AGENT_NAME,
   DEFAULT_SETUP_AUTO_LEVEL,
-  DEFAULT_SETUP_MODEL_BY_PROVIDER,
   DEFAULT_SETUP_PERMISSION_LEVEL,
-  DEFAULT_SETUP_PROVIDER,
-  DEFAULT_SETUP_REASONING_EFFORT,
   getDefaultAgentDescription,
   getDefaultSetupBossName,
   getDefaultSetupWorkspace,
@@ -24,7 +21,7 @@ interface SetupConfigFileV1 {
   "boss-name"?: string;
   "boss-timezone"?: string;
   "boss-token": string;
-  provider?: "claude" | "codex";
+  provider: "claude" | "codex";
   "provider-source-home"?: string;
   memory?: {
     mode?: "default" | "local";
@@ -44,7 +41,7 @@ interface SetupConfigFileV1 {
       | "default"
       | null;
     "auto-level"?: "medium" | "high";
-    "permission-level"?: "restricted" | "standard" | "privileged";
+    "permission-level"?: "restricted" | "standard" | "privileged" | "boss";
     "session-policy"?: {
       "daily-reset-at"?: string;
       "idle-timeout"?: string;
@@ -84,8 +81,10 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
   }
 
   const providerRaw = parsed.provider;
-  const provider =
-    providerRaw === "claude" || providerRaw === "codex" ? providerRaw : DEFAULT_SETUP_PROVIDER;
+  const provider = providerRaw === "claude" || providerRaw === "codex" ? providerRaw : undefined;
+  if (!provider) {
+    throw new Error("Invalid setup config (provider is required; expected 'claude' or 'codex')");
+  }
 
   const providerSourceHomeRaw = (parsed as Record<string, unknown>)["provider-source-home"];
   let providerSourceHome: string | undefined;
@@ -155,7 +154,7 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
       if (trimmed === "default") return null;
       return trimmed;
     }
-    return DEFAULT_SETUP_MODEL_BY_PROVIDER[provider];
+    return null;
   })();
 
   const reasoningEffortRaw = agentRaw["reasoning-effort"];
@@ -176,7 +175,7 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
     ) {
       return reasoningEffortRaw;
     }
-    return DEFAULT_SETUP_REASONING_EFFORT;
+    return null;
   })();
 
   const autoLevelRaw = agentRaw["auto-level"];
@@ -191,7 +190,10 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
 
   const permissionLevelRaw = agentRaw["permission-level"];
   const permissionLevel =
-    permissionLevelRaw === "restricted" || permissionLevelRaw === "standard" || permissionLevelRaw === "privileged"
+    permissionLevelRaw === "restricted" ||
+    permissionLevelRaw === "standard" ||
+    permissionLevelRaw === "privileged" ||
+    permissionLevelRaw === "boss"
       ? permissionLevelRaw
       : DEFAULT_SETUP_PERMISSION_LEVEL;
 

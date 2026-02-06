@@ -109,7 +109,7 @@ export interface AgentRegisterParams {
   name: string;
   description?: string;
   workspace?: string;
-  provider?: "claude" | "codex";
+  provider: "claude" | "codex";
   providerSourceHome?: string;
   model?: string;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | null;

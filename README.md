@@ -104,7 +104,7 @@ Manage agents via the CLI (create / update / remove), and optionally delegate ad
 Create/register a new agent:
 
 ```bash
-hiboss agent register --token <boss-token> --name nex --description "AI assistant" --workspace "$PWD"
+hiboss agent register --token <boss-token> --name nex --provider codex --description "AI assistant" --workspace "$PWD"
 ```
 
 Update an agent (manual configuration):

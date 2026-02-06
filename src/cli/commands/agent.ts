@@ -45,7 +45,7 @@ export interface RegisterAgentOptions {
   name: string;
   description?: string;
   workspace?: string;
-  provider?: string;
+  provider: string;
   providerSourceHome?: string;
   model?: string;
   reasoningEffort?: string;
@@ -113,6 +113,7 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
     }
 
     const token = resolveToken(options.token);
+    const model = normalizeDefaultSentinel(options.model);
     const reasoningEffort = normalizeDefaultSentinel(options.reasoningEffort);
     const result = await client.call<RegisterAgentResult>("agent.register", {
       token,
@@ -121,7 +122,7 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
       workspace: options.workspace,
       provider: options.provider,
       providerSourceHome: options.providerSourceHome,
-      model: options.model,
+      model,
       reasoningEffort,
       autoLevel: options.autoLevel,
       permissionLevel: options.permissionLevel,

@@ -42,7 +42,7 @@ export const DEFAULT_MEMORY_MODEL_URL =
 
 export const DEFAULT_AGENT_PROVIDER = "claude" as const;
 export const DEFAULT_AGENT_REASONING_EFFORT = "medium" as const;
-export const DEFAULT_AGENT_AUTO_LEVEL = "high" as const;
+export const DEFAULT_AGENT_AUTO_LEVEL = "medium" as const;
 export const DEFAULT_AGENT_PERMISSION_LEVEL = "standard" as const;
 
 // ==================== DB/Envelope Defaults ====================
@@ -53,21 +53,14 @@ export const DEFAULT_ENVELOPE_LIST_BOX = "inbox" as const;
 
 // ==================== Setup Defaults ====================
 
-export const DEFAULT_SETUP_PROVIDER = DEFAULT_AGENT_PROVIDER;
 export const DEFAULT_SETUP_AGENT_NAME = "nex" as const;
-export const DEFAULT_SETUP_REASONING_EFFORT = DEFAULT_AGENT_REASONING_EFFORT;
 export const DEFAULT_SETUP_AUTO_LEVEL = DEFAULT_AGENT_AUTO_LEVEL;
-export const DEFAULT_SETUP_PERMISSION_LEVEL = "privileged" as const;
+export const DEFAULT_SETUP_PERMISSION_LEVEL = DEFAULT_AGENT_PERMISSION_LEVEL;
 export const DEFAULT_SETUP_BIND_TELEGRAM = true as const;
 
-export const DEFAULT_SETUP_MODEL_BY_PROVIDER = {
-  claude: "opus",
-  codex: "gpt-5.2",
-} as const;
-
 export const SETUP_MODEL_CHOICES_BY_PROVIDER = {
-  claude: ["opus", "sonnet", "haiku"],
-  codex: ["gpt-5.2", "gpt-5.2-codex"],
+  claude: ["haiku", "sonnet", "opus"],
+  codex: ["gpt-5.2", "gpt-5.2-codex", "gpt-5.3-codex"],
 } as const;
 
 export function getDefaultAgentDescription(agentName: string): string {

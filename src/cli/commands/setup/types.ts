@@ -15,7 +15,7 @@ export interface SetupConfig {
     model: string | null;
     reasoningEffort: "none" | "low" | "medium" | "high" | "xhigh" | null;
     autoLevel: "medium" | "high";
-    permissionLevel?: "restricted" | "standard" | "privileged";
+    permissionLevel?: "restricted" | "standard" | "privileged" | "boss";
     sessionPolicy?: {
       dailyResetAt?: string;
       idleTimeout?: string;
