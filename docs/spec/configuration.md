@@ -139,7 +139,7 @@ Per-agent settings:
 | `workspace` | TEXT | `NULL` | Passed to the provider runtime as the session working directory |
 | `provider` | TEXT | `'claude'` | `"claude"` or `"codex"` |
 | `model` | TEXT | `NULL` | Optional model name. `NULL` means “use the provider default model”. |
-| `reasoning_effort` | TEXT | `'medium'` | `"none"`, `"low"`, `"medium"`, `"high"`, or `"xhigh"`. `NULL` means “use the provider default reasoning effort”. |
+| `reasoning_effort` | TEXT | `NULL` | `"none"`, `"low"`, `"medium"`, `"high"`, or `"xhigh"`. `NULL` means “use the provider default reasoning effort”. |
 | `auto_level` | TEXT | `'medium'` | `"medium"` or `"high"`. Note: unified-agent-sdk also supports `"low"`, but Hi-Boss disallows it because it can prevent the agent from running `hiboss` commands. |
 | `permission_level` | TEXT | `'standard'` | `"restricted"`, `"standard"`, `"privileged"`, or `"boss"` |
 | `session_policy` | TEXT | `NULL` | JSON blob for SessionPolicyConfig |

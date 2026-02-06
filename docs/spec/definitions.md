@@ -337,7 +337,7 @@ export interface Agent {
   token: string;
   description?: string;
   workspace?: string;
-  provider?: "claude" | "codex";
+  provider: "claude" | "codex";
   model?: string;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
   autoLevel?: "medium" | "high";
