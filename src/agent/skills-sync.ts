@@ -197,7 +197,25 @@ export function syncProviderSkillsForNewSession(params: {
       const priorManaged = priorEntries[name];
 
       if (providerEntry && !priorManaged) {
+        const currentHash = hashEntry(providerEntry.absolutePath);
+        if (currentHash === source.hash) {
+          nextEntries[name] = {
+            sourceKind: source.kind,
+            sourceRelPath: source.relativePath,
+            sourceHash: source.hash,
+            targetRelPath: name,
+          };
+          continue;
+        }
+
         stats.skippedPrivate += 1;
+        logEvent("warn", "skills-sync-skip-private", {
+          "agent-name": params.agentName,
+          provider: params.provider,
+          "skill-name": name,
+          "source-kind": source.kind,
+          reason: "private-precedence",
+        });
         continue;
       }
 

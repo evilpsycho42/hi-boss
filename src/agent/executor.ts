@@ -1,6 +1,7 @@
 /**
  * Agent executor for running agent sessions with the unified agent SDK.
  */
+import * as path from "node:path";
 import { createRuntime } from "@unified-agent-sdk/runtime";
 import type { Agent } from "./types.js";
 import type { HiBossDatabase } from "../daemon/db/database.js";
@@ -17,6 +18,7 @@ import {
 import {
   DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PROVIDER,
+  DEFAULT_DAEMON_DIRNAME,
 } from "../shared/defaults.js";
 import { errorMessage, logEvent } from "../shared/daemon-log.js";
 import {
@@ -331,6 +333,7 @@ export class AgentExecutor {
       const homePath = getAgentHomePath(agent.name, provider, this.hibossDir);
       const workspace = agent.workspace ?? process.cwd();
       const internalSpaceDir = getAgentInternalSpaceDir(agent.name, this.hibossDir);
+      const daemonDir = path.join(this.hibossDir, DEFAULT_DAEMON_DIRNAME);
 
       try {
         // Generate and write instruction files for new session
@@ -363,7 +366,7 @@ export class AgentExecutor {
 
         // Create runtime with provider-specific configuration
         const defaultOpts: Record<string, unknown> = {
-          workspace: { cwd: workspace, additionalDirs: [internalSpaceDir, this.hibossDir] },
+          workspace: { cwd: workspace, additionalDirs: [internalSpaceDir, daemonDir] },
           access: { auto: this.mapAccessLevel(agent.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL) },
         };
         if (agent.model !== undefined) {
