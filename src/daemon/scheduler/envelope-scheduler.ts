@@ -148,11 +148,28 @@ export class EnvelopeScheduler {
       if (batch.length < ORPHAN_AGENT_ENVELOPES_BATCH_SIZE) break;
     }
 
+    const hitPerTickCap = cleaned >= MAX_ORPHAN_AGENT_ENVELOPES_PER_TICK;
+    let hasMoreDuePending = false;
+    if (hitPerTickCap) {
+      const next = this.db.listEnvelopes({
+        address: toAddress,
+        box: "inbox",
+        status: "pending",
+        limit: 1,
+        dueOnly: true,
+      });
+      hasMoreDuePending = next.length > 0;
+      if (hasMoreDuePending) {
+        this.tickQueued = true;
+      }
+    }
+
     if (cleaned > 0) {
       logEvent("warn", "scheduler-orphan-agent-envelopes-cleaned", {
         "agent-name": raw || "(empty)",
         to: toAddress,
         cleaned,
+        "more-pending": hasMoreDuePending,
       });
     }
   }

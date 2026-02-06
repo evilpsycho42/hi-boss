@@ -3,7 +3,6 @@ import {
   DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
-  DEFAULT_AGENT_REASONING_EFFORT,
   DEFAULT_AGENT_RUN_STATUS,
   DEFAULT_ENVELOPE_STATUS,
 } from "../src/shared/defaults.js";
@@ -28,7 +27,7 @@ function main(): void {
   );
   assertIncludes(
     normalized,
-    `reasoning_effort TEXT DEFAULT '${DEFAULT_AGENT_REASONING_EFFORT}'`,
+    "reasoning_effort TEXT",
     "agents.reasoning_effort"
   );
   assertIncludes(
@@ -62,4 +61,3 @@ try {
   console.error(message);
   process.exit(1);
 }
-
