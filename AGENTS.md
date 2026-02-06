@@ -99,6 +99,18 @@ Useful checks (run when relevant):
 - `npm run verify:token-usage:real` (talks to a real provider; use intentionally)
 - `npm run inventory:magic` (updates `docs/spec/generated/magic-inventory.md`; do not hand-edit that file)
 
+Real provider verification policy (required for provider/dependency/runtime changes):
+- If code or dependencies affect agent runtime/provider behavior (including `@unified-agent-sdk/*` changes), verify with **real** Codex + Claude requests before merging.
+- By default, use the official provider homes: `~/.codex` and `~/.claude`.
+  - Do not pass `--codex-home` / `--claude-home` unless explicitly testing overrides.
+- Keep tests isolated from normal operator state:
+  - Use a dedicated temporary Hi-Boss directory: `export HIBOSS_DIR="$(mktemp -d /tmp/hiboss-verify-XXXX)"`
+  - Never run destructive reset commands against default `~/hiboss` during verification.
+- Minimum real-request verification checklist:
+  - `npm run verify:token-usage:real -- --provider both --session-mode fresh --turns 1`
+  - `npm run verify:token-usage:real -- --provider both --session-mode continuous --turns 2`
+  - Run one isolated daemon-level smoke flow (setup/start/register/send/list) in the temp `HIBOSS_DIR` and confirm both provider-backed agents complete at least one run.
+
 ## Versioning & publishing
 
 Terminology:
