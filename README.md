@@ -96,6 +96,7 @@ hiboss agent set --token <boss-token> --name <agent-name> --bind-adapter-type te
 Boss-only Telegram commands:
 - `/status` — show `hiboss agent status` for the bound agent
 - `/new` — request a session refresh for the bound agent
+- `/abort` — cancel current run and clear the bound agent's due pending inbox
 
 ## Agent
 
@@ -119,11 +120,12 @@ Remove an agent:
 hiboss agent delete --token <boss-token> --name nex
 ```
 
-List / status:
+List / status / abort:
 
 ```bash
 hiboss agent list --token <boss-token>
 hiboss agent status --token <boss-token> --name nex
+hiboss agent abort --token <boss-token> --name nex
 ```
 
 ### Permission levels
