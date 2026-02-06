@@ -125,7 +125,6 @@ List / status / abort:
 ```bash
 hiboss agent list --token <boss-token>
 hiboss agent status --token <boss-token> --name nex
-hiboss agent abort --token <boss-token> --name nex
 ```
 
 ### Permission levels
