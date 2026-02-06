@@ -41,17 +41,13 @@ export async function runInteractiveSetup(): Promise<void> {
   }
 
   // Step 1: Choose provider (required; no implicit default)
-  const providerInput = await input({
-    message: "Choose provider (claude or codex):",
-    validate: (value) => {
-      const normalized = value.trim().toLowerCase();
-      if (normalized !== "claude" && normalized !== "codex") {
-        return "Please enter either 'claude' or 'codex'";
-      }
-      return true;
-    },
+  const provider = await select<"claude" | "codex">({
+    message: "Choose provider:",
+    choices: [
+      { value: "claude", name: "claude" },
+      { value: "codex", name: "codex" },
+    ],
   });
-  const provider = providerInput.trim().toLowerCase() as "claude" | "codex";
 
   const PROVIDER_SOURCE_HOME_CUSTOM = "__custom__";
   const defaultProviderHome = provider === "codex" ? "~/.codex" : "~/.claude";
@@ -131,11 +127,12 @@ export async function runInteractiveSetup(): Promise<void> {
   ).trim();
 
   const defaultAgentDescription = getDefaultAgentDescription(agentName);
-  const agentDescriptionInput = await input({
-    message: `Agent description: (Default: ${defaultAgentDescription})`,
-  });
-  const agentDescription =
-    agentDescriptionInput.trim().length > 0 ? agentDescriptionInput.trim() : defaultAgentDescription;
+  const agentDescription = (
+    await input({
+      message: "Agent description:",
+      default: defaultAgentDescription,
+    })
+  ).trim();
 
   const workspace = await input({
     message: "Workspace directory:",

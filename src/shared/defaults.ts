@@ -54,7 +54,7 @@ export const DEFAULT_ENVELOPE_LIST_BOX = "inbox" as const;
 // ==================== Setup Defaults ====================
 
 export const DEFAULT_SETUP_AGENT_NAME = "nex" as const;
-export const DEFAULT_SETUP_AUTO_LEVEL = DEFAULT_AGENT_AUTO_LEVEL;
+export const DEFAULT_SETUP_AUTO_LEVEL = "high" as const;
 export const DEFAULT_SETUP_PERMISSION_LEVEL = DEFAULT_AGENT_PERMISSION_LEVEL;
 export const DEFAULT_SETUP_BIND_TELEGRAM = true as const;
 

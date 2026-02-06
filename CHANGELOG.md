@@ -6,6 +6,13 @@ This project uses date-based npm versions (see `AGENTS.md`).
 
 ## [Unreleased]
 
+## [2026.2.6-rev.2-rc.1] - 2026-02-06
+
+### Changed
+- Setup wizard provider selection now uses an arrow-key selector instead of free-text input.
+- Setup wizard agent description now pre-fills the default value for inline editing instead of showing it in the prompt label.
+- Setup wizard default auto-level changed from "medium" to "high".
+
 ## [2026.2.6-rev.1] - 2026-02-06
 
 ### Added
