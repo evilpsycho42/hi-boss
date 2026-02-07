@@ -6,6 +6,33 @@ allowed-tools: Bash(agent-browser:*)
 
 # Browser Automation with agent-browser
 
+## Prerequisites
+
+This skill requires `agent-browser` version **0.9.1**.
+
+**Check if installed:**
+
+```bash
+agent-browser --version
+```
+
+If the command is not found or the version does not match 0.9.1, install it:
+
+```bash
+# If previously installed via Homebrew, remove it first to avoid PATH conflicts:
+# brew uninstall agent-browser
+
+npm install -g agent-browser@0.9.1
+```
+
+After installing, download the bundled Chromium browser:
+
+```bash
+agent-browser install
+# On Linux, include system dependencies:
+agent-browser install --with-deps
+```
+
 ## Core Workflow
 
 Every browser automation follows this pattern:
