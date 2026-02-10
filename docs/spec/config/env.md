@@ -1,0 +1,27 @@
+# Config: Environment Variables
+
+## `HIBOSS_TOKEN`
+
+Default token for CLI commands when `--token` is omitted (agent or boss token).
+
+Used by most commands that talk to the daemon, including:
+- `hiboss envelope send`
+- `hiboss envelope list`
+- `hiboss agent ...`
+- `hiboss daemon ...`
+
+## `HIBOSS_DIR`
+
+Overrides the Hi-Boss root directory (default: `~/hiboss`).
+
+Notes:
+- Must be an absolute path, or start with `~`.
+- The daemon stores internal state under `{{HIBOSS_DIR}}/.daemon/`.
+
+---
+
+## Provider CLI homes
+
+Hi-Boss uses shared default provider homes (`~/.claude`, `~/.codex`).
+
+When spawning provider processes, Hi-Boss clears `CLAUDE_CONFIG_DIR` and `CODEX_HOME` so provider-home overrides do not change behavior.

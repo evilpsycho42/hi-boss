@@ -1,9 +1,6 @@
 # CLI: Agents
 
-Auto-level:
-- `medium` — workspace + additional dirs access (can write files and run a broad set of commands, but stays workspace-scoped)
-- `high` — full access to this computer (can run almost anything; recommended only when you trust the agent)
-- Note: unified-agent-sdk supports `low`, but Hi-Boss disallows it because it can block `hiboss` CLI usage.
+Note: Hi-Boss currently runs provider CLIs in **full-access mode** (bypassing sandboxing / permission prompts) so agents can reliably execute `hiboss` commands.
 
 ## `hiboss agent register`
 
@@ -15,10 +12,8 @@ Flags:
 - `--description <description>` (optional)
 - `--workspace <path>` (optional)
 - `--provider <claude|codex>` (required)
-- `--provider-source-home <path>` (optional; when used with `--provider`, imports provider config from this directory)
 - `--model <model>` (optional)
 - `--reasoning-effort <default|none|low|medium|high|xhigh>` (optional; use `default` to clear and use provider default)
-- `--auto-level <medium|high>` (optional)
 - `--permission-level <restricted|standard|privileged|boss>` (optional; `boss` requires boss-privileged token)
 - `--metadata-json <json>` or `--metadata-file <path>` (optional)
 - Optional binding at creation:
@@ -33,7 +28,6 @@ Defaults (when flags are omitted):
 - `provider`: none (required)
 - `model`: provider default (`NULL` override)
 - `reasoning-effort`: provider default (`NULL` override)
-- `auto-level`: `medium`
 - `permission-level`: `standard`
 - `description`: generated default description
 - `workspace`: unset (`NULL`)
@@ -44,12 +38,10 @@ Notes:
 - `--model default` on register clears the model override to provider default (`NULL`).
 - `--reasoning-effort default` on register clears the reasoning-effort override to provider default (`NULL`).
 
-Provider config import:
-- Hi-Boss imports provider config files into the agent’s provider home for the effective provider.
-- If `--provider-source-home` is omitted, Hi-Boss uses the provider default source home:
-  - `codex` → `~/.codex/`
-  - `claude` → `~/.claude/`
-- `--provider-source-home` requires `--provider`.
+Provider homes:
+- Provider CLIs use shared default homes (`~/.claude`, `~/.codex`).
+- Hi-Boss clears `CLAUDE_CONFIG_DIR` / `CODEX_HOME` when spawning provider processes so overrides do not change behavior.
+- Hi-Boss does not import/copy provider config files into per-agent directories.
 
 Output (parseable):
 - `name:`
@@ -67,10 +59,8 @@ Flags:
 - `--description <description>` (optional)
 - `--workspace <path>` (optional)
 - `--provider <claude|codex>` (optional)
-- `--provider-source-home <path>` (optional; when used with `--provider`, imports provider config from this directory)
 - `--model <model>` (optional; use `default` to clear and use provider default)
 - `--reasoning-effort <default|none|low|medium|high|xhigh>` (optional)
-- `--auto-level <medium|high>` (optional)
 - `--permission-level <restricted|standard|privileged|boss>` (optional; boss-privileged token only)
 - Session policy:
   - `--session-daily-reset-at HH:MM` (optional)
@@ -88,18 +78,15 @@ Notes:
 - Updating `--provider`, `--model`, or `--reasoning-effort` does **not** force a session refresh. Existing/resumed sessions may continue using the previous session config until a refresh (`/new`) or policy refresh opens a new session.
 - When switching providers without specifying `--model` / `--reasoning-effort`, Hi-Boss clears these overrides so the new provider can use its defaults when a fresh session is eventually opened.
 - `--clear-metadata` clears user metadata but preserves the internal session resume handle (`metadata.sessionHandle`). The `sessionHandle` key is reserved and is ignored if provided via `--metadata-*`.
-- `--provider-source-home` requires `--provider`.
 
-Provider config import:
-- When `--provider` is provided, Hi-Boss imports provider config files into the agent’s provider home.
-- If `--provider-source-home` is omitted, Hi-Boss uses the provider default source home:
-  - `codex` → `~/.codex/`
-  - `claude` → `~/.claude/`
+Provider homes:
+- Provider CLIs use shared default homes (`~/.claude`, `~/.codex`).
+- Hi-Boss clears `CLAUDE_CONFIG_DIR` / `CODEX_HOME` when spawning provider processes so overrides do not change behavior.
 
 Output (parseable):
 - `success: true|false`
 - `agent-name:`
-- Updated fields when present (e.g., `provider:`, `model:`, `reasoning-effort:`, `auto-level:`, `permission-level:`)
+- Updated fields when present (e.g., `provider:`, `model:`, `reasoning-effort:`, `permission-level:`)
 - `bindings:` (optional; comma-separated adapter types)
 
 ## `hiboss agent delete`
@@ -180,7 +167,6 @@ workspace: /path/to/workspace
 provider: codex
 model: default
 reasoning-effort: default
-auto-level: medium
 permission-level: restricted
 bindings: telegram
 session-daily-reset-at: 03:00
@@ -202,7 +188,6 @@ Output (parseable):
 - `provider:`
 - `model:` (`default` when unset)
 - `reasoning-effort:` (`default` when unset)
-- `auto-level:`
 - `permission-level:`
 - `bindings:` (optional; comma-separated adapter types)
 - `session-daily-reset-at:` (optional)
@@ -218,6 +203,7 @@ Output (parseable):
 - `last-run-started-at:` (optional; boss timezone offset)
 - `last-run-completed-at:` (optional; boss timezone offset)
 - `last-run-context-length:` (optional; integer, when available)
+  - Meaning: best-effort **final model-call size** for the last successful run (prompt + output); see `docs/spec/provider-clis.md#token-usage`.
 - `last-run-error:` (optional; only when `last-run-status=failed|cancelled`)
 
 ---

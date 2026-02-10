@@ -2,7 +2,6 @@ import type { ChannelCommand, ChannelCommandHandler, MessageContent } from "../a
 import type { HiBossDatabase } from "./db/database.js";
 import type { AgentExecutor } from "../agent/executor.js";
 import {
-  DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
 } from "../shared/defaults.js";
@@ -19,7 +18,6 @@ function buildAgentStatusText(params: { db: HiBossDatabase; executor: AgentExecu
 
   const bossTz = params.db.getBossTimezone();
   const effectiveProvider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
-  const effectiveAutoLevel = agent.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL;
   const effectivePermissionLevel = agent.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL;
   const effectiveWorkspace = agent.workspace ?? process.cwd();
 
@@ -36,7 +34,6 @@ function buildAgentStatusText(params: { db: HiBossDatabase; executor: AgentExecu
   lines.push(`provider: ${effectiveProvider}`);
   lines.push(`model: ${agent.model ?? "default"}`);
   lines.push(`reasoning-effort: ${agent.reasoningEffort ?? "default"}`);
-  lines.push(`auto-level: ${effectiveAutoLevel}`);
   lines.push(`permission-level: ${effectivePermissionLevel}`);
   if (bindings.length > 0) {
     lines.push(`bindings: ${bindings.join(", ")}`);

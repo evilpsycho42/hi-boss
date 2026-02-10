@@ -1,17 +1,15 @@
 /**
  * Instruction generator for agent system prompts.
  *
- * Generates AGENTS.md and CLAUDE.md files for agent sessions.
+ * Generates system instructions as a string to be passed inline
+ * to provider CLIs via --append-system-prompt (Claude) or
+ * -c developer_instructions=... (Codex).
  */
 
-import * as fs from "fs";
-import * as path from "path";
 import type { Agent } from "./types.js";
 import type { AgentBinding } from "../daemon/db/database.js";
 import { renderPrompt } from "../shared/prompt-renderer.js";
 import { buildSystemPromptContext } from "../shared/prompt-context.js";
-import { formatAgentAddress } from "../adapters/types.js";
-import { getCodexHomePath, getClaudeHomePath } from "./home-setup.js";
 import { ensureAgentInternalSpaceLayout, readAgentInternalMemorySnapshot } from "../shared/internal-space.js";
 
 /**
@@ -39,10 +37,11 @@ function chooseFence(text: string): string {
 }
 
 /**
- * Format bindings into a readable string.
- */
-/**
  * Generate system instructions for an agent.
+ *
+ * Returns a string suitable for passing inline to CLI flags:
+ * - Claude: --append-system-prompt
+ * - Codex: -c developer_instructions=...
  *
  * @param ctx - Instruction context with agent info and bindings
  * @returns Generated instruction content
@@ -88,64 +87,4 @@ export function generateSystemInstructions(ctx: InstructionContext): string {
     template: "system/base.md",
     context: promptContext,
   });
-}
-
-/**
- * Write instruction files to agent's home directories.
- *
- * Writes AGENTS.md to codex_home and CLAUDE.md to claude_home.
- * Only called when creating a NEW session (instructions persist in session).
- *
- * @param agentName - The agent's name
- * @param instructions - The instruction content
- * @param options - Optional settings (hibossDir)
- */
-export async function writeInstructionFiles(
-  agentName: string,
-  instructions: string,
-  options?: { hibossDir?: string }
-): Promise<void> {
-  const { hibossDir } = options ?? {};
-
-  // Write to codex_home/AGENTS.md
-  const codexHome = getCodexHomePath(agentName, hibossDir);
-  const agentsMdPath = path.join(codexHome, "AGENTS.md");
-
-  // Ensure directory exists
-  if (!fs.existsSync(codexHome)) {
-    fs.mkdirSync(codexHome, { recursive: true });
-  }
-  fs.writeFileSync(agentsMdPath, instructions, "utf-8");
-
-  // Write to claude_home/CLAUDE.md
-  const claudeHome = getClaudeHomePath(agentName, hibossDir);
-  const claudeMdPath = path.join(claudeHome, "CLAUDE.md");
-
-  // Ensure directory exists
-  if (!fs.existsSync(claudeHome)) {
-    fs.mkdirSync(claudeHome, { recursive: true });
-  }
-  fs.writeFileSync(claudeMdPath, instructions, "utf-8");
-}
-
-/**
- * Read existing instruction file content.
- */
-export function readInstructionFile(
-  agentName: string,
-  provider: "claude" | "codex",
-  hibossDir?: string
-): string | null {
-  const homePath = provider === "codex"
-    ? getCodexHomePath(agentName, hibossDir)
-    : getClaudeHomePath(agentName, hibossDir);
-
-  const filename = provider === "codex" ? "AGENTS.md" : "CLAUDE.md";
-  const filePath = path.join(homePath, filename);
-
-  if (!fs.existsSync(filePath)) {
-    return null;
-  }
-
-  return fs.readFileSync(filePath, "utf-8");
 }

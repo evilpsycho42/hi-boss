@@ -3,7 +3,6 @@
  */
 
 import {
-  DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
   DEFAULT_AGENT_RUN_STATUS,
@@ -22,10 +21,9 @@ CREATE TABLE IF NOT EXISTS config (
 	  token TEXT UNIQUE NOT NULL,  -- agent token (short identifier; stored as plaintext)
 	  description TEXT,
 	  workspace TEXT,
-	  provider TEXT DEFAULT '${DEFAULT_AGENT_PROVIDER}',
+  provider TEXT DEFAULT '${DEFAULT_AGENT_PROVIDER}',
   model TEXT,
   reasoning_effort TEXT,
-  auto_level TEXT DEFAULT '${DEFAULT_AGENT_AUTO_LEVEL}',
   permission_level TEXT DEFAULT '${DEFAULT_AGENT_PERMISSION_LEVEL}',
   session_policy TEXT,           -- JSON blob for SessionPolicyConfig
   created_at INTEGER DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000),

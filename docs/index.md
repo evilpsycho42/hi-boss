@@ -5,6 +5,10 @@ Hi-Boss has two kinds of documentation:
 - **Specifications** (`docs/spec/`) — for developers; goals, architecture, and design. Implementations should align with these docs.
 - **User Guides** (`docs/guide/`) — for users; what you can do with Hi-Boss, how to install it, and how to use it. Keep these readable and concise (tables/diagrams preferred, minimal internals).
 
+Start here:
+- Users: `docs/guide/quickstart.md`
+- Developers/spec readers: `docs/spec/index.md`
+
 ## User Guides
 
 - `docs/guide/overview.md` — what Hi-Boss is and what it can do
@@ -17,13 +21,16 @@ Hi-Boss has two kinds of documentation:
 ## Specifications
 
 Core (top-level):
+- `docs/spec/index.md` — spec entrypoint + map
 - `docs/spec/goals.md` — product goals, non-goals, principles
 - `docs/spec/architecture.md` — system architecture + invariants
 - `docs/spec/envelope.md` — envelope concept, lifecycle, and semantics
+- `docs/spec/conventions.md` — naming, IDs, boss marker
 - `docs/spec/definitions.md` — field mappings (TypeScript ↔ SQLite ↔ CLI output keys)
 - `docs/spec/cli.md` — CLI index (command summary + links to topic specs)
 - `docs/spec/ipc.md` — CLI ↔ daemon IPC (JSON-RPC over local socket)
 - `docs/spec/configuration.md` — config sources, persistence, permission policy
+- `docs/spec/compatibility.md` — preserved legacy behavior for safe upgrades
 
 Components:
 - `docs/spec/components/routing.md` — message routing and envelope flow
@@ -44,8 +51,8 @@ CLI topics (details):
 Adapters:
 - `docs/spec/adapters/telegram.md` — Telegram adapter behavior and message schema
 
-Reference:
-- `docs/spec/reference/token-usage.md` — token usage semantics + provider differences
+Providers:
+- `docs/spec/provider-clis.md` — provider CLI invocation, token usage, and recorded experiments
 
 ## Generated
 

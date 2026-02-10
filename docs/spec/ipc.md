@@ -64,8 +64,7 @@ Memory:
 
 Backwards-compatible aliases:
 
-- `message.send`
-- `message.list`
+None.
 
 Agents:
 

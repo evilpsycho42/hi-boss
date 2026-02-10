@@ -289,7 +289,6 @@ export function buildSystemPromptContext(params: {
       provider: params.agent.provider ?? DEFAULT_AGENT_PROVIDER,
       model: params.agent.model ?? "",
       reasoningEffort: params.agent.reasoningEffort ?? "",
-      autoLevel: params.agent.autoLevel ?? "",
       permissionLevel: params.agent.permissionLevel ?? "",
       sessionPolicy: {
         dailyResetAt: params.agent.sessionPolicy?.dailyResetAt ?? "",

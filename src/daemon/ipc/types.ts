@@ -101,8 +101,7 @@ export interface CronDeleteParams {
 }
 
 // Backwards-compatible aliases (deprecated)
-export type MessageSendParams = EnvelopeSendParams;
-export type MessageListParams = EnvelopeListParams;
+// (Removed) message.send / message.list aliases were dropped; use envelope.send / envelope.list.
 
 export interface AgentRegisterParams {
   token: string;
@@ -110,10 +109,8 @@ export interface AgentRegisterParams {
   description?: string;
   workspace?: string;
   provider: "claude" | "codex";
-  providerSourceHome?: string;
   model?: string;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | null;
-  autoLevel?: "medium" | "high";
   permissionLevel?: "restricted" | "standard" | "privileged" | "boss";
   metadata?: Record<string, unknown>;
   sessionDailyResetAt?: string;
@@ -169,7 +166,6 @@ export interface AgentSelfResult {
     workspace: string;
     model?: string;
     reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
-    autoLevel: 'medium' | 'high';
   };
 }
 
@@ -198,7 +194,6 @@ export interface AgentStatusResult {
     provider?: "claude" | "codex";
     model?: string;
     reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
-    autoLevel?: "medium" | "high";
     permissionLevel?: "restricted" | "standard" | "privileged" | "boss";
     sessionPolicy?: {
       dailyResetAt?: string;
@@ -210,7 +205,6 @@ export interface AgentStatusResult {
   effective: {
     workspace: string;
     provider: "claude" | "codex";
-    autoLevel: "medium" | "high";
     permissionLevel: "restricted" | "standard" | "privileged" | "boss";
   };
   status: {
@@ -247,10 +241,8 @@ export interface AgentSetParams {
   description?: string | null;
   workspace?: string | null;
   provider?: "claude" | "codex" | null;
-  providerSourceHome?: string;
   model?: string | null;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | null;
-  autoLevel?: "medium" | "high" | null;
   permissionLevel?: "restricted" | "standard" | "privileged" | "boss";
   sessionPolicy?: {
     dailyResetAt?: string;
@@ -272,7 +264,6 @@ export interface AgentSetResult {
     provider: "claude" | "codex";
     model?: string;
     reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
-    autoLevel: "medium" | "high";
     permissionLevel: "restricted" | "standard" | "privileged" | "boss";
     sessionPolicy?: unknown;
     metadata?: unknown;
@@ -309,7 +300,6 @@ export interface SetupCheckResult {
 
 export interface SetupExecuteParams {
   provider: 'claude' | 'codex';
-  providerSourceHome?: string;
   bossName: string;
   bossTimezone: string;
   agent: {
@@ -318,7 +308,6 @@ export interface SetupExecuteParams {
     workspace?: string;
     model?: string | null;
     reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null;
-    autoLevel?: 'medium' | 'high';
     permissionLevel?: 'restricted' | 'standard' | 'privileged' | 'boss';
     sessionPolicy?: {
       dailyResetAt?: string;

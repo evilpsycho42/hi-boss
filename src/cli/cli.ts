@@ -1,4 +1,7 @@
 import { Command } from "commander";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   startDaemon,
   stopDaemon,
@@ -24,12 +27,35 @@ import {
 } from "./commands/index.js";
 import { registerAgentCommands } from "./cli-agent.js";
 
+function readPackageVersion(): string {
+  // Works from both `src/` (dev) and `dist/` (built) by walking up until the
+  // nearest package.json is found.
+  let current = path.dirname(fileURLToPath(import.meta.url));
+  while (true) {
+    const packageJsonPath = path.join(current, "package.json");
+    try {
+      const parsed = JSON.parse(fs.readFileSync(packageJsonPath, "utf8")) as { version?: unknown };
+      if (typeof parsed.version === "string" && parsed.version.trim()) {
+        return parsed.version.trim();
+      }
+    } catch {
+      // ignore and keep walking up
+    }
+
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+  return "0.0.0";
+}
+
 const program = new Command();
+const hibossVersion = readPackageVersion();
 
 program
   .name("hiboss")
   .description("Hi-Boss: Agent-to-agent and agent-to-human communication daemon")
-  .version("2026.2.4");
+  .version(hibossVersion);
 program.helpCommand(false);
 
 // Daemon commands

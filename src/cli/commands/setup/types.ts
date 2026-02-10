@@ -5,7 +5,6 @@ import type { MemoryModelMode, ResolvedMemoryModelConfig } from "../../memory-mo
  */
 export interface SetupConfig {
   provider: "claude" | "codex";
-  providerSourceHome?: string;
   bossName: string;
   bossTimezone: string; // IANA timezone (used for all displayed timestamps)
   agent: {
@@ -14,7 +13,6 @@ export interface SetupConfig {
     workspace: string;
     model: string | null;
     reasoningEffort: "none" | "low" | "medium" | "high" | "xhigh" | null;
-    autoLevel: "medium" | "high";
     permissionLevel?: "restricted" | "standard" | "privileged" | "boss";
     sessionPolicy?: {
       dailyResetAt?: string;

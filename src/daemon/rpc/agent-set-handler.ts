@@ -12,7 +12,6 @@ import type { Agent } from "../../agent/types.js";
 import { setupAgentHome } from "../../agent/home-setup.js";
 import { parseDailyResetAt, parseDurationToMs } from "../../shared/session-policy.js";
 import {
-  DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
 } from "../../shared/defaults.js";
@@ -40,6 +39,10 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid agent-name");
       }
 
+      if ((p as any).providerSourceHome !== undefined) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "provider-source-home is no longer supported");
+      }
+
       const agent = ctx.db.getAgentByNameCaseInsensitive(p.agentName.trim());
       if (!agent) {
         rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
@@ -56,7 +59,6 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         p.provider !== undefined ||
         p.model !== undefined ||
         p.reasoningEffort !== undefined ||
-        p.autoLevel !== undefined ||
         p.permissionLevel !== undefined ||
         p.sessionPolicy !== undefined ||
         p.metadata !== undefined ||
@@ -71,10 +73,8 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         ...(p.description !== undefined ? ["description"] : []),
         ...(p.workspace !== undefined ? ["workspace"] : []),
         ...(p.provider !== undefined ? ["provider"] : []),
-        ...(p.providerSourceHome !== undefined ? ["provider-source-home"] : []),
         ...(p.model !== undefined ? ["model"] : []),
         ...(p.reasoningEffort !== undefined ? ["reasoning-effort"] : []),
-        ...(p.autoLevel !== undefined ? ["auto-level"] : []),
         ...(p.permissionLevel !== undefined ? ["permission-level"] : []),
         ...(p.sessionPolicy !== undefined ? ["session-policy"] : []),
         ...(p.metadata !== undefined ? ["metadata"] : []),
@@ -109,17 +109,6 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         provider = p.provider;
       }
 
-      let providerSourceHome: string | undefined;
-      if (p.providerSourceHome !== undefined) {
-        if (typeof p.providerSourceHome !== "string" || !p.providerSourceHome.trim()) {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid provider-source-home");
-        }
-        providerSourceHome = p.providerSourceHome.trim();
-      }
-      if (providerSourceHome !== undefined && (provider === undefined || provider === null)) {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "--provider-source-home requires --provider");
-      }
-
       let reasoningEffort: Agent["reasoningEffort"] | null | undefined;
       if (p.reasoningEffort !== undefined) {
         if (
@@ -136,14 +125,6 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
           );
         }
         reasoningEffort = p.reasoningEffort;
-      }
-
-      let autoLevel: Agent["autoLevel"] | null | undefined;
-      if (p.autoLevel !== undefined) {
-        if (p.autoLevel !== null && p.autoLevel !== "medium" && p.autoLevel !== "high") {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid auto-level (expected medium, high)");
-        }
-        autoLevel = p.autoLevel;
       }
 
       let permissionLevel: Agent["permissionLevel"] | undefined;
@@ -230,18 +211,7 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
       const before = ctx.db.getAgentByName(agentName)!;
 
       if (provider === "claude" || provider === "codex") {
-        try {
-          await setupAgentHome(agentName, ctx.config.dataDir, {
-            provider,
-            providerSourceHome,
-          });
-        } catch (err) {
-          const message = (err as Error).message || String(err);
-          if (message.includes("provider-source-home")) {
-            rpcError(RPC_ERRORS.INVALID_PARAMS, message);
-          }
-          throw err;
-        }
+        await setupAgentHome(agentName, ctx.config.dataDir);
       }
 
       // Bind/unbind are async due to adapter start/stop; do those outside the DB transaction.
@@ -307,7 +277,6 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         provider?: "claude" | "codex" | null;
         model?: string | null;
         reasoningEffort?: Agent["reasoningEffort"] | null;
-        autoLevel?: Agent["autoLevel"] | null;
       } = {};
 
       if (p.description !== undefined) {
@@ -356,10 +325,6 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         updates.reasoningEffort = reasoningEffort;
       }
 
-      if (autoLevel !== undefined) {
-        updates.autoLevel = autoLevel;
-      }
-
       ctx.db.runInTransaction(() => {
         if (Object.keys(updates).length > 0) {
           ctx.db.updateAgentFields(agentName, updates);
@@ -386,7 +351,6 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
       const bindings = ctx.db.getBindingsByAgentName(agentName).map((b) => b.adapterType);
 
       const needsRefresh =
-        (autoLevel !== undefined && before.autoLevel !== updated.autoLevel) ||
         (p.workspace !== undefined && before.workspace !== updated.workspace);
 
       if (needsRefresh) {
@@ -409,7 +373,6 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
           provider: updated.provider ?? DEFAULT_AGENT_PROVIDER,
           model: updated.model,
           reasoningEffort: updated.reasoningEffort,
-          autoLevel: updated.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL,
           permissionLevel: updated.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL,
           sessionPolicy: updated.sessionPolicy,
           metadata: updated.metadata,

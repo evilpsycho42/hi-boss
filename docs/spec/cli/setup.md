@@ -3,7 +3,9 @@
 This document specifies the `hiboss setup` command family.
 
 See also:
-- `docs/spec/configuration.md` (what setup persists and where)
+- `docs/spec/configuration.md` (config entrypoint)
+- `docs/spec/config/sqlite.md` (SQLite state)
+- `docs/spec/config/data-dir.md` (data directory layout)
 - `docs/spec/cli/agents.md` (agent fields used by setup config files)
 
 ## `hiboss setup`
@@ -15,7 +17,7 @@ Behavior:
 - Creates the agent home directories under `~/hiboss/agents/<agent-name>/`
 - Creates an empty `~/hiboss/BOSS.md` placeholder (best-effort; not rendered in minimal system prompt)
 - Creates an empty `~/hiboss/agents/<agent-name>/SOUL.md` placeholder (best-effort)
-- Imports provider config files for the chosen provider into the agent’s provider home (`~/.claude` for Claude, `~/.codex` for Codex, unless overridden)
+- Provider CLIs use shared default homes (`~/.claude` / `~/.codex`). Hi-Boss clears `CLAUDE_CONFIG_DIR` / `CODEX_HOME` when spawning provider processes, and does not create per-agent provider homes or import/copy provider config files.
 - Creates the first agent and prints `agent-token:` once (no “show token” command)
 - Prints `boss-token:` once
 - Prompts for `boss-timezone` (IANA) used for all displayed timestamps; defaults to the daemon host timezone
@@ -23,7 +25,6 @@ Behavior:
 
 Interactive defaults (when you press Enter):
 - `provider`: no default; required input (`claude` or `codex`)
-- `provider-source-home`: provider-specific default (`~/.claude` or `~/.codex`)
 - `boss-name`: current OS username
 - `boss-timezone`: daemon host timezone (IANA)
 - `agent.name`: `nex`
@@ -31,7 +32,6 @@ Interactive defaults (when you press Enter):
 - `agent.workspace`: user home directory
 - `agent.model`: `null` (use provider default)
 - `agent.reasoning-effort`: `null` (use provider default)
-- `agent.auto-level`: `medium`
 - `agent.permission-level`: `standard`
 - `session-policy`: unset
 - `metadata`: unset
@@ -58,10 +58,8 @@ Optional:
 - `memory: { mode, model-path }`
   - `mode`: `default` (download the default embedding model) or `local` (use a local GGUF)
   - `model-path`: required when `mode: local` (absolute path to a `.gguf`)
-- `provider-source-home: <path>` (optional; imports provider config from this directory; defaults to `~/.codex/` or `~/.claude/` based on `provider`)
 
 Config-file defaults (when omitted):
-- `provider-source-home`: provider-specific default (`~/.claude` or `~/.codex`)
 - `boss-name`: current OS username
 - `boss-timezone`: daemon host timezone (IANA)
 - `agent.name`: `nex`
@@ -69,7 +67,6 @@ Config-file defaults (when omitted):
 - `agent.workspace`: user home directory
 - `agent.model`: `null` (use provider default)
 - `agent.reasoning-effort`: `null` (use provider default)
-- `agent.auto-level`: `medium`
 - `agent.permission-level`: `standard`
 - `memory.mode`: `default`
 
@@ -82,20 +79,18 @@ Example (`setup.json`):
   "boss-timezone": "Asia/Shanghai",
   "boss-token": "your-boss-token",
   "provider": "claude",
-  "provider-source-home": "~/.claude",
   "memory": {
     "mode": "local",
     "model-path": "/absolute/path/to/embedding-model.gguf"
   },
-  "agent": {
-    "name": "nex",
-    "description": "A reliable and collaborative professional who delivers results with clarity and respect for others, and consistently makes teamwork more effective and enjoyable.",
-    "workspace": "/absolute/path/to/workspace",
-    "model": null,
-    "reasoning-effort": null,
-    "auto-level": "medium",
-    "permission-level": "standard"
-  },
+	  "agent": {
+	    "name": "nex",
+	    "description": "A reliable and collaborative professional who delivers results with clarity and respect for others, and consistently makes teamwork more effective and enjoyable.",
+	    "workspace": "/absolute/path/to/workspace",
+	    "model": null,
+	    "reasoning-effort": null,
+	    "permission-level": "standard"
+	  },
   "telegram": {
     "adapter-token": "123456789:ABCdef...",
     "adapter-boss-id": "your_telegram_username"
@@ -115,3 +110,23 @@ Output:
 - Setup prints tokens once, plus a small block of stable key/value lines (keys are kebab-case and may be indented in the human UI).
 - `hiboss setup` (interactive) prints: `daemon-timezone:`, `boss-timezone:`, `agent-name:`, `agent-token:`, `boss-token:`, `memory-enabled:`, and (when applicable) `memory-model-path:`, `memory-model-dims:`, `memory-last-error:`.
 - `hiboss setup --config-file ...` prints: `daemon-timezone:`, `boss-timezone:`, `boss-name:`, `agent-name:`, `agent-token:`, `boss-token:`, `provider:`, `model:`, `memory-enabled:`.
+
+---
+
+## Persistence (canonical)
+
+Setup persists configuration into SQLite (`{{HIBOSS_DIR}}/.daemon/hiboss.db`).
+
+From the setup config JSON:
+- `boss-name` → `config.boss_name`
+- `boss-timezone` → `config.boss_timezone` (IANA; used for displayed timestamps)
+- `boss-token` → hashed into `config.boss_token_hash` (token is printed once; no “show token” command)
+- `provider` → `config.default_provider` (informational today)
+- `telegram.adapter-boss-id` → `config.adapter_boss_id_telegram` (stored without `@`)
+
+Other side effects:
+- Creates the first agent row in `agents` and prints `agent-token:` once.
+- Creates an initial `agent_bindings` row for the first agent from `telegram.adapter-token`.
+- Writes semantic memory config keys when memory is configured:
+  - `config.memory_enabled`, `config.memory_model_source`, `config.memory_model_uri`, `config.memory_model_path`, `config.memory_model_dims`, `config.memory_model_last_error`
+- Marks setup complete: `config.setup_completed = "true"`.

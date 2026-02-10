@@ -2,18 +2,17 @@
   "version": 1,
   "boss-name": "Kevin",
   "boss-token": "boss-test-token",
-  "provider": "codex",
+  "provider": "claude",
   "memory": {
     "mode": "local",
     "model-path": "/Users/kky/Qwen3-Embedding-0.6B-Q8_0.gguf"
   },
   "agent": {
-    "name": "test-high",
-    "description": "test-high (codex/gpt-5.2) - auto-level=high",
-    "workspace": "/Users/kky/Dev/hi-boss.test-auto-level",
-    "model": "gpt-5.2",
+    "name": "test-claude",
+    "description": "test-claude (claude/sonnet)",
+    "workspace": "/Users/kky/Dev/hi-boss.test-provider-runtime",
+    "model": "sonnet",
     "reasoning-effort": "medium",
-    "auto-level": "high",
     "permission-level": "standard"
   },
   "telegram": {

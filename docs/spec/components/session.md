@@ -15,12 +15,13 @@ Envelope delivery remains the priority: if session resume fails (missing/expired
 Sessions are created on-demand when an agent needs to process envelopes:
 
 1. `AgentExecutor.getOrCreateSession()` checks if a session exists in memory
-2. If not (or if refresh is needed), syncs skills for the effective provider (built-ins + globals) into the provider home skills directory
-3. Generates fresh instruction files (AGENTS.md/CLAUDE.md) in the agent home directory (including an injected `internal_space/MEMORY.md` snapshot)
-4. Creates a new `UnifiedAgentRuntime` with home path pointing to instruction files
-5. If the agent has a persisted `sessionHandle` and session policy allows it, attempts `runtime.resumeSession(handle)`
-6. If resume is not possible or fails, opens a new session via `runtime.openSession({})`
-7. Caches the session in memory by agent name
+2. If not (or if refresh is needed), generates system instructions as an inline string (including an injected `internal_space/MEMORY.md` snapshot)
+3. If the agent has a persisted `sessionHandle` and session policy allows it, sets `sessionId` so the next turn will run the provider CLI in resume mode (`claude -r` / `codex exec resume`)
+4. Otherwise, starts fresh (no `sessionId`)
+5. Caches the session in memory by agent name
+6. On each turn, spawns a CLI process with system instructions injected via flags, captures the resulting session/thread ID from output, and persists it for best-effort resume:
+   - Claude: `--append-system-prompt`
+   - Codex: `-c developer_instructions=...`
 
 ### Reuse
 
@@ -34,7 +35,7 @@ Sessions are refreshed (disposed and recreated) when:
 |---------|-------------|
 | `dailyResetAt` | Configured time of day (e.g., `"09:00"`) |
 | `idleTimeout` | No activity for configured duration (e.g., `"2h"`) |
-| `maxContextLength` | Context length exceeds threshold (evaluated after a successful run; uses `usage.context_length` when present; skipped when missing) |
+| `maxContextLength` | Context length exceeds threshold (evaluated after a successful run; uses `agent_runs.context_length` when available; skipped when missing) |
 | Manual `/new` | Boss sends `/new` command via Telegram |
 | Daemon restart | In-memory sessions are lost; Hi-Boss attempts to resume from persisted `sessionHandle` when possible |
 
@@ -60,10 +61,14 @@ Session structure:
 
 ```typescript
 interface AgentSession {
-  runtime: UnifiedAgentRuntime<any, any>;
-  session: UnifiedSession<any, any>;
-  agentToken: string;
   provider: "claude" | "codex";
+  agentToken: string;
+  systemInstructions: string;
+  workspace: string;
+  model?: string;
+  reasoningEffort?: string;
+  childProcess?: ChildProcess;
+  sessionId?: string;
   createdAtMs: number;
   lastRunCompletedAtMs?: number;
 }
@@ -72,7 +77,7 @@ interface AgentSession {
 ### Persistent (Survives Restart)
 
 - **Database** (`~/hiboss/.daemon/hiboss.db`): Agent metadata, envelope queue, bindings, session policies
-- **Home directories**: Provider configs and instruction files (see [Agents](agent.md#home-directories))
+- **Agent directories**: Persona and memory files (see [Agents](agent.md#home-directories))
 
 Session resume uses a small record stored in `agents.metadata.sessionHandle`:
 
@@ -81,9 +86,15 @@ Session resume uses a small record stored in `agents.metadata.sessionHandle`:
   "version": 1,
   "provider": "codex",
   "handle": {
-    "provider": "@openai/codex-sdk",
+    "provider": "codex",
     "sessionId": "<thread id>",
-    "metadata": { "...": "..." }
+    "metadata": {
+      "codexCumulativeUsage": {
+        "inputTokens": 12105,
+        "cachedInputTokens": 2816,
+        "outputTokens": 79
+      }
+    }
   },
   "createdAtMs": 0,
   "lastRunCompletedAtMs": 0,
@@ -93,8 +104,8 @@ Session resume uses a small record stored in `agents.metadata.sessionHandle`:
 
 Notes:
 - The record is updated after successful runs (best-effort).
+- `handle.metadata` is provider-specific; for Codex it can include `codexCumulativeUsage` to compute per-turn token usage deltas from cumulative `turn.completed.usage` totals.
 - A manual refresh (`/new`) or policy refresh clears the persisted handle so the next run starts fresh.
-- For providers that support it, the `handle.metadata` includes a snapshot of the unified session config (workspace/access/model/reasoning). On resume, the provider may prefer this snapshot over the agent’s current settings. Practically, changing an agent’s `model` / `reasoning-effort` may not affect an already-resumed session until a fresh session is opened.
 - If the agent’s configured provider changes while a persisted handle exists, Hi-Boss may still resume the legacy provider session (best-effort) until the session is refreshed.
 
 ## Daemon Restart Recovery
@@ -112,7 +123,7 @@ This ensures no envelopes are lost during daemon downtime.
 
 Session policies are configured per-agent (see [Agents](agent.md#session-policy)).
 
-Before starting a run, `getRefreshReasonForPolicy()` in `src/agent/executor.ts` checks:
+Before starting a run, `getRefreshReasonForPolicy()` in `src/agent/executor-support.ts` checks (called from `src/agent/executor-session.ts`):
 
 1. **Daily reset**: Has the configured reset time passed since session creation?
 2. **Idle timeout**: Has the session been inactive longer than the threshold?

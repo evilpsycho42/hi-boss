@@ -1,14 +1,15 @@
-import * as path from "node:path";
-import { createRuntime } from "@unified-agent-sdk/runtime";
+/**
+ * Agent session creation for CLI-based provider invocation.
+ *
+ * Creates AgentSession objects that hold the configuration needed to spawn
+ * CLI processes (claude / codex) for each turn.
+ */
+
 import type { Agent } from "./types.js";
 import type { HiBossDatabase } from "../daemon/db/database.js";
-import { getAgentHomePath, getAgentInternalSpaceDir } from "./home-setup.js";
-import { generateSystemInstructions, writeInstructionFiles } from "./instruction-generator.js";
-import { HIBOSS_TOKEN_ENV } from "../shared/env.js";
+import { generateSystemInstructions } from "./instruction-generator.js";
 import {
-  DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PROVIDER,
-  DEFAULT_DAEMON_DIRNAME,
 } from "../shared/defaults.js";
 import { errorMessage, logEvent } from "../shared/daemon-log.js";
 import {
@@ -19,14 +20,37 @@ import {
 import { readPersistedAgentSession } from "./persisted-session.js";
 import type { AgentRunTrigger } from "./executor-triggers.js";
 import { getTriggerFields } from "./executor-triggers.js";
-import { openOrResumeUnifiedSession } from "./session-resume.js";
-import { syncProviderSkillsForNewSession } from "./skills-sync.js";
+import { resolveSessionOpenMode } from "./session-resume.js";
 
 type SessionPolicy = {
   dailyResetAt?: { hour: number; minute: number; normalized: string };
   idleTimeoutMs?: number;
   maxContextLength?: number;
 };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseCodexCumulativeUsageTotals(value: unknown): {
+  inputTokens: number;
+  cachedInputTokens: number;
+  outputTokens: number;
+} | undefined {
+  if (!isRecord(value)) return undefined;
+  const inputTokens = value.inputTokens;
+  const cachedInputTokens = value.cachedInputTokens;
+  const outputTokens = value.outputTokens;
+  if (typeof inputTokens !== "number" || !Number.isFinite(inputTokens)) return undefined;
+  if (typeof cachedInputTokens !== "number" || !Number.isFinite(cachedInputTokens)) return undefined;
+  if (typeof outputTokens !== "number" || !Number.isFinite(outputTokens)) return undefined;
+  if (inputTokens < 0 || cachedInputTokens < 0 || outputTokens < 0) return undefined;
+  return {
+    inputTokens,
+    cachedInputTokens,
+    outputTokens,
+  };
+}
 
 export async function getOrCreateAgentSession(params: {
   agent: Agent;
@@ -36,7 +60,6 @@ export async function getOrCreateAgentSession(params: {
   applyPendingSessionRefresh: (agentName: string) => Promise<string[]>;
   refreshSession: (agentName: string, reason?: string) => Promise<void>;
   getSessionPolicy: (agent: Agent) => SessionPolicy;
-  mapAccessLevel: (autoLevel: "medium" | "high") => "medium" | "high";
   trigger?: AgentRunTrigger;
 }): Promise<AgentSession> {
   // Apply any pending refresh request at the first safe point (before a run).
@@ -66,18 +89,19 @@ export async function getOrCreateAgentSession(params: {
 
     const desiredProvider = params.agent.provider ?? DEFAULT_AGENT_PROVIDER;
     const persisted = readPersistedAgentSession(agentRecord);
-    // Experiment: if a resumable session handle exists, prefer its provider even if the agent's provider changed.
+    // If a resumable session handle exists, prefer its provider.
     const provider =
       persisted?.handle.sessionId && (persisted.provider === "claude" || persisted.provider === "codex")
         ? persisted.provider
         : desiredProvider;
-    const homePath = getAgentHomePath(params.agent.name, provider, params.hibossDir);
     const workspace = params.agent.workspace ?? process.cwd();
-    const internalSpaceDir = getAgentInternalSpaceDir(params.agent.name, params.hibossDir);
-    const daemonDir = path.join(params.hibossDir, DEFAULT_DAEMON_DIRNAME);
+    const codexCumulativeUsageTotals =
+      provider === "codex"
+        ? parseCodexCumulativeUsageTotals(persisted?.handle.metadata?.codexCumulativeUsage)
+        : undefined;
 
     try {
-      // Generate and write instruction files for new session
+      // Generate system instructions for inline injection
       const bindings = params.db.getBindingsByAgentName(params.agent.name);
       const boss = getBossInfo(params.db, bindings);
       const instructions = generateSystemInstructions({
@@ -89,89 +113,26 @@ export async function getOrCreateAgentSession(params: {
         boss,
       });
 
-      const skillSync = syncProviderSkillsForNewSession({
-        hibossDir: params.hibossDir,
-        agentName: params.agent.name,
-        provider,
-        providerHomePath: homePath,
-      });
-      if (skillSync.warnings.length > 0) {
-        logEvent("warn", "skills-sync-provider-warning", {
-          "agent-name": params.agent.name,
-          provider,
-          warnings: skillSync.warnings,
-        });
-      }
-
-      await writeInstructionFiles(params.agent.name, instructions, { hibossDir: params.hibossDir });
-
-      // Create runtime with provider-specific configuration
-      const defaultOpts: Record<string, unknown> = {
-        workspace: { cwd: workspace, additionalDirs: [internalSpaceDir, daemonDir] },
-        access: { auto: params.mapAccessLevel(params.agent.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL) },
-      };
-      if (params.agent.model !== undefined) {
-        defaultOpts.model = params.agent.model;
-      }
-      if (params.agent.reasoningEffort !== undefined) {
-        defaultOpts.reasoningEffort = params.agent.reasoningEffort;
-      }
-
-      const runtime =
-        provider === "claude"
-          ? createRuntime({
-            provider: "@anthropic-ai/claude-agent-sdk",
-            home: homePath,
-            env: { [HIBOSS_TOKEN_ENV]: agentRecord.token },
-            defaultOpts,
-          })
-          : createRuntime({
-            provider: "@openai/codex-sdk",
-            home: homePath,
-            env: { [HIBOSS_TOKEN_ENV]: agentRecord.token },
-            defaultOpts,
-          });
-
-      const openSessionOpts =
-        provider === "claude"
-          ? {
-            config: {
-              provider: {
-                // Allow the agent to send envelopes via the Hi-Boss CLI without permission prompts.
-                allowedTools: [
-                  // Claude Code often permission-gates Bash at the command-prefix level (e.g. `git diff`).
-                  // Hi-Boss replies are sent via `hiboss envelope send`, so allow the full prefix and a
-                  // couple of best-effort fallbacks for prefix extractors that truncate.
-                  "Bash(hiboss envelope send:*)",
-                  "Bash(hiboss envelope:*)",
-                  "Bash(hiboss:*)",
-                ],
-                // Only use project settings, not user settings from ~/.claude which may conflict
-                // with the agent's CLAUDE_CONFIG_DIR settings (e.g., different ANTHROPIC_BASE_URL).
-                settingSources: ["project", "user"],
-              },
-            },
-          }
-          : {};
-
-      const { unifiedSession, createdAtMs, lastRunCompletedAtMs, openMode, openReason } =
-        await openOrResumeUnifiedSession({
+      // Resolve session open mode (fresh vs resume)
+      const { sessionId, createdAtMs, lastRunCompletedAtMs, openMode, openReason } =
+        resolveSessionOpenMode({
           agent: params.agent,
           agentRecord,
           provider,
-          runtime,
           db: params.db,
           policy: params.getSessionPolicy(params.agent),
-          openSessionOpts,
         });
 
       session = {
-        runtime,
-        session: unifiedSession,
-        agentToken: agentRecord.token,
         provider,
-        homePath,
+        agentToken: agentRecord.token,
+        systemInstructions: instructions,
+        workspace,
+        model: params.agent.model,
+        reasoningEffort: params.agent.reasoningEffort,
+        sessionId,
         createdAtMs,
+        ...(codexCumulativeUsageTotals ? { codexCumulativeUsageTotals } : {}),
         ...(lastRunCompletedAtMs !== undefined ? { lastRunCompletedAtMs } : {}),
       };
       params.sessions.set(params.agent.name, session);

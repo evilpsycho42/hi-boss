@@ -1,143 +1,57 @@
 # Telegram Adapter
 
-The Telegram adapter connects Hi-Boss to Telegram bots, enabling agents to communicate with users via Telegram chats.
+The Telegram adapter connects Hi-Boss to a Telegram bot and turns Telegram updates into envelopes (and vice versa).
 
-## Architecture
+Key files:
+- `src/adapters/telegram.adapter.ts` (Telegraf bot + adapter implementation)
+- `src/adapters/telegram/incoming.ts` (Telegram → `ChannelMessage`)
+- `src/adapters/telegram/outgoing.ts` (envelope → Telegram API calls)
+- `src/daemon/bridges/channel-bridge.ts` (channel message/command → envelope)
 
-```
-┌─────────────┐     ┌──────────────────┐     ┌───────────────┐     ┌─────────┐
-│  Telegram   │────▶│ TelegramAdapter  │────▶│ ChannelBridge │────▶│ Envelope│
-│  (user)     │     │ (Telegraf bot)   │     │               │     │ Router  │
-└─────────────┘     └──────────────────┘     └───────────────┘     └─────────┘
-       ▲                    │
-       │                    │
-       └────────────────────┘
-         (sendMessage)
-```
+## Flow
 
-## Message Flow
+Incoming (Telegram → agent):
+- Adapter builds a `ChannelMessage` and passes it to `ChannelBridge`.
+- The daemon creates an envelope:
+  - `from: channel:telegram:<chat-id>`
+  - `to: agent:<bound-agent-name>`
+  - `fromBoss: true` when sender matches `config.adapter_boss_id_telegram`
+- Envelope metadata is populated so prompts can render `sender:` and reply previews (see `docs/spec/definitions.md`).
 
-### Incoming (Telegram → Agent)
+Outgoing (agent → Telegram):
+- Agent sends `hiboss envelope send --to channel:telegram:<chat-id> ...`
+- Router resolves the Telegram adapter and calls `sendMessage`.
 
-1. User sends message in Telegram chat
-2. `TelegramAdapter` receives via Telegraf listener (`bot.on("text")`, etc.)
-3. Adapter builds `ChannelMessage` from Telegram payload
-4. `ChannelBridge.handleChannelMessage()` converts to envelope:
-   - `from`: `channel:telegram:<chat-id>`
-   - `to`: `agent:<bound-agent-name>`
-   - `fromBoss`: `true` if sender matches configured boss username
-5. Envelope is stored and agent is triggered
+## Data model (canonical)
 
-### Outgoing (Agent → Telegram)
+Shared types:
+- `src/adapters/types.ts` (`ChannelMessage`, `Attachment`, `detectAttachmentType`)
 
-1. Agent sends envelope via `hiboss envelope send --to channel:telegram:<chat-id>`
-2. `MessageRouter` resolves destination to Telegram adapter
-3. `TelegramAdapter.sendMessage()` delivers to Telegram API
+Telegram-specific parsing:
+- `src/adapters/telegram/incoming.ts`
 
-## Supported Message Types
+## Boss-only commands
 
-| Type | Incoming | Outgoing |
-|------|----------|----------|
-| Text | ✓ | ✓ |
-| Photo | ✓ | ✓ |
-| Video | ✓ | ✓ |
-| Document | ✓ | ✓ |
-| Voice | ✓ | ✓ |
-| Audio | ✓ | ✓ |
+Telegram chat commands are boss-only (non-boss users get no reply):
+- `/new` — request a session refresh for the bound agent
+- `/status` — show `hiboss agent status` for the bound agent
+- `/abort` — cancel current run + clear **due** pending inbox for the bound agent
 
-## Commands
+## Limits and behavior (canonical)
 
-| Command | Description |
-|---------|-------------|
-| `/new` | Refresh the bound agent session (boss-only) |
-| `/status` | Show `hiboss agent status` for the bound agent (boss-only) |
-| `/abort` | Cancel current run + clear due pending inbox for the bound agent (boss-only) |
+Incoming:
+- Media groups (albums): Telegram delivers each item as a separate message; only the first has the caption. Hi-Boss emits independent envelopes (no grouping). (`src/adapters/types.ts`)
+- Reply previews: `in-reply-to-text` is truncated at 1200 chars and appends `\n\n[...truncated...]\n`. (`src/adapters/telegram/incoming.ts`, `src/adapters/telegram/shared.ts`)
 
-Commands are boss-only: non-boss users get no reply.
+Outgoing:
+- Long text: split at 4096 chars; `--reply-to` (if set) applies only to the first chunk. (`src/adapters/telegram/shared.ts`)
+- Captions: limited to 1024 chars. If attachments are present and text exceeds the caption limit, Hi-Boss sends the text as a separate message and sends attachments without a caption. (`src/adapters/telegram/shared.ts`, `src/adapters/telegram/outgoing.ts`)
+- Albums: when sending 2+ compatible attachments, Hi-Boss prefers `sendMediaGroup` so Telegram renders an album. (`src/adapters/telegram/outgoing.ts`)
+- Uploaded filenames: when uploading local files, Hi-Boss sets the Telegram upload filename (prefers `attachment.filename`, else local basename). (`src/adapters/telegram/outgoing.ts`)
 
-## Limitations
+## Address format
 
-- **Incoming media groups (albums)**: When users send multiple images/videos together, Telegram delivers each as a separate message. Only the first message contains the caption. These are currently emitted as independent messages (not grouped).
-- **Outgoing media groups (albums)**: When an agent sends 2+ compatible attachments (photos/videos, or same-type documents/audios), Hi-Boss sends them via `sendMediaGroup` so they render as a single album in Telegram.
-- **Outgoing attachment filenames**: When uploading a local file via multipart, Hi-Boss sets the uploaded `filename` (prefers `attachment.filename`, otherwise uses the local path basename) so Telegram clients don’t fall back to generic names like `document.dat`.
-- **Outgoing captions**: Telegram captions are limited to 1024 characters. If an outgoing envelope includes attachments and text longer than that, Hi-Boss sends the text as a separate message and sends the attachments without a caption.
-- **Outgoing long text**: Telegram text messages are limited to 4096 characters. Hi-Boss splits longer texts into multiple messages; if `--reply-to` is set, it is only applied to the first chunk.
-- **Incoming reply previews**: `in-reply-to-text` (quoted reply text/caption) is truncated to 1200 characters and includes a `[...truncated...]` marker when it exceeds the limit.
-
-## Address Format
-
-```
-channel:telegram:<chat-id>
-```
-
-- `<chat-id>`: Numeric ID assigned by Telegram (can be negative for groups)
-- Example: `channel:telegram:6447779930`
-
-## Media Storage
-
-Downloaded attachments are saved to `~/hiboss/media/` with:
-- Original filename when available
-- Incremental suffix for duplicates (`file.jpg`, `file_1.jpg`, `file_2.jpg`)
-- Original `telegramFileId` preserved for efficient re-sending
-
----
-
-# Message Schema
-
-## ChannelMessage
-
-Unified message format received from Telegram (and other adapters).
-
-```typescript
-interface ChannelMessage {
-  id: string;           // Telegram message_id (numeric string)
-  platform: string;     // "telegram"
-  author: {
-    id: string;         // Telegram user ID
-    username?: string;  // @username (without @)
-    displayName: string;// first_name
-  };
-  chat: {
-    id: string;         // Telegram chat ID
-    name?: string;      // Group/supergroup title (undefined for DMs)
-  };
-  content: {
-    text?: string;      // Message text or caption
-    attachments?: Attachment[];
-  };
-  raw: unknown;         // Original Telegram message object
-}
-```
-
-## Attachment
-
-```typescript
-interface Attachment {
-  source: string;           // Local file path (e.g., ~/hiboss/media/photo.jpg)
-  filename?: string;        // Original filename for display/type detection
-  telegramFileId?: string;  // Telegram file_id for efficient re-sending
-}
-```
-
-### Attachment Type Detection
-
-Type is inferred from file extension:
-
-| Type | Extensions |
-|------|------------|
-| image | jpg, jpeg, png, gif, webp, bmp |
-| video | mp4, mov, avi, webm, mkv |
-| audio | mp3, wav, m4a, ogg, oga, opus, aac, flac |
-| file | (everything else) |
-
-## ChannelCommand
-
-```typescript
-interface ChannelCommand {
-  command: string;         // Command name without slash (e.g., "new")
-  args: string;            // Arguments after command
-  chatId: string;          // Chat ID where command was issued
-  authorUsername?: string; // Username of command issuer
+`channel:telegram:<chat-id>` where `<chat-id>` is the Telegram numeric chat id (negative for groups).
 }
 ```
 

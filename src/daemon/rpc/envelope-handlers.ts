@@ -241,9 +241,5 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
     // Envelope methods (canonical)
     "envelope.send": createEnvelopeSend("envelope.send"),
     "envelope.list": createEnvelopeList("envelope.list"),
-
-    // Message methods (backwards-compatible aliases)
-    "message.send": createEnvelopeSend("message.send"),
-    "message.list": createEnvelopeList("message.list"),
   };
 }

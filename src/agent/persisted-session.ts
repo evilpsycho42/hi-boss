@@ -1,8 +1,17 @@
-import type { SessionHandle } from "@unified-agent-sdk/runtime";
 import type { HiBossDatabase } from "../daemon/db/database.js";
 import type { Agent } from "./types.js";
 
 const AGENT_PERSISTED_SESSION_KEY = "sessionHandle";
+
+/**
+ * Session handle for CLI-based session persistence.
+ * Stores the provider CLI session/thread ID for resume.
+ */
+export type SessionHandle = {
+  provider: string;
+  sessionId?: string;
+  metadata?: Record<string, unknown>;
+};
 
 export type PersistedAgentSessionV1 = {
   version: 1;
@@ -21,7 +30,7 @@ function parseSessionHandle(value: unknown): SessionHandle | null {
   if (!isRecord(value)) return null;
   if (typeof value.provider !== "string" || !value.provider) return null;
 
-  const handle: SessionHandle = { provider: value.provider as SessionHandle["provider"] };
+  const handle: SessionHandle = { provider: value.provider };
 
   if (typeof value.sessionId === "string" && value.sessionId.trim()) {
     handle.sessionId = value.sessionId.trim();

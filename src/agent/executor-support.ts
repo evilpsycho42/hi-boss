@@ -1,14 +1,28 @@
-import type { UnifiedAgentRuntime, UnifiedSession } from "@unified-agent-sdk/runtime";
 import type { HiBossDatabase } from "../daemon/db/database.js";
+import type { ChildProcess } from "node:child_process";
 
 export interface AgentSession {
-  runtime: UnifiedAgentRuntime<any, any>;
-  session: UnifiedSession<any, any>;
-  agentToken: string;
   provider: "claude" | "codex";
-  homePath: string;
+  agentToken: string;
+  systemInstructions: string;
+  workspace: string;
+  model?: string;
+  reasoningEffort?: string;
+  /** CLI child process for the current run (set during executeCliTurn). */
+  childProcess?: ChildProcess;
+  /** Session ID for resume: session_id (Claude) or thread_id (Codex). */
+  sessionId?: string;
   createdAtMs: number;
   lastRunCompletedAtMs?: number;
+  /**
+   * Codex `turn.completed.usage` values are cumulative across the session thread.
+   * Store the last observed cumulative totals so we can compute per-turn deltas.
+   */
+  codexCumulativeUsageTotals?: {
+    inputTokens: number;
+    cachedInputTokens: number;
+    outputTokens: number;
+  };
 }
 
 export interface SessionRefreshRequest {
@@ -133,4 +147,3 @@ export function getRefreshReasonForPolicy(
 
   return null;
 }
-

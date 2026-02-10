@@ -23,7 +23,6 @@ import { requireToken, rpcError } from "./context.js";
 import { isValidAgentName, AGENT_NAME_ERROR_MESSAGE } from "../../shared/validation.js";
 import { parseDailyResetAt, parseDurationToMs } from "../../shared/session-policy.js";
 import {
-  DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
 } from "../../shared/defaults.js";
@@ -61,7 +60,6 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
           provider: a.provider,
           model: a.model,
           reasoningEffort: a.reasoningEffort,
-          autoLevel: a.autoLevel,
           permissionLevel: a.permissionLevel,
           sessionPolicy: a.sessionPolicy,
           createdAt: a.createdAt,
@@ -92,7 +90,6 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
       }
 
       const effectiveProvider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
-      const effectiveAutoLevel = agent.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL;
       const effectivePermissionLevel = agent.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL;
       const effectiveWorkspace = agent.workspace ?? process.cwd();
 
@@ -111,7 +108,6 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
           ...(agent.provider ? { provider: agent.provider } : {}),
           ...(agent.model ? { model: agent.model } : {}),
           ...(agent.reasoningEffort ? { reasoningEffort: agent.reasoningEffort } : {}),
-          ...(agent.autoLevel ? { autoLevel: agent.autoLevel } : {}),
           ...(agent.permissionLevel ? { permissionLevel: agent.permissionLevel } : {}),
           ...(agent.sessionPolicy ? { sessionPolicy: agent.sessionPolicy } : {}),
         },
@@ -119,7 +115,6 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
         effective: {
           workspace: effectiveWorkspace,
           provider: effectiveProvider,
-          autoLevel: effectiveAutoLevel,
           permissionLevel: effectivePermissionLevel,
         },
         status: {
@@ -298,7 +293,6 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
       const workspace = agent.workspace ?? process.cwd();
       const reasoningEffort = agent.reasoningEffort;
-      const autoLevel = agent.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL;
 
       return {
         agent: {
@@ -307,7 +301,6 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
           workspace,
           model: agent.model,
           reasoningEffort,
-          autoLevel,
         },
       };
     },

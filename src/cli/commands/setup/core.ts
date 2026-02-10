@@ -61,7 +61,6 @@ export async function executeSetup(config: SetupConfig): Promise<string> {
     const client = new IpcClient(getSocketPath());
     const result = await client.call<SetupExecuteResult>("setup.execute", {
       provider: config.provider,
-      providerSourceHome: config.providerSourceHome,
       bossName: config.bossName,
       bossTimezone: config.bossTimezone,
       agent: config.agent,
@@ -122,11 +121,8 @@ async function executeSetupDirect(config: SetupConfig): Promise<string> {
       throw new Error("Setup already completed");
     }
 
-    // Setup agent home directories
-    await setupAgentHome(config.agent.name, daemonConfig.dataDir, {
-      provider: config.provider,
-      providerSourceHome: config.providerSourceHome,
-    });
+    // Setup agent home directory
+    await setupAgentHome(config.agent.name, daemonConfig.dataDir);
     ensureBossProfileFile(daemonConfig.dataDir);
 
     const memory = normalizeMemoryConfig(config);
@@ -151,7 +147,6 @@ async function executeSetupDirect(config: SetupConfig): Promise<string> {
         provider: config.provider,
         model: config.agent.model,
         reasoningEffort: config.agent.reasoningEffort,
-        autoLevel: config.agent.autoLevel,
         permissionLevel: config.agent.permissionLevel,
         sessionPolicy: config.agent.sessionPolicy,
         metadata: config.agent.metadata,
