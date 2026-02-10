@@ -11,56 +11,9 @@ Implementation references:
 
 ---
 
-## Conventions
-
-### Tokens
-
-Many commands accept `--token`; if omitted, the CLI uses the `HIBOSS_TOKEN` environment variable.
-
-### Clearing optional values
-
-Some agent settings are nullable (e.g., `model`, `reasoning-effort`). When cleared, Hi-Boss omits these overrides when opening provider sessions so provider defaults apply.
-
-To clear via CLI, use the sentinel value `default`, for example:
-- `hiboss agent set --name <agent> --model default`
-- `hiboss agent set --name <agent> --reasoning-effort default`
-
-### Output stability
-
-- Most operational commands print key-value lines like `key: value` with kebab-case keys (intended to be parseable).
-- `hiboss setup` (interactive) prints a wizard with human-friendly prose plus a final key-value summary.
-- Envelope instruction output keys and placement are specified in `docs/spec/definitions.md`.
-- Agent configuration fields are primarily reported by `hiboss agent status`; `hiboss agent list` is intentionally a lightweight inventory.
-
-### IDs
-
-Many Hi-Boss entities use internal UUIDs (SQLite primary keys, LanceDB row ids, etc.).
-
-For agent-friendly operation, the CLI **prints short IDs by default**:
-- A **short id** is the first 8 lowercase hex characters of the entity UUID with hyphens removed.
-- Commands that accept `--id` accept:
-  - the short id (8 chars), or
-  - any longer prefix (more chars), or
-  - the full UUID (hyphens optional).
-
-If a provided prefix matches multiple records, the CLI exits non-zero and prints an
-`error: ambiguous-id-prefix` block with `candidate-*` lines so the agent can pick a longer prefix.
-
-### Provider config import
-
-- When an agent provider is set via CLI, Hi-Boss imports provider config files into the agent’s provider home.
-- Source defaults:
-  - `codex` → `~/.codex/`
-  - `claude` → `~/.claude/`
-- Override via `--provider-source-home <path>` on `hiboss agent register` / `hiboss agent set`.
-
-### Daemon dependency
-
-- Commands that call IPC (`envelope.*`, most `agent.*`) require the daemon to be running.
-
-### Daemon debug logging
-
-`hiboss daemon start --debug` enables more verbose `daemon.log` fields (IDs + token usage).
+See also:
+- CLI conventions (tokens, IDs, output stability): `docs/spec/cli/conventions.md`
+- Canonical output keys: `docs/spec/definitions.md`
 
 ---
 

@@ -30,7 +30,6 @@ function makeMockAgent(workspaceDir: string): Agent {
     provider: "codex",
     model: "gpt-5.2",
     reasoningEffort: "medium",
-    autoLevel: "high",
     createdAt: Date.now(),
     metadata: { example: true },
   };

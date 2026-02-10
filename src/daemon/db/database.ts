@@ -7,7 +7,6 @@ import type { Envelope, CreateEnvelopeInput, EnvelopeStatus } from "../../envelo
 import type { CronSchedule, CreateCronScheduleInput } from "../../cron/types.js";
 import type { SessionPolicyConfig } from "../../shared/session-policy.js";
 import {
-  DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
   getDefaultAgentDescription,
@@ -28,7 +27,6 @@ interface AgentRow {
   provider: string | null;
   model: string | null;
   reasoning_effort: string | null;
-  auto_level: string | null;
   permission_level: string | null;
   session_policy: string | null;
   created_at: number;
@@ -146,7 +144,6 @@ export class HiBossDatabase {
         "provider",
         "model",
         "reasoning_effort",
-        "auto_level",
         "permission_level",
         "session_policy",
         "created_at",
@@ -291,8 +288,8 @@ export class HiBossDatabase {
     const createdAt = Date.now();
 
     const stmt = this.db.prepare(`
-      INSERT INTO agents (name, token, description, workspace, provider, model, reasoning_effort, auto_level, permission_level, session_policy, created_at, metadata)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO agents (name, token, description, workspace, provider, model, reasoning_effort, permission_level, session_policy, created_at, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -303,7 +300,6 @@ export class HiBossDatabase {
       input.provider ?? DEFAULT_AGENT_PROVIDER,
       input.model ?? null,
       input.reasoningEffort ?? null,
-      input.autoLevel ?? DEFAULT_AGENT_AUTO_LEVEL,
       input.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL,
       input.sessionPolicy ? JSON.stringify(input.sessionPolicy) : null,
       createdAt,
@@ -375,7 +371,6 @@ export class HiBossDatabase {
       provider?: "claude" | "codex" | null;
       model?: string | null;
       reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | null;
-      autoLevel?: "medium" | "high" | null;
     }
   ): Agent {
     const agent = this.getAgentByNameCaseInsensitive(name);
@@ -405,10 +400,6 @@ export class HiBossDatabase {
     if (update.reasoningEffort !== undefined) {
       updates.push("reasoning_effort = ?");
       params.push(update.reasoningEffort);
-    }
-    if (update.autoLevel !== undefined) {
-      updates.push("auto_level = ?");
-      params.push(update.autoLevel);
     }
 
     if (updates.length === 0) {
@@ -585,11 +576,6 @@ export class HiBossDatabase {
       }
     }
 
-    let autoLevel: Agent["autoLevel"] | undefined;
-    if (row.auto_level === "medium" || row.auto_level === "high") {
-      autoLevel = row.auto_level;
-    }
-
     return {
       name: row.name,
       token: row.token,
@@ -598,7 +584,6 @@ export class HiBossDatabase {
       provider: (row.provider as 'claude' | 'codex') ?? undefined,
       model: row.model ?? undefined,
       reasoningEffort: (row.reasoning_effort as 'none' | 'low' | 'medium' | 'high' | 'xhigh') ?? undefined,
-      autoLevel,
       permissionLevel,
       sessionPolicy,
       createdAt: row.created_at,

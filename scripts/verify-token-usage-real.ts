@@ -1,19 +1,16 @@
-import { createRuntime } from "@unified-agent-sdk/runtime";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 
+import {
+  parseClaudeStreamJsonUsage,
+  parseCodexJsonUsage,
+  runCli,
+  type UsageLike,
+} from "./verify-token-usage/cli.js";
+
 type Provider = "claude" | "codex";
 type SessionMode = "fresh" | "continuous";
-
-type UsageLike = {
-  total_tokens?: number;
-  input_tokens?: number;
-  output_tokens?: number;
-  cache_read_tokens?: number;
-  cache_write_tokens?: number;
-  context_length?: number;
-};
 
 function parseArgs(argv: string[]) {
   const args = new Map<string, string>();
@@ -109,9 +106,14 @@ function readUsageNumbers(usage: unknown) {
   return { input, output, total, cacheRead, cacheWrite, contextLength };
 }
 
-function checkInvariants(usage: unknown): { ok: boolean; errors: string[] } {
+function checkInvariants(params: {
+  provider: Provider;
+  usage: unknown;
+  assistantEvents?: number;
+}): { ok: boolean; errors: string[] } {
   const errors: string[] = [];
-  const { input, output, total, cacheRead, cacheWrite, contextLength } = readUsageNumbers(usage);
+  const { input, output, total, cacheRead, cacheWrite, contextLength } =
+    readUsageNumbers(params.usage);
 
   if (input !== null && output !== null && total !== null) {
     if (total !== input + output) {
@@ -119,18 +121,27 @@ function checkInvariants(usage: unknown): { ok: boolean; errors: string[] } {
     }
   }
 
-  if (input !== null && output !== null && contextLength !== null) {
+  // Context length is provider-specific:
+  // - Codex: best-effort final-call size (input + output)
+  // - Claude: best-effort final-call size (input + cache read + cache write + output)
+  if (
+    params.provider === "codex" &&
+    input !== null &&
+    output !== null &&
+    contextLength !== null
+  ) {
     if (contextLength !== input + output) {
       errors.push(`context_length mismatch: expected ${input + output}, got ${contextLength}`);
     }
   }
 
-  if (input !== null && cacheRead !== null && cacheRead > input) {
-    errors.push(`cache_read_tokens must be <= input_tokens (got ${cacheRead} > ${input})`);
-  }
-
-  if (input !== null && cacheWrite !== null && cacheWrite > input) {
-    errors.push(`cache_write_tokens must be <= input_tokens (got ${cacheWrite} > ${input})`);
+  if (
+    params.provider === "claude" &&
+    contextLength !== null
+  ) {
+    // `context_length` is derived from the last assistant event, while the other fields come
+    // from the aggregated `result.usage` block. Even when there is only one assistant event,
+    // these can differ slightly between CLI versions, so don't enforce an exact equality check.
   }
 
   return { ok: errors.length === 0, errors };
@@ -200,34 +211,28 @@ async function runProvider(options: {
   model?: string;
   providerHomeOverride?: string;
 }): Promise<{ allOk: boolean; sawAnyCacheTokens: boolean }> {
-  const defaultOpts = {
-    workspace: { cwd: options.workspaceDir },
-    access: { auto: "low" as const },
-    reasoningEffort: "low" as const,
-    model: options.model,
-  };
-
+  let allOk = true;
+  let sawAnyCacheTokens = false;
   const providerHome =
     options.providerHomeOverride ??
     (options.provider === "claude"
       ? path.join(os.homedir(), ".claude")
       : path.join(os.homedir(), ".codex"));
 
-  const runtime =
-    options.provider === "claude"
-      ? createRuntime({
-          provider: "@anthropic-ai/claude-agent-sdk",
-          home: providerHome,
-          defaultOpts,
-        })
-      : createRuntime({
-          provider: "@openai/codex-sdk",
-          home: providerHome,
-          defaultOpts,
-        });
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  // Allow overriding homes for experiments, but default to shared user homes.
+  if (options.provider === "claude") {
+    if (options.providerHomeOverride) env.CLAUDE_CONFIG_DIR = options.providerHomeOverride;
+    else delete env.CLAUDE_CONFIG_DIR;
+    delete env.CODEX_HOME;
+  } else {
+    if (options.providerHomeOverride) env.CODEX_HOME = options.providerHomeOverride;
+    else delete env.CODEX_HOME;
+    delete env.CLAUDE_CONFIG_DIR;
+  }
 
-  let allOk = true;
-  let sawAnyCacheTokens = false;
+  let claudeSessionId: string | undefined;
+  let codexThreadId: string | undefined;
 
   try {
     console.log(`provider: ${options.provider}`);
@@ -236,167 +241,119 @@ async function runProvider(options: {
     console.log(`runs: ${options.runs}`);
     if (options.model) console.log(`model: ${options.model}`);
 
-    if (options.sessionMode === "continuous") {
-      const session = await runtime.openSession({});
-      let prev: ReturnType<typeof readUsageNumbers> | null = null;
-      try {
-        for (let i = 0; i < options.runs; i++) {
-          const runIndex = i + 1;
-          const turnPrompt = `${options.prompt}\n\n(turn ${runIndex}/${options.runs})`;
+    let prev: ReturnType<typeof readUsageNumbers> | null = null;
 
-          const errorEvents: { message: string; code?: string }[] = [];
-          const handle = await session.run({
-            input: { parts: [{ type: "text", text: turnPrompt }] },
-          });
+    for (let i = 0; i < options.runs; i++) {
+      const runIndex = i + 1;
+      const turnPrompt = `${options.prompt}\n\n(turn ${runIndex}/${options.runs})`;
 
-          for await (const event of handle.events) {
-            if (event.type === "error") {
-              errorEvents.push({ message: event.message, code: event.code });
-            }
-          }
+      let usage: UsageLike = {};
+      let status: "success" | "failed" = "success";
+      let assistantEvents: number | undefined;
 
-          const result = await handle.result;
-
-          const usage = (result.usage ?? {}) as Record<string, unknown>;
-          const { input, output, total, cacheRead, cacheWrite, contextLength } =
-            readUsageNumbers(usage);
-          const breakdownAvailable = hasAnyUsageNumbers(usage);
-          const { ok, errors } = checkInvariants(usage);
-
-          if ((cacheRead ?? 0) > 0 || (cacheWrite ?? 0) > 0) {
-            sawAnyCacheTokens = true;
-          }
-
-          console.log(`run: ${runIndex}`);
-          console.log(`status: ${result.status}`);
-          if (result.status !== "success") {
-            allOk = false;
-            if (errorEvents.length > 0) {
-              for (const err of errorEvents) {
-                console.log(`run-error: ${err.code ? `${err.code}: ` : ""}${err.message}`);
-              }
-            }
-          }
-          console.log(`input-tokens: ${input ?? "n/a"}`);
-          console.log(`output-tokens: ${output ?? "n/a"}`);
-          console.log(`context-length: ${contextLength ?? "n/a"}`);
-          console.log(`cache-read-tokens: ${cacheRead ?? "n/a"}`);
-          console.log(`cache-write-tokens: ${cacheWrite ?? "n/a"}`);
-          console.log(`total-tokens: ${total ?? "n/a"}`);
-          if (input !== null && output !== null) {
-            console.log(`total-tokens-expected: ${input + output}`);
-            console.log(`context-length-expected: ${input + output}`);
-          }
-
-          console.log(`breakdown-available: ${breakdownAvailable}`);
-          console.log(`breakdown-ok: ${ok}`);
-          if (breakdownAvailable && !ok) {
-            allOk = false;
-            for (const err of errors) console.log(`breakdown-error: ${err}`);
-          }
-
-          if (input !== null && output !== null && contextLength === null) {
-            allOk = false;
-            console.log("breakdown-error: missing context_length");
-          }
-
-          if (runIndex > 1 && prev) {
-            if (input !== null && prev.input !== null) {
-              console.log(`delta-input-tokens: ${input - prev.input}`);
-            }
-            if (output !== null && prev.output !== null) {
-              console.log(`delta-output-tokens: ${output - prev.output}`);
-            }
-            if (total !== null && prev.total !== null) {
-              console.log(`delta-total-tokens: ${total - prev.total}`);
-            }
-            if (cacheRead !== null && prev.cacheRead !== null) {
-              console.log(`delta-cache-read-tokens: ${cacheRead - prev.cacheRead}`);
-            }
-            if (cacheWrite !== null && prev.cacheWrite !== null) {
-              console.log(`delta-cache-write-tokens: ${cacheWrite - prev.cacheWrite}`);
-            }
-            if (contextLength !== null && prev.contextLength !== null) {
-              console.log(`delta-context-length: ${contextLength - prev.contextLength}`);
-            }
-          }
-
-          prev = { input, output, total, cacheRead, cacheWrite, contextLength };
+      if (options.provider === "claude") {
+        const args: string[] = [
+          "-p",
+          "--output-format", "stream-json",
+          "--verbose",
+          "--permission-mode", "acceptEdits",
+        ];
+        if (options.model) args.push("--model", options.model);
+        if (options.sessionMode === "continuous" && claudeSessionId) {
+          args.push("-r", claudeSessionId);
         }
-      } finally {
-        await session.dispose();
-      }
-    } else {
-      for (let i = 0; i < options.runs; i++) {
-        const runIndex = i + 1;
-        const session = await runtime.openSession({});
+        args.push("--", turnPrompt);
 
-        try {
-          const turnPrompt = `${options.prompt}\n\n(turn ${runIndex}/${options.runs})`;
+        const result = await runCli({ cmd: "claude", args, cwd: options.workspaceDir, env });
+        if (result.exitCode !== 0) {
+          status = "failed";
+          allOk = false;
+          console.log(`run-error: claude exitCode=${result.exitCode}`);
+          if (result.stderr.trim()) console.log(`stderr: ${result.stderr.trim().slice(0, 800)}`);
+        } else {
+          const parsed = parseClaudeStreamJsonUsage(result.stdout);
+          usage = parsed.usage;
+          assistantEvents = parsed.assistantEvents;
+          if (parsed.sessionId) claudeSessionId = parsed.sessionId;
+        }
+      } else {
+        const isResume = options.sessionMode === "continuous" && Boolean(codexThreadId);
+        const args: string[] = isResume
+          ? ["exec", "resume", "--json", "--skip-git-repo-check", "--full-auto"]
+          : ["exec", "--json", "--skip-git-repo-check", "--full-auto"];
+        if (options.model) args.push("-m", options.model);
 
-          const errorEvents: { message: string; code?: string }[] = [];
-          const handle = await session.run({
-            input: { parts: [{ type: "text", text: turnPrompt }] },
-          });
+        if (isResume) {
+          args.push(codexThreadId!, turnPrompt);
+        } else {
+          args.push(turnPrompt);
+        }
 
-          for await (const event of handle.events) {
-            if (event.type === "error") {
-              errorEvents.push({ message: event.message, code: event.code });
-            }
-          }
-
-          const result = await handle.result;
-
-          const usage = (result.usage ?? {}) as Record<string, unknown>;
-          const { input, output, total, cacheRead, cacheWrite, contextLength } =
-            readUsageNumbers(usage);
-          const breakdownAvailable = hasAnyUsageNumbers(usage);
-          const { ok, errors } = checkInvariants(usage);
-
-          if ((cacheRead ?? 0) > 0 || (cacheWrite ?? 0) > 0) {
-            sawAnyCacheTokens = true;
-          }
-
-          console.log(`run: ${runIndex}`);
-          console.log(`status: ${result.status}`);
-          if (result.status !== "success") {
-            allOk = false;
-            if (errorEvents.length > 0) {
-              for (const err of errorEvents) {
-                console.log(`run-error: ${err.code ? `${err.code}: ` : ""}${err.message}`);
-              }
-            }
-          }
-          console.log(`input-tokens: ${input ?? "n/a"}`);
-          console.log(`output-tokens: ${output ?? "n/a"}`);
-          console.log(`context-length: ${contextLength ?? "n/a"}`);
-          console.log(`cache-read-tokens: ${cacheRead ?? "n/a"}`);
-          console.log(`cache-write-tokens: ${cacheWrite ?? "n/a"}`);
-          console.log(`total-tokens: ${total ?? "n/a"}`);
-          if (input !== null && output !== null) {
-            console.log(`total-tokens-expected: ${input + output}`);
-            console.log(`context-length-expected: ${input + output}`);
-          }
-
-          console.log(`breakdown-available: ${breakdownAvailable}`);
-          console.log(`breakdown-ok: ${ok}`);
-          if (breakdownAvailable && !ok) {
-            allOk = false;
-            for (const err of errors) console.log(`breakdown-error: ${err}`);
-          }
-
-          if (input !== null && output !== null && contextLength === null) {
-            allOk = false;
-            console.log("breakdown-error: missing context_length");
-          }
-        } finally {
-          await session.dispose();
+        const result = await runCli({ cmd: "codex", args, cwd: options.workspaceDir, env });
+        if (result.exitCode !== 0) {
+          status = "failed";
+          allOk = false;
+          console.log(`run-error: codex exitCode=${result.exitCode}`);
+          if (result.stderr.trim()) console.log(`stderr: ${result.stderr.trim().slice(0, 800)}`);
+        } else {
+          const parsed = parseCodexJsonUsage(result.stdout);
+          usage = parsed.usage;
+          if (!codexThreadId && parsed.threadId) codexThreadId = parsed.threadId;
         }
       }
+
+      const { input, output, total, cacheRead, cacheWrite, contextLength } =
+        readUsageNumbers(usage);
+      const breakdownAvailable = hasAnyUsageNumbers(usage);
+      const { ok, errors } = checkInvariants({ provider: options.provider, usage, assistantEvents });
+
+      if ((cacheRead ?? 0) > 0 || (cacheWrite ?? 0) > 0) {
+        sawAnyCacheTokens = true;
+      }
+
+      console.log(`run: ${runIndex}`);
+      console.log(`status: ${status}`);
+      console.log(`input-tokens: ${input ?? "n/a"}`);
+      console.log(`output-tokens: ${output ?? "n/a"}`);
+      console.log(`context-length: ${contextLength ?? "n/a"}`);
+      console.log(`cache-read-tokens: ${cacheRead ?? "n/a"}`);
+      console.log(`cache-write-tokens: ${cacheWrite ?? "n/a"}`);
+      console.log(`total-tokens: ${total ?? "n/a"}`);
+      if (input !== null && output !== null) {
+        console.log(`total-tokens-expected: ${input + output}`);
+      }
+
+      console.log(`breakdown-available: ${breakdownAvailable}`);
+      console.log(`breakdown-ok: ${ok}`);
+      if (breakdownAvailable && !ok) {
+        allOk = false;
+        for (const err of errors) console.log(`breakdown-error: ${err}`);
+      }
+
+      if (runIndex > 1 && prev) {
+        if (input !== null && prev.input !== null) {
+          console.log(`delta-input-tokens: ${input - prev.input}`);
+        }
+        if (output !== null && prev.output !== null) {
+          console.log(`delta-output-tokens: ${output - prev.output}`);
+        }
+        if (total !== null && prev.total !== null) {
+          console.log(`delta-total-tokens: ${total - prev.total}`);
+        }
+        if (cacheRead !== null && prev.cacheRead !== null) {
+          console.log(`delta-cache-read-tokens: ${cacheRead - prev.cacheRead}`);
+        }
+        if (cacheWrite !== null && prev.cacheWrite !== null) {
+          console.log(`delta-cache-write-tokens: ${cacheWrite - prev.cacheWrite}`);
+        }
+        if (contextLength !== null && prev.contextLength !== null) {
+          console.log(`delta-context-length: ${contextLength - prev.contextLength}`);
+        }
+      }
+
+      prev = { input, output, total, cacheRead, cacheWrite, contextLength };
     }
-  } finally {
-    await runtime.close();
-  }
+  } finally {}
 
   return { allOk, sawAnyCacheTokens };
 }

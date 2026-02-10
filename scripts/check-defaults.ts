@@ -1,6 +1,5 @@
 import { SCHEMA_SQL } from "../src/daemon/db/schema.js";
 import {
-  DEFAULT_AGENT_AUTO_LEVEL,
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
   DEFAULT_AGENT_RUN_STATUS,
@@ -29,11 +28,6 @@ function main(): void {
     normalized,
     "reasoning_effort TEXT",
     "agents.reasoning_effort"
-  );
-  assertIncludes(
-    normalized,
-    `auto_level TEXT DEFAULT '${DEFAULT_AGENT_AUTO_LEVEL}'`,
-    "agents.auto_level"
   );
   assertIncludes(
     normalized,

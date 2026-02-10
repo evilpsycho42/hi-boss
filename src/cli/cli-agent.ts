@@ -21,17 +21,12 @@ export function registerAgentCommands(program: Command): void {
     .requiredOption("--provider <provider>", "Provider (claude or codex)")
     .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
     .option("--description <description>", "Agent description")
-    .option("--workspace <path>", "Workspace path for unified-agent-sdk")
-    .option(
-      "--provider-source-home <path>",
-      "Provider source home to import config from (default: ~/.codex or ~/.claude)"
-    )
+    .option("--workspace <path>", "Workspace directory for provider CLI runs")
     .option("--model <model>", "Model name (provider-specific)")
     .option(
       "--reasoning-effort <effort>",
       "Reasoning effort (default, none, low, medium, high, xhigh)"
     )
-    .option("--auto-level <level>", "Auto-level (medium, high)")
     .option(
       "--permission-level <level>",
       "Permission level (restricted, standard, privileged, boss)"
@@ -60,10 +55,8 @@ export function registerAgentCommands(program: Command): void {
         description: options.description,
         workspace: options.workspace,
         provider: options.provider,
-        providerSourceHome: options.providerSourceHome,
         model: options.model,
         reasoningEffort: options.reasoningEffort,
-        autoLevel: options.autoLevel,
         permissionLevel: options.permissionLevel,
         sessionDailyResetAt: options.sessionDailyResetAt,
         sessionIdleTimeout: options.sessionIdleTimeout,
@@ -81,12 +74,8 @@ export function registerAgentCommands(program: Command): void {
     .requiredOption("--name <name>", "Agent name")
     .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
     .option("--description <description>", "Agent description")
-    .option("--workspace <path>", "Workspace path for unified-agent-sdk")
+    .option("--workspace <path>", "Workspace directory for provider CLI runs")
     .option("--provider <provider>", "Provider (claude or codex)")
-    .option(
-      "--provider-source-home <path>",
-      "Provider source home to import config from (default: ~/.codex or ~/.claude)"
-    )
     .option(
       "--model <model>",
       "Model override (provider-specific; use 'default' to clear)"
@@ -95,7 +84,6 @@ export function registerAgentCommands(program: Command): void {
       "--reasoning-effort <effort>",
       "Reasoning effort (default, none, low, medium, high, xhigh)"
     )
-    .option("--auto-level <level>", "Auto-level (medium, high)")
     .option(
       "--permission-level <level>",
       "Permission level (restricted, standard, privileged, boss; boss-privileged only)"
@@ -127,10 +115,8 @@ export function registerAgentCommands(program: Command): void {
         description: options.description,
         workspace: options.workspace,
         provider: options.provider,
-        providerSourceHome: options.providerSourceHome,
         model: options.model,
         reasoningEffort: options.reasoningEffort,
-        autoLevel: options.autoLevel,
         permissionLevel: options.permissionLevel,
         sessionDailyResetAt: options.sessionDailyResetAt,
         sessionIdleTimeout: options.sessionIdleTimeout,

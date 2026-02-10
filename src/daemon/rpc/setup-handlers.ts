@@ -48,6 +48,10 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
         rpcError(RPC_ERRORS.ALREADY_EXISTS, "Setup already completed");
       }
 
+      if ((p as any).providerSourceHome !== undefined) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "provider-source-home is no longer supported");
+      }
+
       if (typeof p.bossName !== "string" || !p.bossName.trim()) {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid boss-name");
       }
@@ -78,10 +82,6 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
             "Invalid reasoning-effort (expected none, low, medium, high, xhigh)"
           );
         }
-      }
-
-      if (p.agent.autoLevel !== "medium" && p.agent.autoLevel !== "high") {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid auto-level (expected medium, high)");
       }
 
       if (p.agent.permissionLevel !== undefined) {
@@ -182,28 +182,9 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
         }
       }
 
-      // Setup agent home directories
-      let providerSourceHome: string | undefined;
-      if (p.providerSourceHome !== undefined) {
-        if (typeof p.providerSourceHome !== "string" || !p.providerSourceHome.trim()) {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid provider-source-home");
-        }
-        providerSourceHome = p.providerSourceHome.trim();
-      }
-
-      try {
-        await setupAgentHome(p.agent.name, ctx.config.dataDir, {
-          provider: p.provider,
-          providerSourceHome,
-        });
-        ensureBossProfileFile(ctx.config.dataDir);
-      } catch (err) {
-        const message = (err as Error).message || String(err);
-        if (message.includes("provider-source-home")) {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, message);
-        }
-        throw err;
-      }
+      // Setup agent home directory
+      await setupAgentHome(p.agent.name, ctx.config.dataDir);
+      ensureBossProfileFile(ctx.config.dataDir);
 
       // If an adapter is provided and the daemon is running, create/start it first.
       // This validates adapter credentials and avoids committing setup state if startup fails.
@@ -268,7 +249,6 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
             provider: p.provider,
             model: p.agent.model,
             reasoningEffort: p.agent.reasoningEffort,
-            autoLevel: p.agent.autoLevel,
             permissionLevel: p.agent.permissionLevel,
             sessionPolicy: p.agent.sessionPolicy,
             metadata,

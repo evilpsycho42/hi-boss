@@ -16,11 +16,10 @@ export interface Agent {
   name: string;            // unique identifier (alphanumeric, hyphens)
   token: string;           // agent token (short identifier, e.g. "abc123")
   description?: string;    // displayed to other agents
-  workspace?: string;      // for unified-agent-sdk
+  workspace?: string;      // provider CLI working directory (session cwd)
   provider?: 'claude' | 'codex';
   model?: string;
   reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
-  autoLevel?: 'medium' | 'high';
   permissionLevel?: AgentPermissionLevel;   // authorization level for CLI/RPC ops
   sessionPolicy?: SessionPolicyConfig;      // session refresh policy
   createdAt: number;       // unix epoch ms (UTC)
@@ -38,7 +37,6 @@ export interface RegisterAgentInput {
   provider?: 'claude' | 'codex';
   model?: string | null;
   reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null;
-  autoLevel?: 'medium' | 'high';
   permissionLevel?: AgentPermissionLevel;
   sessionPolicy?: SessionPolicyConfig;
   metadata?: Record<string, unknown>;

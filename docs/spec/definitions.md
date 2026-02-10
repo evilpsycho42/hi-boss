@@ -3,6 +3,7 @@
 This document defines the field mappings between code (TypeScript), SQLite, and stable CLI output keys for core Hi-Boss entities.
 
 For command flags and examples, see `docs/spec/cli.md` and the topic files under `docs/spec/cli/`.
+For envelope instruction examples, see `docs/spec/examples/envelope-instructions.md`.
 
 Naming conventions:
 - CLI flags: kebab-case, lowercase
@@ -81,7 +82,7 @@ Command flags:
 - `in-reply-to-channel-message-id:` (Telegram uses the same compact base36 (no prefix) form)
 - `in-reply-to-from-name:` (optional)
 - `in-reply-to-text:` (multiline)
-  - Note: adapters may truncate `in-reply-to-text` for safety/size. The Telegram adapter truncates at 1200 characters and appends `\n\n[...truncated...]\n`.
+  - Note: adapters may truncate `in-reply-to-text` for safety/size (see adapter specs).
 
 **Delivery error keys** (only when a delivery attempt failed or the daemon terminalized an undeliverable envelope)
 - `last-delivery-error-at:` (boss timezone offset)
@@ -129,32 +130,6 @@ Envelope instructions printed by `hiboss envelope list` do **not** include the i
 - `success: true|false`
 - `cron-id: <cron-id>` (short id; derived from the internal cron schedule UUID)
 
-### Example: Envelope instruction (group message)
-
-```
-from: channel:telegram:6447779930
-sender: Kevin (@kky1024) [boss] in group "hiboss-test"
-channel-message-id: zik0zj
-created-at: 2026-01-28T20:08:45+08:00
-
-Hello!
-attachments:
-- [image] photo.jpg (/Users/kky/hiboss/media/photo.jpg)
-```
-
-### Example: Envelope instruction (direct message)
-
-```
-from: channel:telegram:6447779930
-sender: Kevin (@kky1024) [boss] in private chat
-channel-message-id: zik0zi
-created-at: 2026-01-28T20:08:45+08:00
-
-Hello!
-attachments:
-- [image] photo.jpg (/Users/kky/hiboss/media/photo.jpg)
-```
-
 ---
 
 ## Agent
@@ -176,7 +151,6 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 | `agent.provider` | `provider` | `claude` or `codex` |
 | `agent.model` | `model` | Nullable; `NULL` means “use provider default model” |
 | `agent.reasoningEffort` | `reasoning_effort` | See `src/agent/types.ts` for allowed values; `NULL` means “use provider default reasoning effort” |
-| `agent.autoLevel` | `auto_level` | `medium`, `high` (Hi-Boss disallows `low`) |
 | `agent.permissionLevel` | `permission_level` | `restricted`, `standard`, `privileged`, `boss` |
 | `agent.sessionPolicy` | `session_policy` | JSON (nullable) |
 | `agent.createdAt` | `created_at` | Unix epoch ms (UTC) |
@@ -194,14 +168,14 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 Command flags:
 - `hiboss agent ...`: `docs/spec/cli/agents.md`
 
-Provider config import:
-- `--provider-source-home <path>` overrides the source directory used to import provider config files into the agent’s provider home.
-- `--provider-source-home` requires an explicit `--provider` on `hiboss agent register` / `hiboss agent set`.
+Provider homes:
+- Provider CLIs use shared default homes (`~/.claude`, `~/.codex`).
+- When spawning provider processes, Hi-Boss clears `CLAUDE_CONFIG_DIR` and `CODEX_HOME` so overrides do not change behavior.
+- Hi-Boss does not copy/import provider config files into per-agent directories (per-agent provider homes were removed).
 
 Agent defaults:
 - `hiboss agent register` requires `--provider` (`claude` or `codex`).
 - `agent.model` and `agent.reasoningEffort` are nullable overrides; `NULL` means provider defaults.
-- `agent.autoLevel` defaults to `medium` when not specified.
 - `agent.permissionLevel` defaults to `standard` when not specified.
 - On `hiboss agent set`, switching provider without passing `--model` / `--reasoning-effort` clears both overrides to `NULL`.
 
@@ -306,55 +280,8 @@ Command flags:
 
 ---
 
-## TypeScript Interfaces (Current)
+## TypeScript Interfaces
 
-These are the current shapes in `src/envelope/types.ts` and `src/agent/types.ts`.
-
-### Envelope
-
-```ts
-import type { Address } from "../adapters/types.js";
-
-export interface Envelope {
-  id: string;
-  from: Address;                // "agent:<name>" or "channel:<adapter>:<chat-id>"
-  to: Address;
-  fromBoss: boolean;
-  content: {
-    text?: string;
-    attachments?: Array<{
-      source: string;
-      filename?: string;
-      telegramFileId?: string;
-    }>;
-  };
-  deliverAt?: number;           // unix epoch ms (UTC) (not-before delivery)
-  status: "pending" | "done";
-  createdAt: number;            // unix epoch ms (UTC)
-  metadata?: Record<string, unknown>;
-}
-```
-
-### Agent
-
-```ts
-export interface Agent {
-  name: string;
-  token: string;
-  description?: string;
-  workspace?: string;
-  provider: "claude" | "codex";
-  model?: string;
-  reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
-  autoLevel?: "medium" | "high";
-  permissionLevel?: "restricted" | "standard" | "privileged" | "boss";
-  sessionPolicy?: {
-    dailyResetAt?: string;    // "HH:MM" local
-    idleTimeout?: string;     // e.g. "2h", "30m", "1h30m" (units: d/h/m/s)
-    maxContextLength?: number;
-  };
-  createdAt: number;      // unix epoch ms (UTC)
-  lastSeenAt?: number;    // unix epoch ms (UTC)
-  metadata?: Record<string, unknown>;
-}
-```
+The current shapes live in:
+- `src/envelope/types.ts`
+- `src/agent/types.ts`

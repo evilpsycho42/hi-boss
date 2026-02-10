@@ -5,7 +5,6 @@ import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../../shared/vali
 import { parseDailyResetAt, parseDurationToMs } from "../../../shared/session-policy.js";
 import {
   DEFAULT_SETUP_AGENT_NAME,
-  DEFAULT_SETUP_AUTO_LEVEL,
   DEFAULT_SETUP_PERMISSION_LEVEL,
   getDefaultAgentDescription,
   getDefaultSetupBossName,
@@ -22,7 +21,6 @@ interface SetupConfigFileV1 {
   "boss-timezone"?: string;
   "boss-token": string;
   provider: "claude" | "codex";
-  "provider-source-home"?: string;
   memory?: {
     mode?: "default" | "local";
     "model-path"?: string;
@@ -40,7 +38,6 @@ interface SetupConfigFileV1 {
       | "xhigh"
       | "default"
       | null;
-    "auto-level"?: "medium" | "high";
     "permission-level"?: "restricted" | "standard" | "privileged" | "boss";
     "session-policy"?: {
       "daily-reset-at"?: string;
@@ -72,6 +69,10 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
     throw new Error("Invalid setup config version (expected 1)");
   }
 
+  if (Object.prototype.hasOwnProperty.call(parsed, "provider-source-home")) {
+    throw new Error("Invalid setup config (provider-source-home is no longer supported)");
+  }
+
   const bossToken = typeof parsed["boss-token"] === "string" ? parsed["boss-token"].trim() : "";
   if (!bossToken) {
     throw new Error("Invalid setup config (boss-token is required)");
@@ -84,16 +85,6 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
   const provider = providerRaw === "claude" || providerRaw === "codex" ? providerRaw : undefined;
   if (!provider) {
     throw new Error("Invalid setup config (provider is required; expected 'claude' or 'codex')");
-  }
-
-  const providerSourceHomeRaw = (parsed as Record<string, unknown>)["provider-source-home"];
-  let providerSourceHome: string | undefined;
-  if (typeof providerSourceHomeRaw === "string" && providerSourceHomeRaw.trim()) {
-    const trimmed = providerSourceHomeRaw.trim();
-    if (!path.isAbsolute(trimmed) && !trimmed.startsWith("~")) {
-      throw new Error("Invalid setup config (provider-source-home must be an absolute path or start with ~)");
-    }
-    providerSourceHome = trimmed;
   }
 
   const bossNameRaw = parsed["boss-name"];
@@ -178,16 +169,6 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
     return null;
   })();
 
-  const autoLevelRaw = agentRaw["auto-level"];
-  const autoLevel: SetupConfig["agent"]["autoLevel"] = (() => {
-    if (autoLevelRaw === undefined) return DEFAULT_SETUP_AUTO_LEVEL;
-    if (autoLevelRaw === "medium" || autoLevelRaw === "high") return autoLevelRaw;
-    if (autoLevelRaw === "low") {
-      throw new Error("Invalid setup config (agent.auto-level no longer supports 'low'; use medium or high)");
-    }
-    throw new Error("Invalid setup config (agent.auto-level must be 'medium' or 'high')");
-  })();
-
   const permissionLevelRaw = agentRaw["permission-level"];
   const permissionLevel =
     permissionLevelRaw === "restricted" ||
@@ -269,7 +250,6 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
 
   const config: SetupConfig = {
     provider,
-    providerSourceHome,
     bossName,
     bossTimezone,
     agent: {
@@ -278,7 +258,6 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
       workspace,
       model,
       reasoningEffort,
-      autoLevel,
       permissionLevel,
       sessionPolicy,
       metadata,

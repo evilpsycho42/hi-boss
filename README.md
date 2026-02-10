@@ -9,16 +9,18 @@ Highlights:
 
 ## Providers: Claude Code + Codex
 
-Hi-Boss runs agent turns through the Unified Agent SDK runtime with either provider:
+Hi-Boss runs agent turns by spawning provider CLIs directly:
 
-- **Claude Code** (`--provider claude`)
-- **Codex** (`--provider codex`)
+- **Claude Code CLI**: `claude`
+- **Codex CLI**: `codex exec`
 
-When you run `hiboss setup` / `hiboss agent register`, Hi-Boss imports your provider auth/settings from `~/.claude/` or `~/.codex/`.
+Provider state/config lives in the user's shared homes:
+- Claude: `~/.claude`
+- Codex: `~/.codex`
 
-You can also override the import source home:
-- Setup: via the interactive wizard, or `hiboss setup --config-file <path>`
-- Agents: `hiboss agent register|set --provider-source-home <path>`
+Hi-Boss does **not** copy provider config files into `~/hiboss`. System instructions are injected inline via CLI flags:
+- Claude: `--append-system-prompt`
+- Codex: `-c developer_instructions=...`
 
 ## Install
 
@@ -111,7 +113,7 @@ hiboss agent register --token <boss-token> --name nex --provider codex --descrip
 Update an agent (manual configuration):
 
 ```bash
-hiboss agent set --token <boss-token> --name nex --provider codex --auto-level medium --permission-level privileged
+hiboss agent set --token <boss-token> --name nex --provider codex --permission-level privileged
 ```
 
 Remove an agent:
@@ -152,35 +154,6 @@ hiboss agent set --token <boss-token> --name <agent-name> --permission-level bos
 Then, as the boss/user, go to Telegram and ask that agent to perform admin tasks for you (e.g., “add an agent”, “remove an agent”, “update bindings”). If you prefer, you can always do the same operations manually with `hiboss agent register|set|delete`.
 
 This is powerful: a boss-level agent token can perform any boss-privileged CLI operations. Only do this for an agent you fully trust.
-
-## Skills
-
-Hi-Boss supports built-in, global, and provider-private skills that are synced on new sessions.
-
-Built-in skills:
-- `agent-browser`: Browser automation helpers for capturing pages, form flows, authenticated sessions, and related browser workflows.
-
-Add a global skill (shared across agents/providers):
-
-```bash
-mkdir -p ~/hiboss/skills/<skill-name>
-# create ~/hiboss/skills/<skill-name>/SKILL.md (and optional assets/scripts)
-```
-
-Add a provider-private skill (for one agent + provider home):
-
-```bash
-# Codex provider home
-mkdir -p ~/hiboss/agents/<agent-name>/codex_home/skills/<skill-name>
-# Claude provider home
-mkdir -p ~/hiboss/agents/<agent-name>/claude_home/skills/<skill-name>
-# then create SKILL.md inside the skill folder
-```
-
-Skill precedence when names conflict:
-- provider-private > global > built-in
-
-After adding or editing skills, refresh the session to apply updates (`/new` in Telegram, or `hiboss agent refresh`).
 
 ## Memory
 

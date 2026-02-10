@@ -36,9 +36,9 @@ Templates are optimized for:
 
 - Entrypoint: `prompts/system/base.md`
 - Rendered by: `src/agent/instruction-generator.ts`
-- Written to:
-  - `~/hiboss/agents/<agent-name>/codex_home/AGENTS.md`
-  - `~/hiboss/agents/<agent-name>/claude_home/CLAUDE.md`
+- Delivered inline to provider CLIs (not written to provider homes):
+  - Claude: `claude -p --append-system-prompt ...`
+  - Codex: `codex exec -c developer_instructions=...`
 
 Note: system instructions are regenerated when a new session is created (e.g. after `/new` or session refresh policies).
 
@@ -65,12 +65,11 @@ This is the agent-facing text emitted by:
 flowchart TD
   A[Daemon triggers agent run] --> B[Build turn context + envelopes]
   B --> C[Render prompts/turn/turn.md]
-  C --> D[Agent SDK session.run(input)]
+  C --> D[Spawn provider CLI turn]
 
   E[New session / refresh] --> F[Build system context]
   F --> G[Render prompts/system/base.md]
-  G --> H[Write AGENTS.md / CLAUDE.md]
-  H --> D
+  G --> D
 
   I[CLI: hiboss envelope list] --> J[Build envelope context]
   J --> K[Render prompts/envelope/instruction.md]

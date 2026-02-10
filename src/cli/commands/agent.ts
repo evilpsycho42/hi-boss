@@ -46,10 +46,8 @@ export interface RegisterAgentOptions {
   description?: string;
   workspace?: string;
   provider: string;
-  providerSourceHome?: string;
   model?: string;
   reasoningEffort?: string;
-  autoLevel?: string;
   permissionLevel?: string;
   sessionDailyResetAt?: string;
   sessionIdleTimeout?: string;
@@ -85,10 +83,8 @@ export interface SetAgentOptions {
   description?: string;
   workspace?: string;
   provider?: string;
-  providerSourceHome?: string;
   model?: string;
   reasoningEffort?: string;
-  autoLevel?: string;
   permissionLevel?: string;
   sessionDailyResetAt?: string;
   sessionIdleTimeout?: string;
@@ -113,9 +109,6 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
     if (!isValidAgentName(options.name)) {
       throw new Error(AGENT_NAME_ERROR_MESSAGE);
     }
-    if (options.providerSourceHome && !options.provider) {
-      throw new Error("--provider-source-home requires --provider");
-    }
 
     const token = resolveToken(options.token);
     const model = normalizeDefaultSentinel(options.model);
@@ -126,10 +119,8 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
       description: options.description,
       workspace: options.workspace,
       provider: options.provider,
-      providerSourceHome: options.providerSourceHome,
       model,
       reasoningEffort,
-      autoLevel: options.autoLevel,
       permissionLevel: options.permissionLevel,
       metadata: sanitizeAgentMetadata(await readMetadataInput(options)),
       sessionDailyResetAt: options.sessionDailyResetAt,
@@ -162,9 +153,6 @@ export async function setAgent(options: SetAgentOptions): Promise<void> {
 
   try {
     const token = resolveToken(options.token);
-    if (options.providerSourceHome && !options.provider) {
-      throw new Error("--provider-source-home requires --provider");
-    }
 
     if (options.clearMetadata && (options.metadataJson || options.metadataFile)) {
       throw new Error("Use either --clear-metadata or --metadata-json/--metadata-file, not both");
@@ -206,10 +194,8 @@ export async function setAgent(options: SetAgentOptions): Promise<void> {
       description: options.description,
       workspace: options.workspace,
       provider: options.provider,
-      providerSourceHome: options.providerSourceHome,
       model,
       reasoningEffort,
-      autoLevel: options.autoLevel,
       permissionLevel: options.permissionLevel,
       sessionPolicy,
       metadata,
@@ -234,9 +220,6 @@ export async function setAgent(options: SetAgentOptions): Promise<void> {
     }
     if (result.agent.reasoningEffort) {
       console.log(`reasoning-effort: ${result.agent.reasoningEffort}`);
-    }
-    if (result.agent.autoLevel) {
-      console.log(`auto-level: ${result.agent.autoLevel}`);
     }
     if (result.agent.permissionLevel) {
       console.log(`permission-level: ${result.agent.permissionLevel}`);
@@ -323,7 +306,6 @@ export async function agentStatus(options: AgentStatusOptions): Promise<void> {
     console.log(`provider: ${result.effective.provider}`);
     console.log(`model: ${result.agent.model ?? "default"}`);
     console.log(`reasoning-effort: ${result.agent.reasoningEffort ?? "default"}`);
-    console.log(`auto-level: ${result.effective.autoLevel}`);
     console.log(`permission-level: ${result.effective.permissionLevel}`);
     if (result.bindings.length > 0) {
       console.log(`bindings: ${result.bindings.join(", ")}`);

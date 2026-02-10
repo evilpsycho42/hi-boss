@@ -174,8 +174,8 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
 
   const insertAgent = db.prepare(
     `INSERT INTO agents
-     (name, token, description, workspace, provider, model, reasoning_effort, auto_level, permission_level, session_policy, created_at, last_seen_at, metadata)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+     (name, token, description, workspace, provider, model, reasoning_effort, permission_level, session_policy, created_at, last_seen_at, metadata)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   );
 
   insertAgent.run(
@@ -185,7 +185,6 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     "/home/user/projects/myapp",
     "claude",
     "claude-sonnet-4-20250514",
-    "medium",
     "medium",
     "restricted",
     JSON.stringify({ dailyResetAt: "03:00", idleTimeout: "30m", maxContextLength: 180000 }),
@@ -201,7 +200,6 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     null,
     "codex",
     null,
-    "medium",
     "medium",
     "restricted",
     null,

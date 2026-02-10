@@ -42,7 +42,6 @@ export const DEFAULT_MEMORY_MODEL_URL =
 
 export const DEFAULT_AGENT_PROVIDER = "claude" as const;
 export const DEFAULT_AGENT_REASONING_EFFORT = "medium" as const;
-export const DEFAULT_AGENT_AUTO_LEVEL = "medium" as const;
 export const DEFAULT_AGENT_PERMISSION_LEVEL = "standard" as const;
 
 // ==================== DB/Envelope Defaults ====================
@@ -54,7 +53,6 @@ export const DEFAULT_ENVELOPE_LIST_BOX = "inbox" as const;
 // ==================== Setup Defaults ====================
 
 export const DEFAULT_SETUP_AGENT_NAME = "nex" as const;
-export const DEFAULT_SETUP_AUTO_LEVEL = "high" as const;
 export const DEFAULT_SETUP_PERMISSION_LEVEL = DEFAULT_AGENT_PERMISSION_LEVEL;
 export const DEFAULT_SETUP_BIND_TELEGRAM = true as const;
 
@@ -84,10 +82,6 @@ export const DEFAULT_PERMISSION_POLICY: PermissionPolicyV1 = {
     // Envelope operations (agents)
     "envelope.send": "restricted",
     "envelope.list": "restricted",
-
-    // Backwards-compatible aliases
-    "message.send": "restricted",
-    "message.list": "restricted",
 
     // Reactions
     "reaction.set": "restricted",

@@ -20,6 +20,10 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
     const requestedAgentName = typeof p.name === "string" ? p.name.trim() : "";
 
     try {
+      if ((p as any).providerSourceHome !== undefined) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "provider-source-home is no longer supported");
+      }
+
       if (typeof p.name !== "string" || !isValidAgentName(p.name)) {
         rpcError(RPC_ERRORS.INVALID_PARAMS, AGENT_NAME_ERROR_MESSAGE);
       }
@@ -51,14 +55,6 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
           );
         }
         reasoningEffort = p.reasoningEffort;
-      }
-
-      let autoLevel: Agent["autoLevel"] | undefined;
-      if (p.autoLevel !== undefined) {
-        if (p.autoLevel !== "medium" && p.autoLevel !== "high") {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid auto-level (expected medium, high)");
-        }
-        autoLevel = p.autoLevel;
       }
 
       let permissionLevel: Agent["permissionLevel"] | undefined;
@@ -121,33 +117,13 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
         provider,
         model: typeof p.model === "string" && p.model.trim() ? p.model.trim() : undefined,
         reasoningEffort,
-        autoLevel,
         permissionLevel,
         sessionPolicy: Object.keys(sessionPolicy).length > 0 ? (sessionPolicy as any) : undefined,
         metadata,
       });
 
-      // Setup agent home directories
-      let providerSourceHome: string | undefined;
-      if (p.providerSourceHome !== undefined) {
-        if (typeof p.providerSourceHome !== "string" || !p.providerSourceHome.trim()) {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid provider-source-home");
-        }
-        providerSourceHome = p.providerSourceHome.trim();
-      }
-
-      try {
-        await setupAgentHome(p.name, ctx.config.dataDir, {
-          provider,
-          providerSourceHome,
-        });
-      } catch (err) {
-        const message = (err as Error).message || String(err);
-        if (message.includes("provider-source-home")) {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, message);
-        }
-        throw err;
-      }
+      // Setup agent home directory
+      await setupAgentHome(p.name, ctx.config.dataDir);
 
       const bindAdapterType = p.bindAdapterType;
       const bindAdapterToken = p.bindAdapterToken;

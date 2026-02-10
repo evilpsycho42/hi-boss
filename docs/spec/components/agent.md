@@ -37,16 +37,22 @@ The daemon authorizes token-authenticated operations using `config.permission_po
 - Boss operations require a token whose effective permission level is `boss` (boss token or a boss-level agent token).
 - `permissionLevel: boss` grants authorization only; it does not mark messages as boss (`fromBoss` / `[boss]` are adapter identity, not permission).
 
-See `docs/spec/configuration.md#permission-policy`.
+See:
+- `src/shared/defaults.ts` (`DEFAULT_PERMISSION_POLICY`)
+- `docs/spec/config/sqlite.md` (`config.permission_policy`)
 
 ## Providers
 
-Hi-Boss supports two agent SDK providers:
+Hi-Boss supports two provider CLIs:
 
-| Provider | SDK Package | Home Directory |
-|----------|-------------|----------------|
-| claude | `@anthropic-ai/claude-agent-sdk` | `~/hiboss/agents/<name>/claude_home/` |
-| codex | `@openai/codex-sdk` | `~/hiboss/agents/<name>/codex_home/` |
+| Provider | CLI Command | Default Home |
+|----------|-------------|--------------|
+| claude | `claude` (Claude Code CLI) | `~/.claude` (shared) |
+| codex | `codex` (Codex CLI) | `~/.codex` (shared) |
+
+Hi-Boss does not create per-agent provider directories. When spawning provider processes, Hi-Boss clears `CLAUDE_CONFIG_DIR` and `CODEX_HOME` so provider homes remain the shared defaults. System prompts are injected via CLI flags:
+- Claude: `--append-system-prompt`
+- Codex: `-c developer_instructions=...`
 
 ### Provider Configuration
 
@@ -57,82 +63,39 @@ Set at registration or via agent settings:
 | `provider` | SDK provider | `claude`, `codex` |
 | `model` | Model override | Provider-specific model ID (`null`/unset means “use provider default”) |
 | `reasoningEffort` | Reasoning effort override | `none`, `low`, `medium`, `high`, `xhigh` (`null`/unset means “use provider default”) |
-| `autoLevel` | Automation/access level | `medium`, `high` |
 | `permissionLevel` | Authorization for CLI/RPC ops | `restricted`, `standard`, `privileged`, `boss` |
 | `sessionPolicy` | Session refresh policy | See [Session Policy](#session-policy) |
 
-### Access Level Mapping
+### Provider Execution Mode (Current)
 
-The `autoLevel` setting maps to SDK access permissions:
+Hi-Boss currently runs provider CLIs in **full-access mode** (bypassing sandboxing / permission prompts) so agents can reliably execute `hiboss` commands.
 
-| autoLevel | Behavior |
-|-----------|----------|
-| `medium` | Workspace-scoped automation: can write files in the workspace (including configured additional dirs) and run a broad set of commands, but stays workspace-scoped |
-| `high` | Full-computer automation: can run almost anything on this machine (recommended only when you trust the agent) |
+- Codex: `--dangerously-bypass-approvals-and-sandbox` (fresh + resume)
+- Claude: `--permission-mode bypassPermissions`
 
-Note: unified-agent-sdk supports `autoLevel=low`, but Hi-Boss disallows it because Hi-Boss agent instructions rely on running the `hiboss` CLI (local IPC via `~/hiboss/.daemon/daemon.sock`), and `low` can block that. `autoLevel=medium` is the lowest supported setting that still allows agents to use the Hi-Boss envelope system.
+Important: Claude Code CLI does not provide a Codex-style workspace-only filesystem sandbox. If you allow `Write`/`Edit`, assume the agent can write outside the intended workspace unless the `claude` process is externally sandboxed (container/VM/OS policy).
 
-### Real-provider behavior test
+### Real-provider verification (dev)
 
-To validate that agents can actually use the Hi-Boss envelope system end-to-end (including `hiboss envelope send`) under **real** provider calls:
+To validate provider behavior under real API calls (costs money), use the scripted verifier:
+- `npm run verify:token-usage:real`
 
-1) Stop the daemon and delete `~/hiboss` (or your overridden `HIBOSS_DIR`)
-2) Run `hiboss setup --config-file ...` using a known-good template (see `scripts/test-auto-level/`)
-3) Start the daemon
-4) Send a boss-marked envelope that instructs a `high` and a `medium` agent to send to a non-existent sink address (e.g., `agent:test-sink`)
-5) Verify each sender's outbox contains the expected `pong` messages via `hiboss envelope list --to agent:test-sink --status done`
-
-This test incurs real provider usage (cost). See `scripts/test-auto-level/README.md` for the exact repeatable command sequence.
+Policy:
+- Use a dedicated temporary `HIBOSS_DIR` (do not touch default `~/hiboss`).
+- Verify both providers in both fresh and continuous session modes (see repo AGENTS instructions).
 
 ## Home Directories
 
-Each agent has provider-specific home directories for configuration and state.
+Each agent has a home directory for persona and memory files. Provider CLIs use shared default homes (`~/.claude`, `~/.codex`).
 
 ### Structure
 
 ```
 ~/hiboss/agents/<agent-name>/
 ├── SOUL.md              # Persona placeholder (created empty; not rendered in minimal system prompt)
-├── internal_space/      # Agent's private space, automatically added into additional directories
-│   └── MEMORY.md        # Agent long-term memory (auto-injected into system prompt; truncated; default max 36,000 chars)
-├── codex_home/
-│   ├── .hiboss/
-│   │   └── skills-managed.json  # Managed skills manifest (daemon-owned)
-│   ├── skills/          # Provider-private skills (highest precedence)
-│   ├── config.toml      # Imported from provider source home (default: ~/.codex/config.toml)
-│   ├── auth.json        # Imported from provider source home (default: ~/.codex/auth.json)
-│   └── AGENTS.md        # Generated system instructions
-└── claude_home/
-    ├── .hiboss/
-    │   └── skills-managed.json  # Managed skills manifest (daemon-owned)
-    ├── skills/          # Provider-private skills (highest precedence)
-    ├── settings.json    # Imported from provider source home (default: ~/.claude/settings.json)
-    ├── .claude.json     # Imported from provider source home (default: ~/.claude/.claude.json)
-    └── CLAUDE.md        # Generated system instructions
+└── internal_space/      # Agent's private space, automatically added into additional directories
+    └── MEMORY.md        # Agent long-term memory (auto-injected into system prompt; truncated; default max 36,000 chars)
 ```
-
-Shared skill roots under Hi-Boss data directory:
-
-```
-~/hiboss/skills/
-├── .system/             # Built-in skills (project-managed; refreshed from package assets)
-└── <name>/              # Global skills (user-managed)
-```
-
-Packaged built-in source path:
-
-- `<package-root>/skills/.system/` (published via `package.json#files` including `skills/`)
-- On each new session, Hi-Boss re-seeds `~/hiboss/skills/.system/` from this packaged source.
-- If the packaged source is missing/corrupted, Hi-Boss logs a warning and continues session creation.
-
-Built-in source metadata convention:
-
-- Record upstream metadata in this codebase (not in user runtime state): `docs/spec/skills/builtin-sources.json`.
-- This file tracks `source-repo`, `source-path`, `source-ref`, and `source-commit` so built-ins can be refreshed from upstream deliberately.
-
-Precedence when names conflict:
-
-`provider-private > global > built-in`
 
 ### Setup Functions
 
@@ -140,24 +103,21 @@ Located in `src/agent/home-setup.ts`:
 
 | Function | Purpose |
 |----------|---------|
-| `setupAgentHome(agentName, opts?)` | Creates home directories and imports provider configs (provider-specific) |
-| `getAgentHomePath(agentName, provider)` | Returns provider-specific home path |
+| `setupAgentHome(agentName, hibossDir?)` | Creates home directory with `internal_space/` and `SOUL.md` |
+| `getAgentDir(agentName, hibossDir?)` | Returns agent directory path |
 | `getAgentInternalSpaceDir(agentName)` | Returns `~/hiboss/agents/<name>/internal_space/` |
-| `agentHomeExists(agentName)` | Checks if home directories exist |
+| `agentHomeExists(agentName)` | Checks if home directory exists |
 | `removeAgentHome(agentName)` | Deletes agent home directory |
 
 ## Instruction Generation
 
-System instructions define the agent's behavior and context. Instruction files are regenerated each time a new session is created (see [Session Management](session.md#creation)).
+System instructions define the agent's behavior and context. Instructions are regenerated as a string each time a new session is created and passed inline to the CLI:
+- Claude: via `--append-system-prompt`
+- Codex: via `-c developer_instructions=...`
 
 On each new session, Hi-Boss injects:
 - a truncated snapshot of the agent long-term memory file (`internal_space/MEMORY.md`; default max 36,000 chars)
 It intentionally does not inject additional persona/profile files (the system prompt is designed to be minimal).
-
-### Files
-
-- Claude: `~/hiboss/agents/<name>/claude_home/CLAUDE.md`
-- Codex: `~/hiboss/agents/<name>/codex_home/AGENTS.md`
 
 ### Template System
 
@@ -174,9 +134,7 @@ Located in:
 
 | Function | Purpose |
 |----------|---------|
-| `generateSystemInstructions(ctx)` | Renders template with agent context |
-| `writeInstructionFiles(agentName, instructions)` | Writes to both AGENTS.md and CLAUDE.md |
-| `readInstructionFile(agentName, provider)` | Reads existing instruction file |
+| `generateSystemInstructions(ctx)` | Renders template with agent context; returns inline string |
 
 ## Agent Execution
 
@@ -188,7 +146,7 @@ Located in `src/agent/executor.ts`:
 2. **Lock**: Per-agent queue lock acquired (no concurrent runs for same agent)
 3. **Session**: Get or create session (see [Session Management](session.md))
 4. **Turn Input**: Format pending envelopes into turn input
-5. **Execute**: Run agent SDK session with turn input
+5. **Execute**: Spawn provider CLI with turn input and system instructions
 6. **Auto-Ack**: Mark read envelopes as `done` immediately after they are loaded for a run (at-most-once)
 7. **Audit**: Record run in `agent_runs` table
 8. **Reschedule**: If more pending envelopes exist, schedule another turn via `setImmediate`

@@ -5,7 +5,6 @@ import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../../shared/vali
 import { parseDailyResetAt, parseDurationToMs } from "../../../shared/session-policy.js";
 import {
   DEFAULT_SETUP_AGENT_NAME,
-  DEFAULT_SETUP_AUTO_LEVEL,
   DEFAULT_SETUP_PERMISSION_LEVEL,
   SETUP_MODEL_CHOICES_BY_PROVIDER,
   getDefaultAgentDescription,
@@ -48,36 +47,6 @@ export async function runInteractiveSetup(): Promise<void> {
       { value: "codex", name: "codex" },
     ],
   });
-
-  const PROVIDER_SOURCE_HOME_CUSTOM = "__custom__";
-  const defaultProviderHome = provider === "codex" ? "~/.codex" : "~/.claude";
-  const providerSourceHomeChoice = await select<string>({
-    message: "Choose provider source home (where to import settings/auth from):",
-    choices: [
-      {
-        value: defaultProviderHome,
-        name: `${defaultProviderHome} (recommended)`,
-      },
-      { value: PROVIDER_SOURCE_HOME_CUSTOM, name: "Custom path..." },
-    ],
-  });
-
-  const providerSourceHome =
-    providerSourceHomeChoice === PROVIDER_SOURCE_HOME_CUSTOM
-      ? (
-          await input({
-            message: "Provider source home (absolute path or starting with ~):",
-            validate: (value) => {
-              const trimmed = value.trim();
-              if (!trimmed) return "Provider source home is required";
-              if (!path.isAbsolute(trimmed) && !trimmed.startsWith("~")) {
-                return "Please provide an absolute path or one starting with ~";
-              }
-              return true;
-            },
-          })
-        ).trim()
-      : providerSourceHomeChoice;
 
   // Step 2: Boss name
   const bossName = await input({
@@ -203,19 +172,6 @@ export async function runInteractiveSetup(): Promise<void> {
   });
   const reasoningEffort: SetupConfig["agent"]["reasoningEffort"] =
     reasoningEffortChoice === "default" ? null : reasoningEffortChoice;
-
-  console.log("\n📊 Auto-level controls the agent sandbox:");
-  console.log("   • Medium: Workspace-scoped (can write workspace + additional dirs; runs many commands)");
-  console.log("   • High: Full computer access (can run almost anything)\n");
-
-  const autoLevel = await select<"medium" | "high">({
-    message: "Auto-level:",
-    choices: [
-      { value: "high", name: "High - Full access (recommended)" },
-      { value: "medium", name: "Medium - Workspace-scoped" },
-    ],
-    default: DEFAULT_SETUP_AUTO_LEVEL,
-  });
 
   const permissionLevel = await select<"restricted" | "standard" | "privileged" | "boss">({
     message: "Agent permission level:",
@@ -416,7 +372,6 @@ export async function runInteractiveSetup(): Promise<void> {
 
   const config: SetupConfig = {
     provider,
-    providerSourceHome,
     bossName,
     bossTimezone,
     agent: {
@@ -425,7 +380,6 @@ export async function runInteractiveSetup(): Promise<void> {
       workspace,
       model,
       reasoningEffort,
-      autoLevel,
       permissionLevel,
       sessionPolicy,
       metadata,

@@ -1,7 +1,7 @@
 /**
- * Agent executor for running agent sessions with the unified agent SDK.
+ * Agent executor for running agent sessions with direct CLI invocation.
  */
-import type { RunHandle } from "@unified-agent-sdk/runtime";
+import type { ChildProcess } from "node:child_process";
 import type { Agent } from "./types.js";
 import type { HiBossDatabase } from "../daemon/db/database.js";
 import { getHiBossDir } from "./home-setup.js";
@@ -19,7 +19,7 @@ import { writePersistedAgentSession } from "./persisted-session.js";
 import type { AgentRunTrigger } from "./executor-triggers.js";
 import { getTriggerFields } from "./executor-triggers.js";
 import { countDuePendingEnvelopesForAgent } from "./executor-db.js";
-import { executeUnifiedTurn } from "./executor-turn.js";
+import { executeCliTurn } from "./executor-turn.js";
 import { getOrCreateAgentSession } from "./executor-session.js";
 
 /**
@@ -30,7 +30,7 @@ const MAX_ENVELOPES_PER_TURN = 10;
 type InFlightAgentRun = {
   runRecordId: string;
   abortController: AbortController;
-  runHandle: RunHandle | null;
+  childProcess: ChildProcess | null;
   abortReason?: string;
 };
 
@@ -60,8 +60,6 @@ export class AgentExecutor {
 
   /**
    * True if the daemon currently has a queued or in-flight task for this agent.
-   *
-   * This is a busy-ness signal (used for operator UX); it is not persisted.
    */
   isAgentBusy(agentName: string): boolean {
     return this.agentLocks.has(agentName);
@@ -69,9 +67,6 @@ export class AgentExecutor {
 
   /**
    * Cancel the current in-flight run for an agent (best-effort).
-   *
-   * Note: this does not clear pending envelopes. Callers should clear the inbox
-   * separately (e.g., via an operator abort RPC).
    */
   abortCurrentRun(agentName: string, reason: string): boolean {
     const inFlight = this.inFlightRuns.get(agentName);
@@ -83,13 +78,16 @@ export class AgentExecutor {
 
     inFlight.abortController.abort();
 
-    if (inFlight.runHandle) {
-      inFlight.runHandle.cancel().catch((err) => {
-        logEvent("warn", "agent-run-cancel-failed", {
-          "agent-name": agentName,
-          error: errorMessage(err),
-        });
-      });
+    if (inFlight.childProcess) {
+      try {
+        if (inFlight.childProcess.pid) {
+          process.kill(-inFlight.childProcess.pid, "SIGTERM");
+        } else {
+          inFlight.childProcess.kill("SIGTERM");
+        }
+      } catch {
+        try { inFlight.childProcess.kill("SIGTERM"); } catch { /* best-effort */ }
+      }
     }
 
     return true;
@@ -97,11 +95,6 @@ export class AgentExecutor {
 
   /**
    * Request a session refresh for an agent.
-   *
-   * Safe to call at any time (including during a run). The refresh will be applied
-   * at the next safe point (before the next run, or after the current queue drains).
-   *
-   * Non-blocking: callers should not await this for interactive UX (e.g., Telegram /new).
    */
   requestSessionRefresh(agentName: string, reason: string): void {
     const existing = this.pendingSessionRefresh.get(agentName);
@@ -114,7 +107,6 @@ export class AgentExecutor {
       });
     }
 
-    // Ensure the pending refresh gets applied even if no additional turns run.
     queueAgentTask({
       agentLocks: this.agentLocks,
       agentName,
@@ -150,9 +142,6 @@ export class AgentExecutor {
 
   /**
    * Check and run agent if pending envelopes exist.
-   *
-   * Non-blocking with queue-safe atomic locks per agent.
-   * If an agent is already running, waits for completion then runs.
    */
   async checkAndRun(agent: Agent, db: HiBossDatabase, trigger?: AgentRunTrigger): Promise<void> {
     const agentName = agent.name;
@@ -222,7 +211,7 @@ export class AgentExecutor {
     const inFlight: InFlightAgentRun = {
       runRecordId: run.id,
       abortController: new AbortController(),
-      runHandle: null,
+      childProcess: null,
     };
     this.inFlightRuns.set(agent.name, inFlight);
 
@@ -263,11 +252,13 @@ export class AgentExecutor {
       });
       runStartedAtMs = Date.now();
 
-      // Execute the turn
-      const turn = await executeUnifiedTurn(session, turnInput, {
+      // Execute the turn via CLI
+      const turn = await executeCliTurn(session, turnInput, {
+        hibossDir: this.hibossDir,
+        agentName: agent.name,
         signal: inFlight.abortController.signal,
-        onRunHandle: (handle) => {
-          inFlight.runHandle = handle;
+        onChildProcess: (proc) => {
+          inFlight.childProcess = proc;
         },
       });
 
@@ -288,24 +279,34 @@ export class AgentExecutor {
       const response = turn.finalText;
       session.lastRunCompletedAtMs = Date.now();
 
+      // Update session ID from CLI output (for resume on next turn).
+      if (turn.sessionId) {
+        session.sessionId = turn.sessionId;
+      }
+
       // Persist session handle for best-effort resume after daemon restart.
-      try {
-        const handle = await session.session.snapshot();
-        if (handle.sessionId) {
+      if (session.sessionId) {
+        try {
           writePersistedAgentSession(db, agent.name, {
             version: 1,
             provider: session.provider,
-            handle,
+            handle: {
+              provider: session.provider,
+              sessionId: session.sessionId,
+              ...(session.provider === "codex" && session.codexCumulativeUsageTotals
+                ? { metadata: { codexCumulativeUsage: session.codexCumulativeUsageTotals } }
+                : {}),
+            },
             createdAtMs: session.createdAtMs,
             lastRunCompletedAtMs: session.lastRunCompletedAtMs,
             updatedAtMs: Date.now(),
           });
+        } catch (err) {
+          logEvent("warn", "agent-session-snapshot-failed", {
+            "agent-name": agent.name,
+            error: errorMessage(err),
+          });
         }
-      } catch (err) {
-        logEvent("warn", "agent-session-snapshot-failed", {
-          "agent-name": agent.name,
-          error: errorMessage(err),
-        });
       }
 
       // Complete the run record
@@ -338,15 +339,15 @@ export class AgentExecutor {
       }
       return envelopeIds.length;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      db.failAgentRun(run.id, errorMessage);
+      const errMsg = error instanceof Error ? error.message : String(error);
+      db.failAgentRun(run.id, errMsg);
       logEvent("info", "agent-run-complete", {
         "agent-name": agent.name,
         "agent-run-id": run.id,
         state: "failed",
         "duration-ms": runStartedAtMs ? Date.now() - runStartedAtMs : 0,
         "context-length": null,
-        error: errorMessage,
+        error: errMsg,
       });
       throw error;
     } finally {
@@ -373,17 +374,8 @@ export class AgentExecutor {
       applyPendingSessionRefresh: (name) => this.applyPendingSessionRefresh(name),
       refreshSession: (name, reason) => this.refreshSession(name, reason),
       getSessionPolicy: (a) => this.getSessionPolicy(a),
-      mapAccessLevel: (level) => this.mapAccessLevel(level),
       trigger,
     });
-  }
-
-  /**
-   * Map auto level to SDK access level.
-   */
-  private mapAccessLevel(autoLevel: "medium" | "high"): "medium" | "high" {
-    // Direct mapping - SDK uses same values
-    return autoLevel;
   }
 
   /**
@@ -392,7 +384,6 @@ export class AgentExecutor {
    * Clears the existing session so a new one will be created on next run.
    */
   async refreshSession(agentName: string, reason?: string): Promise<void> {
-    // If a refresh is requested (or just happened), clear any pending flags to avoid duplicate refreshes.
     this.pendingSessionRefresh.delete(agentName);
 
     if (this.db) {
@@ -407,13 +398,8 @@ export class AgentExecutor {
       }
     }
 
-    const session = this.sessions.get(agentName);
-    if (session) {
-      // Dispose session and close runtime
-      await session.session.dispose();
-      await session.runtime.close();
-      this.sessions.delete(agentName);
-    }
+    // For CLI-based sessions, there's no runtime/session to dispose — just clear the in-memory cache.
+    this.sessions.delete(agentName);
 
     logEvent("info", "agent-session-remove", {
       "agent-name": agentName,
@@ -426,12 +412,19 @@ export class AgentExecutor {
    * Close all sessions on shutdown.
    */
   async closeAll(): Promise<void> {
-    for (const [agentName, session] of this.sessions) {
-      await session.session.dispose();
-      await session.runtime.close();
+    // Kill any in-flight CLI processes
+    for (const [agentName, inFlight] of this.inFlightRuns) {
+      if (inFlight.childProcess) {
+        try {
+          inFlight.childProcess.kill("SIGTERM");
+        } catch {
+          // best-effort
+        }
+      }
     }
     this.sessions.clear();
     this.agentLocks.clear();
+    this.inFlightRuns.clear();
   }
 }
 

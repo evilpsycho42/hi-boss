@@ -50,7 +50,7 @@ Rendering (default):
 Notes:
 - Envelopes are marked `done` automatically by the daemon after successful delivery (channels) or immediately after being read for an agent run (agents, at-most-once).
 - `hiboss envelope list` only lists envelopes where the authenticated agent is either the sender (`from: agent:<name>`) or the recipient (`to: agent:<name>`).
-- Listing with `--from <address> --status pending` is treated as a work-queue read: the daemon immediately acknowledges the returned envelopes (marks them `done`, at-most-once) so they won’t be reprocessed.
+- Listing with `--from <address> --status pending` is treated as a work-queue read: the daemon returns **due** pending envelopes and immediately acknowledges what it returns (marks them `done`, at-most-once) so they won’t be reprocessed.
 - Envelope instructions do not include a `status:` field; agents should rely on the `--status` flag they requested.
 - Boss tokens cannot list envelopes (use an agent token).
 
