@@ -6,6 +6,16 @@ This project uses date-based npm versions (see `AGENTS.md`).
 
 ## [Unreleased]
 
+## [2026.2.10] - 2026-02-10
+
+### Changed
+- Provider integration now runs by spawning provider CLIs directly (`claude`, `codex exec`) instead of the Unified Agent SDK runtime.
+- Removed JSON-RPC method aliases `message.send` / `message.list`; use `envelope.send` / `envelope.list`.
+
+### Docs
+- Added a spec doc describing preserved upgrade-compatibility behaviors (`docs/spec/compatibility.md`).
+- Regenerated CLI and prompt examples.
+
 ## [2026.2.10-rc.1] - 2026-02-10
 
 ### Changed
