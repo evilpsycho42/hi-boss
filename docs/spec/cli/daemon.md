@@ -45,7 +45,7 @@ Shows daemon status as parseable keys:
 
 Meaning of `data-dir`:
 - The daemon’s root directory (default `~/hiboss/`, override via `HIBOSS_DIR`).
-- Internal daemon files are stored under `{{data-dir}}/.daemon/` (DB/socket/logs/models/memory).
+- Internal daemon files are stored under `{{data-dir}}/.daemon/` (DB/socket/PID/logs).
 - User-facing files are stored under `{{data-dir}}/` (agents, media, BOSS.md).
 
 Default permission:

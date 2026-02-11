@@ -154,7 +154,7 @@ export function readAgentInternalDailyMemorySnapshot(params: {
           DEFAULT_MEMORY_SHORTTERM_PER_DAY_MAX_CHARS,
           `<<truncated due to internal-space-daily-per-day-max-chars=${DEFAULT_MEMORY_SHORTTERM_PER_DAY_MAX_CHARS}>>`
         );
-        blocks.push(`--- ${filename.replace(/\\.md$/, "")} ---\n${truncated}`);
+        blocks.push(`--- ${filename.replace(/\.md$/, "")} ---\n${truncated}`);
       } catch {
         // Best-effort: skip unreadable daily files.
       }
