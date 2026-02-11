@@ -1,7 +1,4 @@
-## Tools
-
-{% set hasTelegram = false %}
-{% for b in bindings %}{% if b.adapterType == "telegram" %}{% set hasTelegram = true %}{% endif %}{% endfor %}
+## Tools{% set hasTelegram = false %}{% for b in bindings %}{% if b.adapterType == "telegram" %}{% set hasTelegram = true %}{% endif %}{% endfor %}
 
 ### Hi-Boss CLI (required)
 
@@ -28,7 +25,18 @@ EOF
 {% if hasTelegram %}- `channel:telegram:<chatId>` (reply using the incoming `from:` address)
 {% endif %}
 
+**Reply-to (thread context):**
+- Use `--reply-to <envelope-id>` to link your envelope to a prior envelope (task/subtask context).
+- Agent↔agent and background tasks: when replying to another agent or assigning work to `agent:background`, you MUST include `--reply-to <envelope-id>` (the envelope you are responding to / delegating from) so the envelope thread is traceable.
+- Use `hiboss envelope thread --envelope-id <id>` when you need the full context chain.
+
 **Attachments / scheduling:** use `--attachment` and `--deliver-at` (see `hiboss envelope send --help`).
+
+**Background jobs (`agent:background`):**
+- Use `--to agent:background` for a one-shot subtask that returns a final result only.
+- The daemon runs it without Hi-Boss tools/system prompt, so include all required context in your task text.
+- You will receive a feedback envelope back to you from `agent:background`.
+- Treat feedback envelopes `from: agent:background` as results; do not send an acknowledgement reply. If you need follow-up work, send a new `--to agent:background` envelope with full context (it has no memory).
 
 {% if hasTelegram %}
 **Formatting (Telegram):**
@@ -37,11 +45,11 @@ EOF
 - Use `--parse-mode markdownv2` only if you can escape special characters correctly
 
 **Reply-to (Telegram quoting):**
-- Most users reply without quoting; do **not** add `--reply-to` by default
-- Use `--reply-to <channel-message-id>` only when it prevents confusion (busy groups, multiple questions)
+- For Telegram channel destinations, `--reply-to` also quotes/replies to the referenced channel message when possible.
+- Human chats: most users reply without quoting; do **not** add `--reply-to` by default unless it prevents confusion (busy groups, multiple questions).
 
 **Reactions (Telegram emoji):**
-- Optional. Use `hiboss reaction set ...` sparingly for agreement/appreciation (see `hiboss reaction set --help`).
+- Optional. Use `hiboss reaction set ...` sparingly for agreement/appreciation (see `hiboss reaction set --help`). Prefer targeting by `--envelope-id`.
 {% endif %}
 
 **Listing messages (when needed):**

@@ -44,7 +44,7 @@ Incoming:
 - Reply previews: `in-reply-to-text` is truncated at 1200 chars and appends `\n\n[...truncated...]\n`. (`src/adapters/telegram/incoming.ts`, `src/adapters/telegram/shared.ts`)
 
 Outgoing:
-- Long text: split at 4096 chars; `--reply-to` (if set) applies only to the first chunk. (`src/adapters/telegram/shared.ts`)
+- Long text: split at 4096 chars; `--reply-to` (if set) applies only to the first chunk. `--reply-to` is provided as an **envelope id** and resolved internally to a Telegram `message_id` for quoting. (`src/adapters/telegram/shared.ts`, `src/daemon/router/message-router.ts`)
 - Captions: limited to 1024 chars. If attachments are present and text exceeds the caption limit, Hi-Boss sends the text as a separate message and sends attachments without a caption. (`src/adapters/telegram/shared.ts`, `src/adapters/telegram/outgoing.ts`)
 - Albums: when sending 2+ compatible attachments, Hi-Boss prefers `sendMediaGroup` so Telegram renders an album. (`src/adapters/telegram/outgoing.ts`)
 - Uploaded filenames: when uploading local files, Hi-Boss sets the Telegram upload filename (prefers `attachment.filename`, else local basename). (`src/adapters/telegram/outgoing.ts`)
@@ -52,8 +52,6 @@ Outgoing:
 ## Address format
 
 `channel:telegram:<chat-id>` where `<chat-id>` is the Telegram numeric chat id (negative for groups).
-}
-```
 
 ## MessageContent (Outgoing)
 

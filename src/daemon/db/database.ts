@@ -7,6 +7,7 @@ import type { Envelope, CreateEnvelopeInput, EnvelopeStatus } from "../../envelo
 import type { CronSchedule, CreateCronScheduleInput } from "../../cron/types.js";
 import type { SessionPolicyConfig } from "../../shared/session-policy.js";
 import {
+  BACKGROUND_AGENT_NAME,
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
   getDefaultAgentDescription,
@@ -278,6 +279,9 @@ export class HiBossDatabase {
    */
   registerAgent(input: RegisterAgentInput): { agent: Agent; token: string } {
     assertValidAgentName(input.name);
+    if (input.name.trim().toLowerCase() === BACKGROUND_AGENT_NAME) {
+      throw new Error(`Reserved agent name: ${BACKGROUND_AGENT_NAME}`);
+    }
 
     const existing = this.getAgentByNameCaseInsensitive(input.name);
     if (existing) {
@@ -632,6 +636,24 @@ export class HiBossDatabase {
   }
 
   /**
+   * Find envelopes by compact UUID prefix (lowercase hex; hyphens ignored).
+   *
+   * Used for user/agent-facing short-id inputs (default 8 chars).
+   */
+  findEnvelopesByIdPrefix(idPrefix: string, limit = 50): Envelope[] {
+    const prefix = idPrefix.trim().toLowerCase();
+    const n = Number.isFinite(limit) ? Math.max(1, Math.min(500, Math.trunc(limit))) : 50;
+    const stmt = this.db.prepare(`
+      SELECT * FROM envelopes
+      WHERE replace(lower(id), '-', '') LIKE ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `);
+    const rows = stmt.all(`${prefix}%`, n) as EnvelopeRow[];
+    return rows.map((row) => this.rowToEnvelope(row));
+  }
+
+  /**
    * List envelopes for an address (inbox or outbox).
    */
   listEnvelopes(options: {
@@ -893,6 +915,9 @@ export class HiBossDatabase {
     }
     if (metadata && typeof metadata.replyToMessageId === "string") {
       delete metadata.replyToMessageId;
+    }
+    if (metadata && typeof metadata.replyToEnvelopeId === "string") {
+      delete metadata.replyToEnvelopeId;
     }
     const attachments = row.content_attachments ? JSON.parse(row.content_attachments) : undefined;
 

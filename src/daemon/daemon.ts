@@ -8,6 +8,7 @@ import { IpcServer } from "./ipc/server.js";
 import { MessageRouter } from "./router/message-router.js";
 import { ChannelBridge } from "./bridges/channel-bridge.js";
 import { AgentExecutor, createAgentExecutor } from "../agent/executor.js";
+import { type BackgroundExecutor, createBackgroundExecutor } from "../agent/background-executor.js";
 import type { Agent } from "../agent/types.js";
 import { EnvelopeScheduler } from "./scheduler/envelope-scheduler.js";
 import { CronScheduler } from "./scheduler/cron-scheduler.js";
@@ -16,7 +17,7 @@ import type { RpcMethodRegistry } from "./ipc/types.js";
 import { RPC_ERRORS } from "./ipc/types.js";
 import type { ChatAdapter } from "../adapters/types.js";
 import { TelegramAdapter } from "../adapters/telegram.adapter.js";
-import { DEFAULT_AGENT_PERMISSION_LEVEL } from "../shared/defaults.js";
+import { BACKGROUND_AGENT_NAME, DEFAULT_AGENT_PERMISSION_LEVEL } from "../shared/defaults.js";
 import { getHiBossPaths } from "../shared/hiboss-paths.js";
 import {
   DEFAULT_PERMISSION_POLICY,
@@ -95,6 +96,7 @@ export class Daemon {
   private router: MessageRouter;
   private bridge: ChannelBridge;
   private executor: AgentExecutor;
+  private backgroundExecutor: BackgroundExecutor;
   private scheduler: EnvelopeScheduler;
   private cronScheduler: CronScheduler | null = null;
   private memoryService: MemoryService | null = null;
@@ -122,6 +124,7 @@ export class Daemon {
       hibossDir: config.dataDir,
       onEnvelopesDone: (envelopeIds) => this.cronScheduler?.onEnvelopesDone(envelopeIds),
     });
+    this.backgroundExecutor = createBackgroundExecutor({ db: this.db, router: this.router });
     this.scheduler = new EnvelopeScheduler(this.db, this.router, this.executor);
     this.cronScheduler = new CronScheduler(this.db, this.scheduler);
 
@@ -311,6 +314,7 @@ export class Daemon {
 
       // Register agent handlers for auto-execution
       await this.registerAgentExecutionHandlers();
+      this.registerBackgroundAgentHandler();
 
       // Start all loaded adapters
       for (const adapter of this.adapters.values()) {
@@ -379,6 +383,12 @@ export class Daemon {
           error: errorMessage(err),
         });
       });
+    });
+  }
+
+  private registerBackgroundAgentHandler(): void {
+    this.router.registerAgentHandler(BACKGROUND_AGENT_NAME, async (envelope) => {
+      this.backgroundExecutor.enqueue(envelope);
     });
   }
 

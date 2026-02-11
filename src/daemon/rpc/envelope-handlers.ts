@@ -6,12 +6,17 @@ import type {
   RpcMethodRegistry,
   EnvelopeSendParams,
   EnvelopeListParams,
+  EnvelopeThreadParams,
+  EnvelopeThreadResult,
 } from "../ipc/types.js";
 import { RPC_ERRORS } from "../ipc/types.js";
 import type { DaemonContext } from "./context.js";
 import { requireToken, rpcError } from "./context.js";
 import { formatAgentAddress, parseAddress } from "../../adapters/types.js";
 import { parseDateTimeInputToUnixMsInTimeZone } from "../../shared/time.js";
+import { BACKGROUND_AGENT_NAME } from "../../shared/defaults.js";
+import { resolveEnvelopeIdInput } from "./resolve-envelope-id.js";
+import type { Envelope } from "../../envelope/types.js";
 
 /**
  * Create envelope RPC handlers.
@@ -58,6 +63,10 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
     const to = (() => {
       if (destination.type !== "agent") return toInput;
 
+      if (destination.agentName.toLowerCase() === BACKGROUND_AGENT_NAME) {
+        return formatAgentAddress(BACKGROUND_AGENT_NAME);
+      }
+
       const destAgent = ctx.db.getAgentByNameCaseInsensitive(destination.agentName);
       if (!destAgent) {
         rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
@@ -103,17 +112,11 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
       metadata.parseMode = mode;
     }
 
-    if (p.replyToMessageId !== undefined) {
-      if (typeof p.replyToMessageId !== "string" || !p.replyToMessageId.trim()) {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid reply-to-channel-message-id");
+    if (p.replyToEnvelopeId !== undefined) {
+      if (typeof p.replyToEnvelopeId !== "string" || !p.replyToEnvelopeId.trim()) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid reply-to-envelope-id");
       }
-      if (destination.type !== "channel") {
-        rpcError(
-          RPC_ERRORS.INVALID_PARAMS,
-          "reply-to-channel-message-id is only supported for channel destinations"
-        );
-      }
-      metadata.replyToMessageId = p.replyToMessageId.trim();
+      metadata.replyToEnvelopeId = resolveEnvelopeIdInput(ctx.db, p.replyToEnvelopeId.trim());
     }
 
     let deliverAt: number | undefined;
@@ -237,9 +240,68 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
     return { envelopes };
   };
 
+  const createEnvelopeThread = (operation: string) => async (params: Record<string, unknown>) => {
+    const p = params as unknown as EnvelopeThreadParams;
+    const token = requireToken(p.token);
+    const principal = ctx.resolvePrincipal(token);
+    ctx.assertOperationAllowed(operation, principal);
+
+    if (principal.kind !== "agent") {
+      rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
+    }
+
+    if (typeof p.envelopeId !== "string" || !p.envelopeId.trim()) {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid envelope-id");
+    }
+
+    ctx.db.updateAgentLastSeen(principal.agent.name);
+    const resolvedId = resolveEnvelopeIdInput(ctx.db, p.envelopeId.trim());
+
+    const maxDepth = 20;
+    const chain: Envelope[] = [];
+    const seen = new Set<string>();
+
+    let currentId: string | null = resolvedId;
+    let safety = 0;
+    while (currentId && safety < 5000) {
+      if (seen.has(currentId)) break;
+      seen.add(currentId);
+
+      const env = ctx.db.getEnvelopeById(currentId);
+      if (!env) break;
+      chain.push(env);
+
+      const md = env.metadata;
+      const parentRaw =
+        md && typeof md === "object" ? (md as Record<string, unknown>).replyToEnvelopeId : undefined;
+      const parentId = typeof parentRaw === "string" ? parentRaw.trim() : "";
+      if (!parentId) break;
+      currentId = parentId;
+      safety++;
+    }
+
+    const totalCount = chain.length;
+    const truncated = totalCount > maxDepth;
+    const envelopes = truncated
+      ? [...chain.slice(0, maxDepth - 1), chain[totalCount - 1]!]
+      : chain;
+    const truncatedIntermediateCount = truncated ? totalCount - maxDepth : 0;
+
+    const result: EnvelopeThreadResult = {
+      maxDepth,
+      totalCount,
+      returnedCount: envelopes.length,
+      truncated,
+      truncatedIntermediateCount,
+      envelopes,
+    };
+    return result;
+  };
+
   return {
     // Envelope methods (canonical)
     "envelope.send": createEnvelopeSend("envelope.send"),
     "envelope.list": createEnvelopeList("envelope.list"),
+    "envelope.thread": createEnvelopeThread("envelope.thread"),
   };
 }

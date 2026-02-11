@@ -10,6 +10,7 @@ It is focused on **current Hi-Boss behavior**. Manual experiments and CLI gotcha
 
 Key implementation files:
 - `src/agent/executor-turn.ts` (process spawning + args)
+- `src/agent/background-turn.ts` (background process spawning + final text extraction)
 - `src/agent/provider-cli-parsers.ts` (JSONL parsing)
 - `src/agent/session-resume.ts` / `src/agent/persisted-session.ts` (resume handles)
 
@@ -49,6 +50,11 @@ Codex (per turn):
 - Fresh: `codex exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox --add-dir ... --add-dir ... -c developer_instructions=... [-c model_reasoning_effort=\"...\"] [-m <model>] <prompt>`
 - Resume: `codex exec resume --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox [-c ...] [-m <model>] <thread-id> <prompt>`
   - Note: `codex exec resume` does not support `--add-dir`.
+
+Background one-shot (`to: agent:background`):
+- Claude: `claude -p --output-format text --permission-mode bypassPermissions [-m <model>]`
+- Codex: `codex exec --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -o <tmp-file> [-c model_reasoning_effort=\"...\"] [-m <model>] <prompt>`
+- Final feedback text is taken from provider-native stable outputs (Claude text stdout, Codex `-o` file), not JSONL event parsing.
 
 ## Abort / cancellation behavior
 

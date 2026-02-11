@@ -3,7 +3,7 @@
 This document defines the field mappings between code (TypeScript), SQLite, and stable CLI output keys for core Hi-Boss entities.
 
 For command flags and examples, see `docs/spec/cli.md` and the topic files under `docs/spec/cli/`.
-For envelope instruction examples, see `docs/spec/examples/envelope-instructions.md`.
+For generated prompt/envelope instruction examples, run `npm run examples:prompts` (outputs under `examples/prompts/` and `prompts/examples/`).
 
 Naming conventions:
 - CLI flags: kebab-case, lowercase
@@ -32,6 +32,9 @@ Derived (not stored):
 |------|--------|---------|
 | Agent | `agent:<name>` | `agent:nex` |
 | Channel | `channel:<adapter>:<chat-id>` | `channel:telegram:123456` |
+
+Reserved agent addresses:
+- `agent:background` — one-shot daemon-executed background job (see `docs/spec/components/agent.md`).
 
 ---
 
@@ -71,15 +74,15 @@ Command flags:
 `hiboss envelope list` renders an agent-facing “envelope instruction” (see `src/cli/instructions/format-envelope.ts` and `prompts/envelope/instruction.md`).
 
 **Header keys**
+- `envelope-id:` (always; short id derived from the internal envelope UUID)
 - `from:` (always; raw address)
+- `to:` (always; raw destination address)
 - `sender:` (only for channel messages; `Author [boss] in group "<name>"` or `Author [boss] in private chat`)
-- `channel-message-id:` (only for channel messages; platform message id. For Telegram, rendered in compact base36 (no prefix); accepted by `--reply-to` and `hiboss reaction set --channel-message-id` using the displayed value. Raw decimal can be passed as `dec:<id>`.)
 - `created-at:` (always; boss timezone offset)
 - `deliver-at:` (optional; shown when present, in boss timezone offset)
 - `cron-id:` (optional; shown when present; short id derived from the internal cron schedule UUID)
 
 **Reply/quote keys** (only when the incoming channel message is a reply)
-- `in-reply-to-channel-message-id:` (Telegram uses the same compact base36 (no prefix) form)
 - `in-reply-to-from-name:` (optional)
 - `in-reply-to-text:` (multiline)
   - Note: adapters may truncate `in-reply-to-text` for safety/size (see adapter specs).
@@ -96,7 +99,9 @@ Command flags:
 `hiboss envelope send` prints:
 - `id: <envelope-id>` (short id; derived from the internal envelope UUID)
 
-Envelope instructions printed by `hiboss envelope list` do **not** include the internal envelope id.
+Notes:
+- Channel platform message ids (e.g., Telegram `message_id`) are stored internally in `envelope.metadata.channelMessageId` for adapter delivery, but are intentionally **not rendered** in agent prompts/CLI envelope instructions.
+- Agents should use `envelope-id:` + `hiboss envelope send --reply-to <envelope-id>` for quoting (channels) and threading (agent↔agent).
 
 ### CLI Output (Cron Schedules)
 

@@ -21,6 +21,7 @@ Agent names must match `^[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*$`:
 - alphanumeric characters
 - hyphens allowed (not at start/end; not consecutive)
 - uniqueness is checked case-insensitively
+- reserved name: `background` (used for `agent:background`; not user-registrable)
 
 ### Token
 
@@ -169,9 +170,9 @@ pending-envelopes: 2
 
 ---
 
+envelope-id: 4b7c2d1a
 from: channel:telegram:12345
 sender: Alice (@alice) in group "hiboss-test"
-channel-message-id: zik0zj
 created-at: 2026-01-28T10:25:00+08:00
 
 Hello, can you help me?
@@ -187,6 +188,37 @@ Note: each pending envelope is rendered one-by-one (no batching).
 Hi-Boss marks envelopes as `done` immediately after they are read for a run.
 
 This is **at-most-once**: if a run fails, already-read envelopes stay `done` and will not be retried.
+
+---
+
+## Background Agent (one-shot, daemon-executed)
+
+Hi-Boss supports a reserved one-shot destination:
+
+- `to: agent:background`
+
+This is used for lightweight “fire-and-forget” subtasks without granting the sub-agent access to the Hi-Boss CLI or system prompt.
+
+Behavior (canonical):
+- **Execution**: the daemon spawns a single provider CLI process (Claude Code / Codex CLI) with the envelope text + attachment list as the prompt.
+- **Result extraction**: background jobs capture final assistant text via provider-native stable outputs:
+  - Claude: `--output-format text` (stdout)
+  - Codex: `-o/--output-last-message <file>` (read by daemon)
+- **Concurrency**: background jobs are executed with a default max concurrency of `4` (implementation clamps to `1..32`).
+- **No Hi-Boss system instructions**: background jobs do not receive the Hi-Boss role/system prompt injection.
+- **No Hi-Boss token**: the daemon does not set `HIBOSS_TOKEN` in the background process environment.
+- **Runtime permissions**: runs in the same non-interactive full-access mode as normal agent turns:
+  - Codex: `--dangerously-bypass-approvals-and-sandbox`
+  - Claude: `--permission-mode bypassPermissions`
+- **Config inheritance**: provider/model/reasoning-effort/workspace default to the **sender agent’s** settings.
+- **Feedback (best-effort)**: for valid sender agents, the daemon sends a feedback envelope back to the sender:
+  - `from: agent:background`
+  - `to: agent:<sender>`
+  - `metadata.replyToEnvelopeId: <background-request-envelope-uuid>`
+- **Failure feedback text**: provider/spawn/runtime failures are returned as `Background job failed: <error>` in the feedback envelope body.
+- **No-feedback edge cases**: if `from` is not an agent address or the sender agent cannot be resolved, the daemon logs and drops the background request without sending feedback.
+- **No conversation**: background jobs are one-shot and have no memory. Treat the feedback envelope as a result; do not send an acknowledgement reply. For follow-up work, send a new envelope to `agent:background` with full context (and a `replyToEnvelopeId` link).
+- **At-most-once**: the background request envelope is ACKed immediately (marked `done`) when accepted for execution.
 
 ## Agent Bindings
 

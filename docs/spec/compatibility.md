@@ -6,7 +6,7 @@ Hi-Boss preserves a small set of legacy behaviors so an upgraded install can sti
 
 ### Filesystem layout
 
-- Legacy root `~/.hiboss/` (older versions) may still exist on upgraded machines. The current layout is `~/hiboss/` with internal state under `~/hiboss/.daemon/` (see `docs/guide/troubleshooting.md` for the operator migration steps).
+- Legacy root `~/.hiboss/` (older versions) may still exist on upgraded machines. The current layout is `~/hiboss/` with internal state under `~/hiboss/.daemon/`. For operator migration, move state from `~/.hiboss/` to `~/hiboss/` before starting the daemon.
 
 ### Internal-space memory filename
 

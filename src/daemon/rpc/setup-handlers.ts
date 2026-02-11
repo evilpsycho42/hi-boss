@@ -13,6 +13,7 @@ import { isValidAgentName, AGENT_NAME_ERROR_MESSAGE } from "../../shared/validat
 import { parseDailyResetAt, parseDurationToMs } from "../../shared/session-policy.js";
 import { setupAgentHome } from "../../agent/home-setup.js";
 import { isValidIanaTimeZone, getDaemonIanaTimeZone } from "../../shared/timezone.js";
+import { BACKGROUND_AGENT_NAME } from "../../shared/defaults.js";
 
 function ensureBossProfileFile(hibossDir: string): void {
   try {
@@ -66,6 +67,9 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
 
       if (typeof p.agent.name !== "string" || !isValidAgentName(p.agent.name)) {
         rpcError(RPC_ERRORS.INVALID_PARAMS, AGENT_NAME_ERROR_MESSAGE);
+      }
+      if (p.agent.name.trim().toLowerCase() === BACKGROUND_AGENT_NAME) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, `Reserved agent name: ${BACKGROUND_AGENT_NAME}`);
       }
 
       if (p.agent.reasoningEffort !== undefined) {

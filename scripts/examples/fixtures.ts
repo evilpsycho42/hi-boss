@@ -228,7 +228,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
 
   // Three pending group messages in the same Telegram group (used by envelope list + turn prompt)
   insertEnvelope.run(
-    "env_group_001",
+    "a0b1c2d3-0000-4000-8000-000000000001",
     "channel:telegram:-100123456789",
     "agent:nex",
     1,
@@ -245,7 +245,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     })
   );
   insertEnvelope.run(
-    "env_group_002",
+    "b1c2d3e4-0000-4000-8000-000000000002",
     "channel:telegram:-100123456789",
     "agent:nex",
     0,
@@ -265,7 +265,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     })
   );
   insertEnvelope.run(
-    "env_group_003",
+    "c2d3e4f5-0000-4000-8000-000000000003",
     "channel:telegram:-100123456789",
     "agent:nex",
     0,
@@ -284,7 +284,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
 
   // One pending group message from a different Telegram group (used by turn prompt)
   insertEnvelope.run(
-    "env_group_other_001",
+    "d3e4f5a6-0000-4000-8000-000000000004",
     "channel:telegram:-100987654321",
     "agent:nex",
     0,
@@ -303,7 +303,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
 
   // Direct boss message (used by envelope prompt examples)
   insertEnvelope.run(
-    "env_direct_001",
+    "e4f5a6b7-0000-4000-8000-000000000005",
     "channel:telegram:789012",
     "agent:nex",
     1,
@@ -326,7 +326,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
 
   // Agent-to-agent message (used by envelope prompt examples + turn prompt)
   insertEnvelope.run(
-    "env_agent_001",
+    "f5a6b7c8-0000-4000-8000-000000000006",
     "agent:scheduler",
     "agent:nex",
     0,
@@ -357,7 +357,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
 
   // Delayed self-message (not cron) (used by turn prompt)
   insertEnvelope.run(
-    "env_self_delayed_001",
+    "0a1b2c3d-0000-4000-8000-000000000007",
     "agent:nex",
     "agent:nex",
     0,
@@ -367,6 +367,52 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     "pending",
     Date.parse("2026-01-29T09:40:00.000Z"),
     JSON.stringify({ parseMode: "plain" })
+  );
+
+  // Envelope thread example (done; UUID ids so short ids are valid hex)
+  const THREAD_ROOT_ENV = "4b7c2d1a-0000-4000-8000-000000000001";
+  const THREAD_ASSIGN_ENV = "1a2b3c4d-0000-4000-8000-000000000002";
+  const THREAD_FEEDBACK_ENV = "9d0a61fe-0000-4000-8000-000000000003";
+  insertEnvelope.run(
+    THREAD_ROOT_ENV,
+    "channel:telegram:789012",
+    "agent:nex",
+    1,
+    "Please summarize the attached notes.",
+    null,
+    null,
+    "done",
+    Date.parse("2026-01-29T09:00:00.000Z"),
+    JSON.stringify({
+      platform: "telegram",
+      channelMessageId: "4001",
+      author: { id: "u-123", username: "kky1024", displayName: "Kevin" },
+      chat: { id: "789012" },
+    })
+  );
+  insertEnvelope.run(
+    THREAD_ASSIGN_ENV,
+    "agent:nex",
+    "agent:background",
+    0,
+    "Summarize the notes in 5 bullets. Return final result only.",
+    null,
+    null,
+    "done",
+    Date.parse("2026-01-29T09:02:00.000Z"),
+    JSON.stringify({ replyToEnvelopeId: THREAD_ROOT_ENV })
+  );
+  insertEnvelope.run(
+    THREAD_FEEDBACK_ENV,
+    "agent:background",
+    "agent:nex",
+    0,
+    "- Key decisions: ...\n- Risks: ...\n- Owners: ...\n- Next steps: ...\n- Open questions: ...",
+    null,
+    null,
+    "done",
+    Date.parse("2026-01-29T09:05:00.000Z"),
+    JSON.stringify({ replyToEnvelopeId: THREAD_ASSIGN_ENV })
   );
 
   const insertCron = db.prepare(

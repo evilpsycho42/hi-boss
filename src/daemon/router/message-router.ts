@@ -7,6 +7,7 @@ import { formatUnixMsAsTimeZoneOffset, isDueUnixMs } from "../../shared/time.js"
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 import { RPC_ERRORS } from "../ipc/types.js";
 import type { OutgoingParseMode } from "../../adapters/types.js";
+import { formatTelegramMessageIdCompact } from "../../shared/telegram-message-id.js";
 
 export type EnvelopeHandler = (envelope: Envelope) => void | Promise<void>;
 
@@ -231,7 +232,7 @@ export class MessageRouter {
     }
 
     const parseMode = this.getOutgoingParseMode(envelope);
-    const replyToMessageId = this.getOutgoingReplyToMessageId(envelope);
+    const replyToMessageId = this.getOutgoingReplyToMessageId(envelope, adapterType, chatId);
 
     try {
       await adapter.sendMessage(chatId, {
@@ -308,12 +309,39 @@ export class MessageRouter {
     return undefined;
   }
 
-  private getOutgoingReplyToMessageId(envelope: Envelope): string | undefined {
+  private getOutgoingReplyToMessageId(envelope: Envelope, adapterType: string, chatId: string): string | undefined {
     const md = envelope.metadata;
     if (!md || typeof md !== "object") return undefined;
-    const v = (md as Record<string, unknown>).replyToMessageId;
-    if (typeof v !== "string" || !v.trim()) return undefined;
-    return v.trim();
+
+    // Legacy: direct platform message id stored on the outgoing envelope.
+    const legacy = (md as Record<string, unknown>).replyToMessageId;
+    if (typeof legacy === "string" && legacy.trim()) {
+      return legacy.trim();
+    }
+
+    const replyToEnvelopeId = (md as Record<string, unknown>).replyToEnvelopeId;
+    if (typeof replyToEnvelopeId !== "string" || !replyToEnvelopeId.trim()) return undefined;
+    const parent = this.db.getEnvelopeById(replyToEnvelopeId.trim());
+    if (!parent?.metadata || typeof parent.metadata !== "object") return undefined;
+
+    // Best-effort: only apply quoting when the referenced envelope is a channel message in the same destination chat.
+    try {
+      const parentFrom = parseAddress(parent.from);
+      if (parentFrom.type !== "channel") return undefined;
+      if (parentFrom.adapter !== adapterType) return undefined;
+      if (parentFrom.chatId !== chatId) return undefined;
+    } catch {
+      return undefined;
+    }
+
+    const channelMessageId = (parent.metadata as Record<string, unknown>).channelMessageId;
+    if (typeof channelMessageId !== "string" || !channelMessageId.trim()) return undefined;
+
+    // Adapters consume a platform message id string; Telegram expects the compact base36 form.
+    if (adapterType === "telegram") {
+      return formatTelegramMessageIdCompact(channelMessageId.trim());
+    }
+    return channelMessageId.trim();
   }
 
   private recordDeliveryError(envelope: Envelope, update: Record<string, unknown>): void {

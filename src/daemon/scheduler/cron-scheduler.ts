@@ -25,6 +25,9 @@ export class CronScheduler {
     if (typeof (template as Record<string, unknown>).replyToMessageId === "string") {
       delete (template as Record<string, unknown>).replyToMessageId;
     }
+    if (typeof (template as Record<string, unknown>).replyToEnvelopeId === "string") {
+      delete (template as Record<string, unknown>).replyToEnvelopeId;
+    }
     return {
       ...template,
       cronScheduleId: schedule.id,
@@ -195,16 +198,19 @@ export class CronScheduler {
           const current = this.db.getCronScheduleById(schedule.id);
           if (!current) return;
 
-          // Backwards-compat: older versions allowed cron schedules to store a reply-to-channel-message-id.
+          // Backwards-compat: older versions allowed cron schedules to store reply-to metadata.
           // Ensure any existing pending cron envelope doesn't reply, even once.
           if (current.pendingEnvelopeId) {
             const pendingEnvelope = this.db.getEnvelopeById(current.pendingEnvelopeId);
             const md = pendingEnvelope?.metadata;
             if (md && typeof md === "object") {
               const obj = md as Record<string, unknown>;
-              if (typeof obj.replyToMessageId === "string") {
+              const hasReplyToMessageId = typeof obj.replyToMessageId === "string";
+              const hasReplyToEnvelopeId = typeof obj.replyToEnvelopeId === "string";
+              if (hasReplyToMessageId || hasReplyToEnvelopeId) {
                 const cleaned = { ...obj };
                 delete cleaned.replyToMessageId;
+                delete cleaned.replyToEnvelopeId;
                 this.db.updateEnvelopeMetadata(
                   current.pendingEnvelopeId,
                   Object.keys(cleaned).length > 0 ? cleaned : undefined

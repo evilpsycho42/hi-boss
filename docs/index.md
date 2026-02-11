@@ -1,22 +1,11 @@
 # Hi-Boss Docs
 
-Hi-Boss has two kinds of documentation:
+Hi-Boss documentation is specification-first:
 
-- **Specifications** (`docs/spec/`) — for developers; goals, architecture, and design. Implementations should align with these docs.
-- **User Guides** (`docs/guide/`) — for users; what you can do with Hi-Boss, how to install it, and how to use it. Keep these readable and concise (tables/diagrams preferred, minimal internals).
+- **Specifications** (`docs/spec/`) — goals, architecture, and canonical behavior. Implementations should align with these docs.
 
 Start here:
-- Users: `docs/guide/quickstart.md`
-- Developers/spec readers: `docs/spec/index.md`
-
-## User Guides
-
-- `docs/guide/overview.md` — what Hi-Boss is and what it can do
-- `docs/guide/install.md` — install + first-time setup
-- `docs/guide/quickstart.md` — 10-minute “happy path”
-- `docs/guide/telegram.md` — Telegram usage and binding
-- `docs/guide/recipes.md` — copy/paste examples
-- `docs/guide/troubleshooting.md` — common issues and fixes
+- `docs/spec/index.md`
 
 ## Specifications
 

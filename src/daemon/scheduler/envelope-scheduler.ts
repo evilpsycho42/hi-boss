@@ -3,10 +3,12 @@ import type { HiBossDatabase } from "../db/database.js";
 import type { MessageRouter } from "../router/message-router.js";
 import type { AgentExecutor } from "../../agent/executor.js";
 import { delayUntilUnixMs } from "../../shared/time.js";
+import { BACKGROUND_AGENT_NAME } from "../../shared/defaults.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 
 const MAX_TIMER_DELAY_MS = 2_147_483_647; // setTimeout max (~24.8 days)
 const MAX_CHANNEL_ENVELOPES_PER_TICK = 100;
+const MAX_BACKGROUND_ENVELOPES_PER_TICK = 100;
 const ORPHAN_AGENT_ENVELOPES_BATCH_SIZE = 100;
 const MAX_ORPHAN_AGENT_ENVELOPES_PER_TICK = 2000;
 
@@ -78,6 +80,29 @@ export class EnvelopeScheduler {
       // 2) Trigger agents that have due envelopes.
       const agentNames = this.db.listAgentNamesWithDueEnvelopes();
       for (const agentName of agentNames) {
+        if (agentName === BACKGROUND_AGENT_NAME) {
+          const batch = this.db.getPendingEnvelopesForAgent(
+            BACKGROUND_AGENT_NAME,
+            MAX_BACKGROUND_ENVELOPES_PER_TICK + 1
+          );
+          const toDeliver = batch.slice(0, MAX_BACKGROUND_ENVELOPES_PER_TICK);
+          for (const env of toDeliver) {
+            try {
+              await this.router.deliverEnvelope(env);
+            } catch (err) {
+              logEvent("error", "scheduler-background-delivery-failed", {
+                "envelope-id": env.id,
+                error: errorMessage(err),
+              });
+            }
+          }
+
+          if (batch.length > MAX_BACKGROUND_ENVELOPES_PER_TICK) {
+            this.tickQueued = true;
+          }
+          continue;
+        }
+
         const agent = this.db.getAgentByNameCaseInsensitive(agentName);
         if (!agent) {
           this.cleanupOrphanAgentEnvelopes(agentName);

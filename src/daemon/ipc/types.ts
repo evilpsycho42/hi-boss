@@ -2,6 +2,8 @@
  * JSON-RPC 2.0 types for Hi-Boss IPC.
  */
 
+import type { Envelope } from "../../envelope/types.js";
+
 export interface JsonRpcRequest {
   jsonrpc: "2.0";
   id: string | number;
@@ -60,7 +62,7 @@ export interface EnvelopeSendParams {
   attachments?: Array<{ source: string; filename?: string; telegramFileId?: string }>;
   deliverAt?: string;
   parseMode?: "plain" | "markdownv2" | "html";
-  replyToMessageId?: string;
+  replyToEnvelopeId?: string;
 }
 
 export interface EnvelopeListParams {
@@ -69,6 +71,20 @@ export interface EnvelopeListParams {
   from?: string;
   status: "pending" | "done";
   limit?: number;
+}
+
+export interface EnvelopeThreadParams {
+  token: string;
+  envelopeId: string;
+}
+
+export interface EnvelopeThreadResult {
+  maxDepth: number;
+  totalCount: number;
+  returnedCount: number;
+  truncated: boolean;
+  truncatedIntermediateCount: number;
+  envelopes: Envelope[];
 }
 
 export interface CronCreateParams {
@@ -132,8 +148,7 @@ export interface AgentDeleteResult {
 
 export interface ReactionSetParams {
   token: string;
-  to: string;         // channel:<adapter>:<chat-id>
-  messageId: string;  // platform message id
+  envelopeId: string; // short id, prefix, or full UUID (must reference a channel envelope)
   emoji: string;      // unicode emoji
 }
 

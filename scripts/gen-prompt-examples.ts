@@ -129,22 +129,22 @@ async function main(): Promise<void> {
 
     const turnEnvelopeIds = [
       // 3 messages from the same Telegram group
-      "env_group_003",
-      "env_group_002",
-      "env_group_001",
+      "c2d3e4f5-0000-4000-8000-000000000003",
+      "b1c2d3e4-0000-4000-8000-000000000002",
+      "a0b1c2d3-0000-4000-8000-000000000001",
 
       // 2 messages: one private chat + one other group
-      "env_direct_001",
-      "env_group_other_001",
+      "e4f5a6b7-0000-4000-8000-000000000005",
+      "d3e4f5a6-0000-4000-8000-000000000004",
 
       // 1 agent message
-      "env_agent_001",
+      "f5a6b7c8-0000-4000-8000-000000000006",
 
       // 1 message from a cron schedule
       "9a0b1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d",
 
       // 1 delayed self-message
-      "env_self_delayed_001",
+      "0a1b2c3d-0000-4000-8000-000000000007",
     ] as const;
 
     const envelopes = turnEnvelopeIds.map((id) => {
@@ -178,9 +178,9 @@ async function main(): Promise<void> {
     console.log("\nGenerating envelope instruction examples (e2e fixture)...");
 
     const envelopeExamples = [
-      { id: "env_direct_001", filename: "envelope_example_direct.DOC.md" },
-      { id: "env_group_001", filename: "envelope_example_group.DOC.md" },
-      { id: "env_agent_001", filename: "envelope_example_agent.DOC.md" },
+      { id: "e4f5a6b7-0000-4000-8000-000000000005", filename: "envelope_example_direct.DOC.md" },
+      { id: "a0b1c2d3-0000-4000-8000-000000000001", filename: "envelope_example_group.DOC.md" },
+      { id: "f5a6b7c8-0000-4000-8000-000000000006", filename: "envelope_example_agent.DOC.md" },
       { id: "9a0b1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d", filename: "envelope_example_cron.DOC.md" },
     ] as const;
 

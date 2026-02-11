@@ -6,6 +6,7 @@ import type { Agent } from "../../agent/types.js";
 import { isValidAgentName, AGENT_NAME_ERROR_MESSAGE } from "../../shared/validation.js";
 import { parseDailyResetAt, parseDurationToMs } from "../../shared/session-policy.js";
 import { setupAgentHome } from "../../agent/home-setup.js";
+import { BACKGROUND_AGENT_NAME } from "../../shared/defaults.js";
 import { isPermissionLevel } from "../../shared/permissions.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 
@@ -26,6 +27,9 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
 
       if (typeof p.name !== "string" || !isValidAgentName(p.name)) {
         rpcError(RPC_ERRORS.INVALID_PARAMS, AGENT_NAME_ERROR_MESSAGE);
+      }
+      if (p.name.trim().toLowerCase() === BACKGROUND_AGENT_NAME) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, `Reserved agent name: ${BACKGROUND_AGENT_NAME}`);
       }
 
       // Check if agent already exists (case-insensitive)

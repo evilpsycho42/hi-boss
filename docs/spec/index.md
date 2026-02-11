@@ -35,8 +35,10 @@
 
 ## Examples + appendix
 
-- Envelope instruction examples: `docs/spec/examples/envelope-instructions.md`
+- Prompt + envelope instruction examples (generated): run `npm run examples:prompts` (outputs under `examples/prompts/` and `prompts/examples/`)
+- CLI output examples (generated): run `npm run examples:cli` (outputs under `examples/cli/`)
 - Provider CLI experiments: `docs/spec/appendix/provider-clis-experiments.md`
+- Research notes: Claude Code agent teams task list: `docs/spec/appendix/claude-code-task-schema.md`
 
 ## Adapters + providers
 

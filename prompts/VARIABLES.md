@@ -56,11 +56,10 @@ Notes:
 | `envelopes` | array | Pending envelopes for this run |
 | `envelopes[].index` | number | 1-based index |
 | `envelopes[].id` | string | Envelope id |
+| `envelopes[].idShort` | string | Envelope id (short id; first 8 hex chars of the UUID with hyphens removed) |
 | `envelopes[].from` | string | Sender address |
 | `envelopes[].fromName` | string | Human-readable name: `group "<name>"` for group messages, or author name with optional `[boss]` suffix for direct messages (or empty) |
-| `envelopes[].channelMessageId` | string | Platform message id for channel messages (or empty). For Telegram, rendered in compact base36 (no prefix) |
 | `envelopes[].inReplyTo` | object | Present only when the channel message is a reply (or empty) |
-| `envelopes[].inReplyTo.channelMessageId` | string | Channel message id being replied to. For Telegram, rendered in compact base36 (no prefix) |
 | `envelopes[].inReplyTo.fromName` | string | Replied-to author display name (or empty) |
 | `envelopes[].inReplyTo.text` | string | Replied-to text excerpt (or `(none)`) |
 | `envelopes[].fromBoss` | boolean | Boss flag |
@@ -88,12 +87,11 @@ Notes:
 | Variable | Type | Meaning |
 |---------|------|---------|
 | `envelope.id` | string | Envelope id |
+| `envelope.idShort` | string | Envelope id (short id; first 8 hex chars of the UUID with hyphens removed) |
 | `envelope.from` | string | Sender address |
 | `envelope.to` | string | Destination address |
 | `envelope.fromName` | string | Human-readable name: `group "<name>"` for group messages, or author name with optional `[boss]` suffix for direct messages (or empty) |
-| `envelope.channelMessageId` | string | Platform message id for channel messages (or empty). For Telegram, rendered in compact base36 (no prefix) |
 | `envelope.inReplyTo` | object | Present only when the channel message is a reply (or empty) |
-| `envelope.inReplyTo.channelMessageId` | string | Channel message id being replied to. For Telegram, rendered in compact base36 (no prefix) |
 | `envelope.inReplyTo.fromName` | string | Replied-to author display name (or empty) |
 | `envelope.inReplyTo.text` | string | Replied-to text excerpt (or `(none)`) |
 | `envelope.fromBoss` | boolean | Boss flag |

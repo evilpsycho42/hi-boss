@@ -15,7 +15,7 @@ Flags:
 - `--to <address>` (required)
 - `--text <text>` or `--text -` (stdin) or `--text-file <path>`
 - `--attachment <path>` (repeatable)
-- `--reply-to <channel-message-id>` (optional; channel destinations only; for Telegram, use the compact base36 id shown as `channel-message-id:` / `in-reply-to-channel-message-id:` in prompts; raw decimal can be passed as `dec:<id>`)
+- `--reply-to <envelope-id>` (optional; adds thread context for agent↔agent envelopes; for channel destinations, also replies/quotes the referenced channel envelope when possible)
 - `--parse-mode <mode>` (optional; channel destinations only; `plain|markdownv2|html`)
 - `--deliver-at <time>` (ISO 8601 or relative: `+2h`, `+30m`, `+1Y2M`, `-15m`; units: `Y/M/D/h/m/s`)
 
@@ -29,6 +29,28 @@ Output (parseable):
 ```
 id: <envelope-id>  # short id
 ```
+
+Default permission:
+- `restricted`
+
+## `hiboss envelope thread`
+
+Prints the envelope chain from a target envelope up to its root (following `metadata.replyToEnvelopeId`).
+
+Flags:
+- `--envelope-id <id>` (required; short id, longer prefix, or full UUID)
+- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
+
+Output (parseable):
+- `thread-max-depth: 20`
+- `thread-total-count: <n>` (full chain length, including the root envelope)
+- `thread-returned-count: <n>` (how many envelope blocks are printed)
+- `thread-truncated: true|false`
+- `thread-truncated-intermediate-count: <n>` (only when truncated)
+- If `thread-returned-count > 0`, prints a blank line, then repeated envelope instruction blocks (same shape as `hiboss envelope list`), separated by a blank line.
+- Thread output suppresses `in-reply-to-from-name:` and `in-reply-to-text:` fields (the chain ordering already provides this context).
+- If truncated, prints a single marker line between the blocks:
+  - `...<n intermediate envelopes truncated>...`
 
 Default permission:
 - `restricted`

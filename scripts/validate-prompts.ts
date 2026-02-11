@@ -178,7 +178,7 @@ function validateTurnPrompt(): void {
     assert.ok(out.includes("sender:"), "turn prompt should include sender for channel messages");
     assert.ok(out.includes("in group \"hiboss-test\""), "turn prompt should show group name in sender line");
     assert.ok(out.includes("Alice (@alice)"), "turn prompt should show author for group messages");
-    assert.ok(out.includes("channel-message-id: zik0zj"), "turn prompt should show compact telegram channel-message-id");
+    assert.ok(out.includes("envelope-id: env1"), "turn prompt should include envelope-id");
     assert.ok(out.includes("deliver-at:"), "turn prompt should include deliver-at when present");
   }
 

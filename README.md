@@ -163,8 +163,7 @@ Each agent has a long-term memory file at:
 
 ## Docs
 
-- `docs/index.md` — docs hub (specs + user guides)
-- `docs/guide/install.md` — install + upgrade notes
-- `docs/guide/telegram.md` — Telegram setup and usage
-- `docs/guide/overview.md` — features overview (cron, deliver-at, etc.)
-- `docs/guide/recipes.md` — cron/scheduling recipes
+- `docs/index.md` — docs hub (specifications)
+- `docs/spec/index.md` — spec entrypoint + map
+- `docs/spec/cli.md` — CLI command surface and links
+- `docs/spec/adapters/telegram.md` — Telegram adapter behavior
