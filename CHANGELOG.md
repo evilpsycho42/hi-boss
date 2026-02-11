@@ -6,6 +6,32 @@ This project uses date-based npm versions (see `AGENTS.md`).
 
 ## [Unreleased]
 
+## [2026.2.11] - 2026-02-11
+
+### Changed
+- Removed legacy semantic-memory CLI/RPC/runtime paths and switched memory usage to file-based internal space snapshots (`internal_space/MEMORY.md` + daily `internal_space/memories/YYYY-MM-DD.md`).
+- Setup config and setup RPC now reject legacy `memory` configuration fields.
+- Provider invocation no longer adds `{{HIBOSS_DIR}}/.daemon` as an additional directory; `internal_space` remains available via `--add-dir` on supported provider commands.
+
+### Docs
+- Removed obsolete memory command references from CLI/IPC/configuration specs.
+- Added file-memory protocol spec (`docs/spec/components/file-memory.md`) and aligned agent/provider docs to current runtime behavior.
+- Updated Telegram reaction guidance with a concise valid emoji list in system communication prompts.
+- Regenerated prompt examples and inventories for the file-based memory flow.
+
+
+## [2026.2.11-rc.1] - 2026-02-11
+
+### Changed
+- Removed legacy semantic-memory CLI/RPC/runtime paths and switched memory usage to file-based internal space snapshots (`internal_space/MEMORY.md` + daily `internal_space/memories/YYYY-MM-DD.md`).
+- Setup config and setup RPC now reject legacy `memory` configuration fields.
+- Provider invocation no longer adds `{{HIBOSS_DIR}}/.daemon` as an additional directory; `internal_space` remains available via `--add-dir` on supported provider commands.
+
+### Docs
+- Removed obsolete memory command references from CLI/IPC/configuration specs.
+- Added file-memory protocol spec (`docs/spec/components/file-memory.md`) and aligned agent/provider docs to current runtime behavior.
+- Updated generated examples and inventories for the file-based memory flow.
+
 ## [2026.2.10] - 2026-02-10
 
 ### Changed

@@ -42,6 +42,8 @@ Reply-to (quoting):
 
 Reactions:
 - `hiboss reaction set ...` is a Telegram **emoji reaction** (not a text reply); use sparingly
+- Use reactions when a message feels especially good, or when you strongly agree or appreciate it
+- 👍 👎 ❤️ 🔥 🤔 🎉 😍 💯
 {% endif %}
 
 ### Progressive disclosure
