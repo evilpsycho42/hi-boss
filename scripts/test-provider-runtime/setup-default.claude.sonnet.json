@@ -3,10 +3,6 @@
   "boss-name": "Kevin",
   "boss-token": "boss-test-token",
   "provider": "claude",
-  "memory": {
-    "mode": "local",
-    "model-path": "/Users/kky/Qwen3-Embedding-0.6B-Q8_0.gguf"
-  },
   "agent": {
     "name": "test-claude",
     "description": "test-claude (claude/sonnet)",
@@ -20,4 +16,3 @@
     "adapter-boss-id": "kky1024"
   }
 }
-

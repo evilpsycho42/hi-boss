@@ -20,6 +20,13 @@ Notes:
 | `internalSpace.note` | string | Snapshot of `{{hiboss.dir}}/agents/{{agent.name}}/internal_space/MEMORY.md` (or empty) |
 | `internalSpace.noteFence` | string | Markdown code fence delimiter for `internalSpace.note` (e.g., ``` or ````) |
 | `internalSpace.error` | string | Internal space snapshot error message (or empty) |
+| `internalSpace.daily` | string | Snapshot of recent `{{hiboss.dir}}/agents/{{agent.name}}/internal_space/memories/YYYY-MM-DD.md` files (or empty) |
+| `internalSpace.dailyFence` | string | Markdown code fence delimiter for `internalSpace.daily` (e.g., ``` or ````) |
+| `internalSpace.dailyError` | string | Daily memory snapshot error message (or empty) |
+| `internalSpace.longtermMaxChars` | number | Truncation limit (chars) for injected `internal_space/MEMORY.md` snapshot |
+| `internalSpace.dailyRecentFiles` | number | How many recent daily memory files are injected (newest-first by filename) |
+| `internalSpace.dailyPerFileMaxChars` | number | Truncation limit (chars) per injected daily file |
+| `internalSpace.dailyMaxChars` | number | Truncation limit (chars) for the combined injected daily snapshot |
 | `environment.time` | string | Current time formatted in boss timezone offset (ISO 8601) |
 | `environment.bossTimezone` | string | Boss timezone (IANA) used for displayed timestamps |
 | `environment.daemonTimezone` | string | Daemon host timezone (IANA) used by shell commands |

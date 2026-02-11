@@ -11,7 +11,6 @@ import { AgentExecutor, createAgentExecutor } from "../agent/executor.js";
 import type { Agent } from "../agent/types.js";
 import { EnvelopeScheduler } from "./scheduler/envelope-scheduler.js";
 import { CronScheduler } from "./scheduler/cron-scheduler.js";
-import { MemoryService, MemoryStore } from "./memory/index.js";
 import type { RpcMethodRegistry } from "./ipc/types.js";
 import { RPC_ERRORS } from "./ipc/types.js";
 import type { ChatAdapter } from "../adapters/types.js";
@@ -35,7 +34,6 @@ import {
   createDaemonHandlers,
   createReactionHandlers,
   createCronHandlers,
-  createMemoryHandlers,
   createEnvelopeHandlers,
   createSetupHandlers,
   createAgentHandlers,
@@ -97,8 +95,6 @@ export class Daemon {
   private executor: AgentExecutor;
   private scheduler: EnvelopeScheduler;
   private cronScheduler: CronScheduler | null = null;
-  private memoryService: MemoryService | null = null;
-  private memoryStore: MemoryStore | null = null;
   private adapters: Map<string, ChatAdapter> = new Map(); // token -> adapter
   private running = false;
   private startTimeMs: number | null = null;
@@ -158,86 +154,6 @@ export class Daemon {
     }
   }
 
-  private getMemoryDisabledMessage(): string {
-    const lastError = (this.db.getConfig("memory_model_last_error") ?? "").trim();
-    const suffix = lastError ? `: ${lastError}` : "";
-    return `Memory is disabled${suffix}. Ask boss for help. Fix with: hiboss memory setup --default OR hiboss memory setup --model-path <path>`;
-  }
-
-  private writeMemoryConfigToDb(memory: {
-    enabled: boolean;
-    mode: "default" | "local";
-    modelPath: string;
-    modelUri: string;
-    dims: number;
-    lastError: string;
-  }): void {
-    this.db.setConfig("memory_enabled", memory.enabled ? "true" : "false");
-    this.db.setConfig("memory_model_source", memory.mode);
-    this.db.setConfig("memory_model_uri", memory.modelUri ?? "");
-    this.db.setConfig("memory_model_path", memory.modelPath ?? "");
-    this.db.setConfig("memory_model_dims", String(memory.dims ?? 0));
-    this.db.setConfig("memory_model_last_error", memory.lastError ?? "");
-  }
-
-  private disableMemoryWithError(message: string): void {
-    this.db.setConfig("memory_enabled", "false");
-    this.db.setConfig("memory_model_last_error", message);
-    this.db.setConfig("memory_model_dims", "0");
-  }
-
-  private async ensureMemoryService(): Promise<MemoryService> {
-    if (this.memoryService) return this.memoryService;
-    const enabled = this.db.getConfig("memory_enabled") === "true";
-    if (!enabled) {
-      rpcError(RPC_ERRORS.INTERNAL_ERROR, this.getMemoryDisabledMessage());
-    }
-    const modelPath = (this.db.getConfig("memory_model_path") ?? "").trim();
-    if (!modelPath) {
-      this.disableMemoryWithError("Missing memory model path");
-      rpcError(RPC_ERRORS.INTERNAL_ERROR, this.getMemoryDisabledMessage());
-    }
-
-    try {
-      const daemonMode = (process.env.HIBOSS_DAEMON_MODE ?? "").trim().toLowerCase();
-      const examplesMode = daemonMode === "examples";
-      const dims = Number((this.db.getConfig("memory_model_dims") ?? "").trim() || "0");
-      this.memoryService = await MemoryService.create({
-        daemonDir: this.config.daemonDir,
-        modelPath,
-        mode: examplesMode ? "examples" : "default",
-        dims: examplesMode ? dims : undefined,
-      });
-      return this.memoryService;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.disableMemoryWithError(message);
-      rpcError(RPC_ERRORS.INTERNAL_ERROR, this.getMemoryDisabledMessage());
-    }
-  }
-
-  private async ensureMemoryStore(): Promise<MemoryStore> {
-    const enabled = this.db.getConfig("memory_enabled") === "true";
-    if (!enabled) {
-      rpcError(RPC_ERRORS.INTERNAL_ERROR, this.getMemoryDisabledMessage());
-    }
-    if (this.memoryStore) return this.memoryStore;
-    const modelPath = (this.db.getConfig("memory_model_path") ?? "").trim();
-    if (!modelPath) {
-      this.disableMemoryWithError("Missing memory model path");
-      rpcError(RPC_ERRORS.INTERNAL_ERROR, this.getMemoryDisabledMessage());
-    }
-
-    try {
-      this.memoryStore = await MemoryStore.create({ daemonDir: this.config.daemonDir });
-      return this.memoryStore;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.disableMemoryWithError(message);
-      rpcError(RPC_ERRORS.INTERNAL_ERROR, this.getMemoryDisabledMessage());
-    }
-  }
-
   /**
    * Create the DaemonContext for RPC handlers.
    */
@@ -261,12 +177,6 @@ export class Daemon {
       resolvePrincipal: (token) => this.resolvePrincipal(token),
       assertOperationAllowed: (op, principal) => this.assertOperationAllowed(op, principal),
       getPermissionPolicy: () => this.getPermissionPolicy(),
-      ensureMemoryService: () => this.ensureMemoryService(),
-      ensureMemoryStore: () => this.ensureMemoryStore(),
-      getMemoryDisabledMessage: () => this.getMemoryDisabledMessage(),
-      writeMemoryConfigToDb: (m) => this.writeMemoryConfigToDb(m),
-      closeMemoryService: async () => { await this.memoryService?.close().catch(() => undefined); this.memoryService = null; },
-      closeMemoryStore: async () => { await this.memoryStore?.close().catch(() => undefined); this.memoryStore = null; },
       createAdapterForBinding: (type, token) => this.createAdapterForBinding(type, token),
       removeAdapter: (token) => this.removeAdapter(token),
       registerAgentHandler: (name) => this.registerSingleAgentHandler(name),
@@ -476,14 +386,6 @@ export class Daemon {
     // Stop IPC server
     await this.ipc.stop();
 
-    // Close semantic memory service
-    await this.memoryService?.close().catch(() => undefined);
-    this.memoryService = null;
-
-    // Close semantic memory store (non-embedding operations)
-    await this.memoryStore?.close().catch(() => undefined);
-    this.memoryStore = null;
-
     // Close database
     this.db.close();
 
@@ -511,7 +413,6 @@ export class Daemon {
       ...createEnvelopeHandlers(ctx),
       ...createReactionHandlers(ctx),
       ...createCronHandlers(ctx),
-      ...createMemoryHandlers(ctx),
       ...createAgentHandlers(ctx),
       ...createAgentSetHandler(ctx),
       ...createAgentDeleteHandler(ctx),

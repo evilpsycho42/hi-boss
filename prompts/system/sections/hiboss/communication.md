@@ -50,4 +50,3 @@ Use CLI help instead of memorizing details:
 - `hiboss envelope list --help`
 - `hiboss reaction set --help`
 - `hiboss cron --help`
-- `hiboss memory --help`

@@ -26,6 +26,7 @@
 
 - Agent execution + bindings + providers: `docs/spec/components/agent.md`
 - Sessions (refresh policy + resume): `docs/spec/components/session.md`
+- File-based agent memory (protocol): `docs/spec/components/file-memory.md`
 
 ## Configuration + storage
 

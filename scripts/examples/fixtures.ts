@@ -5,14 +5,11 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import Database from "better-sqlite3";
-import * as lancedb from "@lancedb/lancedb";
-import { Field, FixedSizeList, Float32, Schema, Utf8 } from "apache-arrow";
 
 import { SCHEMA_SQL } from "../../src/daemon/db/schema.js";
 import { hashToken } from "../../src/agent/auth.js";
 import { Daemon } from "../../src/daemon/daemon.js";
 import { isSocketAcceptingConnections } from "../../src/daemon/pid-lock.js";
-import { embedTextForExamples } from "../../src/shared/examples-memory-embed.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -138,11 +135,18 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     "utf-8"
   );
 
-  // Memory model stub file: the daemon checks model-path is set; we avoid loading it in examples.
-  const modelsDir = path.join(daemonDir, "models");
-  fs.mkdirSync(modelsDir, { recursive: true });
-  const modelPath = path.join(modelsDir, "example.gguf");
-  fs.writeFileSync(modelPath, "", "utf-8");
+  const dailyDir = path.join(internalSpaceDir, "memories");
+  fs.mkdirSync(dailyDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(dailyDir, "2026-01-28.md"),
+    ["Project X: weekly update due Friday 5pm PT.", "Use --parse-mode html for long messages."].join("\n") + "\n",
+    "utf-8"
+  );
+  fs.writeFileSync(
+    path.join(dailyDir, "2026-01-29.md"),
+    ["Post the latest build status to the Project X Dev group.", "Follow up with Alice about the weekly update."].join("\n") + "\n",
+    "utf-8"
+  );
 
   // Seed SQLite
   const dbPath = path.join(daemonDir, "hiboss.db");
@@ -165,12 +169,6 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
   upsertConfig.run("boss_name", "Kevin", cfgTime);
   upsertConfig.run("boss_timezone", "Asia/Shanghai", cfgTime);
   upsertConfig.run("adapter_boss_id_telegram", "@kky1024", cfgTime);
-  upsertConfig.run("memory_enabled", "true", cfgTime);
-  upsertConfig.run("memory_model_source", "local", cfgTime);
-  upsertConfig.run("memory_model_uri", "", cfgTime);
-  upsertConfig.run("memory_model_path", modelPath, cfgTime);
-  upsertConfig.run("memory_model_dims", "3", cfgTime);
-  upsertConfig.run("memory_model_last_error", "", cfgTime);
 
   const insertAgent = db.prepare(
     `INSERT INTO agents
@@ -406,40 +404,6 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
   );
 
   db.close();
-
-  // Seed LanceDB memory store with deterministic rows (no embeddings required for list/categories).
-  const dims = 3;
-  const schema = new Schema([
-    new Field("id", new Utf8(), false),
-    new Field("text", new Utf8(), false),
-    new Field("vector", new FixedSizeList(dims, new Field("item", new Float32(), false)), false),
-    new Field("category", new Utf8(), false),
-    new Field("createdAt", new Utf8(), false),
-  ]);
-  const mem = await lancedb.connect(path.join(daemonDir, "memory.lance"));
-  const tableName = "memories__nex";
-  const names = await mem.tableNames();
-  if (!names.includes(tableName)) {
-    await mem.createEmptyTable(tableName, schema);
-  }
-  const table = await mem.openTable(tableName);
-  await table.add([
-    {
-      id: "c3f9b2b1-4b64-4e67-b25f-92a1d3b4c5d6",
-      text: "Project X uses Node.js 22.",
-      vector: embedTextForExamples("Project X uses Node.js 22.", dims),
-      category: "fact",
-      createdAt: String(Date.parse("2026-01-05T12:00:00.000Z")),
-    },
-    {
-      id: "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
-      text: "Weekly update is due every Friday 5pm PT.",
-      vector: embedTextForExamples("Weekly update is due every Friday 5pm PT.", dims),
-      category: "process",
-      createdAt: String(Date.parse("2026-01-06T09:00:00.000Z")),
-    },
-  ]);
-  mem.close();
 
   return {
     homeDir,

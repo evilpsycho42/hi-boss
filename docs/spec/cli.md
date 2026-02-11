@@ -36,9 +36,6 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | `hiboss cron disable` | Disable a cron schedule | Yes (agent token) | restricted |
 | `hiboss cron delete` | Delete a cron schedule | Yes (agent token) | restricted |
 | `hiboss reaction set` | Set a reaction on a channel message | Yes (agent token) | restricted |
-| `hiboss memory add/search/list/categories/get/delete/delete-category` | Semantic memory operations | Yes (agent token) | restricted |
-| `hiboss memory clear` | Clear all semantic memories for an agent | Yes (agent token) | standard |
-| `hiboss memory setup` | Configure semantic memory model | Yes (agent/boss token) | privileged |
 | `hiboss agent register` | Register a new agent | Yes (boss-privileged token) | boss |
 | `hiboss agent set` | Update agent settings and bindings | Yes (agent/boss token) | privileged |
 | `hiboss agent list` | List agents | Yes (agent/boss token) | restricted |
@@ -56,4 +53,3 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 - Cron: `docs/spec/cli/cron.md`
 - Reactions: `docs/spec/cli/reactions.md`
 - Agents: `docs/spec/cli/agents.md`
-- Memory: `docs/spec/cli/memory.md`

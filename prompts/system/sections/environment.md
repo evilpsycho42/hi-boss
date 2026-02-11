@@ -14,7 +14,8 @@
 ### Paths
 - **Workspace**: {{ agent.workspace }}
 - **Internal workspace**: {{ hiboss.dir }}/agents/{{ agent.name }}/
-- **Auto-injected memory file**: {{ hiboss.dir }}/agents/{{ agent.name }}/internal_space/MEMORY.md
+- **Long-term memory (auto-injected)**: {{ hiboss.dir }}/agents/{{ agent.name }}/internal_space/MEMORY.md
+- **Daily memory dir**: {{ hiboss.dir }}/agents/{{ agent.name }}/internal_space/memories/
 - **Provider**: {{ agent.provider }}
 - **Provider home**: {% if agent.provider == "claude" %}~/.claude{% elif agent.provider == "codex" %}~/.codex{% else %}~/.claude / ~/.codex{% endif %} (shared; user-managed)
 {% if bindings.length %}

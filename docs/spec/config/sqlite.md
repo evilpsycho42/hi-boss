@@ -23,8 +23,6 @@ Tables (high level):
 - `default_provider`: `"claude"` or `"codex"` (written by setup; informational today)
 - `permission_policy`: JSON mapping operations → required permission level
 - `adapter_boss_id_<adapter-type>`: boss identity on an adapter (e.g., `adapter_boss_id_telegram`)
-- Semantic memory:
-  - `memory_enabled`, `memory_model_source`, `memory_model_uri`, `memory_model_path`, `memory_model_dims`, `memory_model_last_error`
 
 ## Key invariants
 

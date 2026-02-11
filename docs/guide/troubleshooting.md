@@ -44,8 +44,6 @@ mkdir -p ~/hiboss/.daemon
 mv ~/hiboss/hiboss.db* ~/hiboss/.daemon/
 mv ~/hiboss/daemon.* ~/hiboss/.daemon/
 mv ~/hiboss/log_history ~/hiboss/.daemon/ || true
-mv ~/hiboss/models ~/hiboss/.daemon/ || true
-mv ~/hiboss/memory.lance ~/hiboss/.daemon/ || true
 
 # Start again
 hiboss daemon start --token <boss-token>

@@ -35,7 +35,6 @@ Interactive defaults (when you press Enter):
 - `agent.permission-level`: `standard`
 - `session-policy`: unset
 - `metadata`: unset
-- `memory.mode`: `default` (download default embedding model)
 
 ## `hiboss setup --config-file <path>`
 
@@ -54,11 +53,6 @@ Config file must include:
 - `agent: { ... }`
 - `telegram: { adapter-token, adapter-boss-id }`
 
-Optional:
-- `memory: { mode, model-path }`
-  - `mode`: `default` (download the default embedding model) or `local` (use a local GGUF)
-  - `model-path`: required when `mode: local` (absolute path to a `.gguf`)
-
 Config-file defaults (when omitted):
 - `boss-name`: current OS username
 - `boss-timezone`: daemon host timezone (IANA)
@@ -68,7 +62,6 @@ Config-file defaults (when omitted):
 - `agent.model`: `null` (use provider default)
 - `agent.reasoning-effort`: `null` (use provider default)
 - `agent.permission-level`: `standard`
-- `memory.mode`: `default`
 
 Example (`setup.json`):
 
@@ -79,10 +72,6 @@ Example (`setup.json`):
   "boss-timezone": "Asia/Shanghai",
   "boss-token": "your-boss-token",
   "provider": "claude",
-  "memory": {
-    "mode": "local",
-    "model-path": "/absolute/path/to/embedding-model.gguf"
-  },
 	  "agent": {
 	    "name": "nex",
 	    "description": "A reliable and collaborative professional who delivers results with clarity and respect for others, and consistently makes teamwork more effective and enjoyable.",
@@ -108,8 +97,8 @@ Notes:
 
 Output:
 - Setup prints tokens once, plus a small block of stable key/value lines (keys are kebab-case and may be indented in the human UI).
-- `hiboss setup` (interactive) prints: `daemon-timezone:`, `boss-timezone:`, `agent-name:`, `agent-token:`, `boss-token:`, `memory-enabled:`, and (when applicable) `memory-model-path:`, `memory-model-dims:`, `memory-last-error:`.
-- `hiboss setup --config-file ...` prints: `daemon-timezone:`, `boss-timezone:`, `boss-name:`, `agent-name:`, `agent-token:`, `boss-token:`, `provider:`, `model:`, `memory-enabled:`.
+- `hiboss setup` (interactive) prints: `daemon-timezone:`, `boss-timezone:`, `agent-name:`, `agent-token:`, `boss-token:`.
+- `hiboss setup --config-file ...` prints: `daemon-timezone:`, `boss-timezone:`, `boss-name:`, `agent-name:`, `agent-token:`, `boss-token:`, `provider:`, `model:`.
 
 ---
 
@@ -127,6 +116,4 @@ From the setup config JSON:
 Other side effects:
 - Creates the first agent row in `agents` and prints `agent-token:` once.
 - Creates an initial `agent_bindings` row for the first agent from `telegram.adapter-token`.
-- Writes semantic memory config keys when memory is configured:
-  - `config.memory_enabled`, `config.memory_model_source`, `config.memory_model_uri`, `config.memory_model_path`, `config.memory_model_dims`, `config.memory_model_last_error`
 - Marks setup complete: `config.setup_completed = "true"`.

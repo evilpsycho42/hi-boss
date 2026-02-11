@@ -154,32 +154,8 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid boss-token (must be at least 4 characters)");
       }
 
-      if (p.memory !== undefined) {
-        if (typeof p.memory !== "object" || p.memory === null) {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config");
-        }
-        const m = p.memory as Record<string, unknown>;
-        if (typeof m.enabled !== "boolean") {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config enabled");
-        }
-        if (m.mode !== "default" && m.mode !== "local") {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config mode");
-        }
-        if (typeof m.modelPath !== "string") {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config modelPath");
-        }
-        if (typeof m.modelUri !== "string") {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config modelUri");
-        }
-        if (typeof m.dims !== "number" || !Number.isFinite(m.dims) || m.dims < 0) {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config dims");
-        }
-        if (typeof m.lastError !== "string") {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config lastError");
-        }
-        if (m.enabled === true && (!m.modelPath.trim() || m.dims <= 0)) {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid memory config (missing modelPath or dims)");
-        }
+      if ((p as any).memory !== undefined) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "memory is no longer supported (use long-term memory files)");
       }
 
       // Setup agent home directory
@@ -220,17 +196,6 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
 
           // Set default provider
           ctx.db.setDefaultProvider(p.provider);
-
-          // Store semantic memory configuration (best-effort; can be disabled)
-          const memory = p.memory ?? {
-            enabled: false,
-            mode: "default" as const,
-            modelPath: "",
-            modelUri: "",
-            dims: 0,
-            lastError: "Memory model is not configured",
-          };
-          ctx.writeMemoryConfigToDb(memory);
 
           // Create the first agent
           const metadata =

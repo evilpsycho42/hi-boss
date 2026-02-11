@@ -5,21 +5,7 @@ import { getSocketPath, getDefaultConfig, isDaemonRunning } from "../../../daemo
 import { HiBossDatabase } from "../../../daemon/db/database.js";
 import { setupAgentHome } from "../../../agent/home-setup.js";
 import type { SetupCheckResult, SetupExecuteResult } from "../../../daemon/ipc/types.js";
-import type { ResolvedMemoryModelConfig } from "../../memory-model.js";
 import type { SetupConfig } from "./types.js";
-
-export function normalizeMemoryConfig(config: SetupConfig): ResolvedMemoryModelConfig {
-  return (
-    config.memory ?? {
-      enabled: false,
-      mode: "default",
-      modelPath: "",
-      modelUri: "",
-      dims: 0,
-      lastError: "Memory model is not configured",
-    }
-  );
-}
 
 /**
  * Check if setup is complete (tries IPC first, falls back to direct DB).
@@ -54,8 +40,6 @@ export async function checkSetupStatus(): Promise<boolean> {
  * Execute setup (tries IPC first, falls back to direct DB).
  */
 export async function executeSetup(config: SetupConfig): Promise<string> {
-  const memory = normalizeMemoryConfig(config);
-
   // Try IPC first (daemon running)
   try {
     const client = new IpcClient(getSocketPath());
@@ -66,7 +50,6 @@ export async function executeSetup(config: SetupConfig): Promise<string> {
       agent: config.agent,
       bossToken: config.bossToken,
       adapter: config.adapter,
-      memory,
     });
     return result.agentToken;
   } catch (err) {
@@ -77,15 +60,6 @@ export async function executeSetup(config: SetupConfig): Promise<string> {
     // Daemon not running, execute directly on database
     return executeSetupDirect(config);
   }
-}
-
-function writeMemoryConfigToDb(db: HiBossDatabase, memory: ResolvedMemoryModelConfig): void {
-  db.setConfig("memory_enabled", memory.enabled ? "true" : "false");
-  db.setConfig("memory_model_source", memory.mode);
-  db.setConfig("memory_model_uri", memory.modelUri ?? "");
-  db.setConfig("memory_model_path", memory.modelPath ?? "");
-  db.setConfig("memory_model_dims", String(memory.dims ?? 0));
-  db.setConfig("memory_model_last_error", memory.lastError ?? "");
 }
 
 function ensureBossProfileFile(hibossDir: string): void {
@@ -125,8 +99,6 @@ async function executeSetupDirect(config: SetupConfig): Promise<string> {
     await setupAgentHome(config.agent.name, daemonConfig.dataDir);
     ensureBossProfileFile(daemonConfig.dataDir);
 
-    const memory = normalizeMemoryConfig(config);
-
     const result = db.runInTransaction(() => {
       // Set boss name
       db.setBossName(config.bossName);
@@ -136,8 +108,6 @@ async function executeSetupDirect(config: SetupConfig): Promise<string> {
 
       // Set default provider
       db.setDefaultProvider(config.provider);
-
-      writeMemoryConfigToDb(db, memory);
 
       // Create the first agent
       const agentResult = db.registerAgent({
