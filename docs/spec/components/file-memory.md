@@ -26,7 +26,7 @@ Per agent:
 ```
 
 Notes:
-- `internal_space/` is already included in the provider “additional dirs”, so agents can read/write these files during work.
+- `internal_space/` is included in provider CLI `--add-dir`, so agents can read/write these files during work.
 - `memories/` is append-friendly and safe to prune/archive later.
 - Hi-Boss ensures the internal space layout exists during setup and at session start. If `MEMORY.md` is missing, it is created as an empty file.
 

@@ -6,13 +6,9 @@
  */
 
 import { spawn, type ChildProcess } from "node:child_process";
-import * as path from "node:path";
 import type { AgentSession, TurnTokenUsage } from "./executor-support.js";
 import { readTokenUsage } from "./executor-support.js";
 import { HIBOSS_TOKEN_ENV } from "../shared/env.js";
-import {
-  DEFAULT_DAEMON_DIRNAME,
-} from "../shared/defaults.js";
 import { getAgentInternalSpaceDir } from "./home-setup.js";
 import { errorMessage, logEvent } from "../shared/daemon-log.js";
 import {
@@ -49,11 +45,8 @@ function buildClaudeArgs(
     "--permission-mode", "bypassPermissions",
   ];
 
-  // Additional directories
   const internalSpaceDir = getAgentInternalSpaceDir(agentName, hibossDir);
-  const daemonDir = path.join(hibossDir, DEFAULT_DAEMON_DIRNAME);
   args.push("--add-dir", internalSpaceDir);
-  args.push("--add-dir", daemonDir);
 
   if (session.model) {
     args.push("--model", session.model);
@@ -77,7 +70,6 @@ function buildCodexArgs(
   agentName: string,
 ): string[] {
   const internalSpaceDir = getAgentInternalSpaceDir(agentName, hibossDir);
-  const daemonDir = path.join(hibossDir, DEFAULT_DAEMON_DIRNAME);
 
   // Config overrides (supported by both `codex exec` and `codex exec resume`).
   // NOTE: We intentionally pass `developer_instructions` on every turn so resume
@@ -93,7 +85,6 @@ function buildCodexArgs(
   if (session.sessionId) {
     const resumeArgs: string[] = ["exec", "resume", "--json", "--skip-git-repo-check"];
 
-    // `codex exec resume` does not accept -C/--cd, -s/--sandbox, or --add-dir.
     // Always bypass approvals and sandboxing for reliable agent operation.
     resumeArgs.push("--dangerously-bypass-approvals-and-sandbox");
 
@@ -108,7 +99,6 @@ function buildCodexArgs(
 
   // Additional directories (only supported on fresh `codex exec`).
   freshArgs.push("--add-dir", internalSpaceDir);
-  freshArgs.push("--add-dir", daemonDir);
 
   freshArgs.push(...configArgs, ...modelArgs, turnInput);
   return freshArgs;

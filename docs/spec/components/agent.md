@@ -93,7 +93,7 @@ Each agent has a home directory for persona and memory files. Provider CLIs use 
 ```
 ~/hiboss/agents/<agent-name>/
 ├── SOUL.md              # Persona placeholder (created empty; not rendered in minimal system prompt)
-└── internal_space/      # Agent's private space, automatically added into additional directories
+└── internal_space/      # Agent's private space
     └── MEMORY.md        # Agent long-term memory (auto-injected into system prompt; truncated)
     └── memories/        # Per-agent daily memory files (YYYY-MM-DD.md; not always injected)
 ```
