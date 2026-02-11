@@ -1,5 +1,3 @@
-import type { MemoryModelMode, ResolvedMemoryModelConfig } from "../../memory-model.js";
-
 /**
  * Setup configuration collected from user / config file.
  */
@@ -27,6 +25,4 @@ export interface SetupConfig {
     adapterBossId: string;
   };
   bossToken: string;
-  memory?: ResolvedMemoryModelConfig;
-  memorySelection?: { mode: MemoryModelMode; modelPath?: string };
 }

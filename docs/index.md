@@ -46,7 +46,6 @@ CLI topics (details):
 - `docs/spec/cli/cron.md`
 - `docs/spec/cli/reactions.md`
 - `docs/spec/cli/agents.md`
-- `docs/spec/cli/memory.md`
 
 Adapters:
 - `docs/spec/adapters/telegram.md` — Telegram adapter behavior and message schema

@@ -104,6 +104,7 @@ Hi-Boss stores optional agent files under its state directory (default `~/hiboss
 
 - `~/hiboss/BOSS.md` — boss profile placeholder (created empty by setup; not rendered in the minimal system prompt)
 - `~/hiboss/agents/<agent-name>/SOUL.md` — persona placeholder (created empty; not rendered in the minimal system prompt)
-- `~/hiboss/agents/<agent-name>/internal_space/MEMORY.md` — auto-injected long-term memory (truncated; default max 36,000 chars; rendered as fenced text when non-empty)
+- `~/hiboss/agents/<agent-name>/internal_space/MEMORY.md` — auto-injected long-term memory (truncated; rendered as fenced text when non-empty)
+- `~/hiboss/agents/<agent-name>/internal_space/memories/` — per-agent daily memory files (`YYYY-MM-DD.md`)
 
-Note: the system prompt is intentionally minimal; most guidance should live in CLI `--help` output and semantic memory.
+Note: the system prompt is intentionally minimal; prefer concise, durable guidance in `internal_space/MEMORY.md` and short daily logs in `internal_space/memories/`.

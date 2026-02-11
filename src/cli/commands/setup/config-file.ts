@@ -1,6 +1,5 @@
 import * as fs from "fs";
 import * as path from "path";
-import { getDefaultConfig } from "../../../daemon/daemon.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../../shared/validation.js";
 import { parseDailyResetAt, parseDurationToMs } from "../../../shared/session-policy.js";
 import {
@@ -10,8 +9,7 @@ import {
   getDefaultSetupBossName,
   getDefaultSetupWorkspace,
 } from "../../../shared/defaults.js";
-import { resolveAndValidateMemoryModel, type MemoryModelMode, type ResolvedMemoryModelConfig } from "../../memory-model.js";
-import { checkSetupStatus, executeSetup, normalizeMemoryConfig } from "./core.js";
+import { checkSetupStatus, executeSetup } from "./core.js";
 import type { SetupConfig } from "./types.js";
 import { isPlainObject } from "./utils.js";
 
@@ -21,10 +19,6 @@ interface SetupConfigFileV1 {
   "boss-timezone"?: string;
   "boss-token": string;
   provider: "claude" | "codex";
-  memory?: {
-    mode?: "default" | "local";
-    "model-path"?: string;
-  };
   agent: {
     name?: string;
     description?: string;
@@ -71,6 +65,9 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
 
   if (Object.prototype.hasOwnProperty.call(parsed, "provider-source-home")) {
     throw new Error("Invalid setup config (provider-source-home is no longer supported)");
+  }
+  if (Object.prototype.hasOwnProperty.call(parsed, "memory")) {
+    throw new Error("Invalid setup config (memory is no longer supported)");
   }
 
   const bossToken = typeof parsed["boss-token"] === "string" ? parsed["boss-token"].trim() : "";
@@ -270,17 +267,6 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
     bossToken,
   };
 
-  const memoryRaw = (parsed as Record<string, unknown>).memory;
-  if (isPlainObject(memoryRaw)) {
-    const modeRaw = memoryRaw.mode;
-    const mode: MemoryModelMode =
-      modeRaw === "local" || modeRaw === "default" ? modeRaw : "default";
-    const modelPathRaw = memoryRaw["model-path"];
-    const modelPath =
-      typeof modelPathRaw === "string" && modelPathRaw.trim() ? modelPathRaw.trim() : undefined;
-    config.memorySelection = { mode, modelPath };
-  }
-
   return config;
 }
 
@@ -323,16 +309,6 @@ export async function runConfigFileSetup(options: ConfigFileSetupOptions): Promi
     process.exit(1);
   }
 
-  // Resolve semantic memory model from config file (best-effort; setup still completes if it fails).
-  const daemonConfig = getDefaultConfig();
-  const sel = config.memorySelection ?? { mode: "default" as const };
-  config.memory = await resolveAndValidateMemoryModel({
-    daemonDir: daemonConfig.daemonDir,
-    mode: sel.mode,
-    modelPath: sel.modelPath,
-  });
-  const memory: ResolvedMemoryModelConfig = normalizeMemoryConfig(config);
-
   try {
     const agentToken = await executeSetup(config);
 
@@ -348,7 +324,6 @@ export async function runConfigFileSetup(options: ConfigFileSetupOptions): Promi
     console.log(
       `   model:       ${config.agent.model === null ? "(provider default)" : config.agent.model}`
     );
-    console.log(`   memory-enabled: ${memory.enabled ? "true" : "false"}`);
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("\n⚠️  Save the agent token and boss token! They won't be shown again.\n");
 

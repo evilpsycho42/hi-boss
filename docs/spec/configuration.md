@@ -29,7 +29,6 @@ Built-in defaults are centralized in:
 - Envelopes: `docs/spec/cli/envelopes.md`
 - Cron: `docs/spec/cli/cron.md`
 - Reactions: `docs/spec/cli/reactions.md`
-- Memory: `docs/spec/cli/memory.md`
 
 ---
 

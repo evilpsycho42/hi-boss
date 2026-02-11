@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { HiBossDatabase } from "../src/daemon/db/database.js";
 import { buildCliEnvelopePromptContext, buildSystemPromptContext, buildTurnPromptContext } from "../src/shared/prompt-context.js";
 import { renderPrompt } from "../src/shared/prompt-renderer.js";
-import { ensureAgentInternalSpaceLayout, readAgentInternalMemorySnapshot } from "../src/shared/internal-space.js";
+import { ensureAgentInternalSpaceLayout, readAgentInternalDailyMemorySnapshot, readAgentInternalMemorySnapshot } from "../src/shared/internal-space.js";
 
 import { createExampleFixture } from "./examples/fixtures.js";
 
@@ -94,6 +94,9 @@ async function main(): Promise<void> {
           spaceContext.note = "";
           spaceContext.noteFence = "```";
           spaceContext.error = ensured.error;
+          spaceContext.daily = "";
+          spaceContext.dailyFence = "```";
+          spaceContext.dailyError = ensured.error;
         } else {
           const snapshot = readAgentInternalMemorySnapshot({ hibossDir: fixture.hibossDir, agentName: agent.name });
           if (snapshot.ok) {
@@ -104,6 +107,17 @@ async function main(): Promise<void> {
             spaceContext.note = "";
             spaceContext.noteFence = "```";
             spaceContext.error = snapshot.error;
+          }
+
+          const dailySnapshot = readAgentInternalDailyMemorySnapshot({ hibossDir: fixture.hibossDir, agentName: agent.name });
+          if (dailySnapshot.ok) {
+            spaceContext.daily = dailySnapshot.note;
+            spaceContext.dailyFence = chooseFence(dailySnapshot.note);
+            spaceContext.dailyError = "";
+          } else {
+            spaceContext.daily = "";
+            spaceContext.dailyFence = "```";
+            spaceContext.dailyError = dailySnapshot.error;
           }
         }
 

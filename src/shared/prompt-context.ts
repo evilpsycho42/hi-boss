@@ -8,7 +8,12 @@ import { formatUnixMsAsTimeZoneOffset } from "./time.js";
 import { getDaemonIanaTimeZone } from "./timezone.js";
 import { HIBOSS_TOKEN_ENV } from "./env.js";
 import { getAgentDir, getHiBossDir } from "../agent/home-setup.js";
-import { DEFAULT_AGENT_PROVIDER } from "./defaults.js";
+import {
+  DEFAULT_AGENT_PROVIDER,
+  DEFAULT_MEMORY_LONGTERM_MAX_CHARS,
+  DEFAULT_MEMORY_SHORTTERM_DAYS,
+  DEFAULT_MEMORY_SHORTTERM_PER_DAY_MAX_CHARS,
+} from "./defaults.js";
 import { formatTelegramMessageIdCompact } from "./telegram-message-id.js";
 import { formatShortId } from "./id-format.js";
 
@@ -276,7 +281,14 @@ export function buildSystemPromptContext(params: {
     internalSpace: {
       note: "",
       noteFence: "```",
+      daily: "",
+      dailyFence: "```",
       error: "",
+      dailyError: "",
+      longtermMaxChars: DEFAULT_MEMORY_LONGTERM_MAX_CHARS,
+      dailyRecentFiles: DEFAULT_MEMORY_SHORTTERM_DAYS,
+      dailyPerFileMaxChars: DEFAULT_MEMORY_SHORTTERM_PER_DAY_MAX_CHARS,
+      dailyMaxChars: DEFAULT_MEMORY_SHORTTERM_PER_DAY_MAX_CHARS * DEFAULT_MEMORY_SHORTTERM_DAYS,
     },
     boss: {
       name: params.boss?.name ?? "",
