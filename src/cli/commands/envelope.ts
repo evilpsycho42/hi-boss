@@ -40,6 +40,8 @@ export interface ListEnvelopesOptions {
   to?: string;
   from?: string;
   status: "pending" | "done";
+  createdAfter?: string;
+  createdBefore?: string;
   limit?: number;
 }
 
@@ -205,6 +207,8 @@ export async function listEnvelopes(options: ListEnvelopesOptions): Promise<void
       to: options.to,
       from: options.from,
       status: options.status,
+      createdAfter: options.createdAfter,
+      createdBefore: options.createdBefore,
       limit: options.limit,
     });
 

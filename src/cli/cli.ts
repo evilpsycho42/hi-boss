@@ -10,6 +10,7 @@ import {
   listEnvelopes,
   threadEnvelope,
   createCron,
+  explainCron,
   listCrons,
   enableCron,
   disableCron,
@@ -184,6 +185,14 @@ envelope
     "--status <status>",
     "pending or done (note: --from + pending ACKs what is returned; marks done)"
   )
+  .option(
+    "--created-after <time>",
+    "Filter by created-at >= time (ISO 8601 or relative: +2h, +30m, +1Y2M, -15m; units: Y/M/D/h/m/s)"
+  )
+  .option(
+    "--created-before <time>",
+    "Filter by created-at <= time (ISO 8601 or relative: +2h, +30m, +1Y2M, -15m; units: Y/M/D/h/m/s)"
+  )
   .option("-n, --limit <n>", "Maximum number of results (default 10, max 50)", parseInt, 10)
   .addHelpText(
     "after",
@@ -195,6 +204,8 @@ envelope
       to: options.to,
       from: options.from,
       status: options.status as "pending" | "done",
+      createdAfter: options.createdAfter,
+      createdBefore: options.createdBefore,
       limit: options.limit,
     });
   });
@@ -236,6 +247,25 @@ cron
       textFile: options.textFile,
       attachment: options.attachment,
       parseMode: options.parseMode,
+    });
+  });
+
+cron
+  .command("explain")
+  .description("Explain a cron expression by showing upcoming run times")
+  .requiredOption(
+    "--cron <expr>",
+    "Cron expression (5-field or 6-field with seconds; supports @daily, @hourly, ...)"
+  )
+  .option("--timezone <iana>", "IANA timezone (defaults to boss timezone)")
+  .option("--count <n>", "Number of upcoming runs to show (default 5, max 20)", parseInt, 5)
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN; only needed when --timezone is omitted)")
+  .action((options) => {
+    explainCron({
+      cron: options.cron,
+      timezone: options.timezone,
+      count: options.count,
+      token: options.token,
     });
   });
 

@@ -123,6 +123,13 @@ Notes:
 `hiboss cron create` prints:
 - `cron-id: <cron-id>` (short id; derived from the internal cron schedule UUID)
 
+`hiboss cron explain` prints:
+- `cron:`
+- `timezone:`
+- `count:`
+- `evaluated-at:`
+- `next-run-1:` ... `next-run-N:`
+
 `hiboss cron enable|disable|delete` print:
 - `success: true|false`
 - `cron-id: <cron-id>` (short id; derived from the internal cron schedule UUID)
@@ -197,7 +204,9 @@ Clearing nullable overrides:
   - `description:` (always; generated default when omitted; may be empty string)
   - `workspace:` (`(none)` when unset)
   - `token:` (printed once; there is no “show token” command)
+  - `dry-run: true` (only when `--dry-run` is set)
 - In `hiboss agent register` output, `workspace: (none)` means no explicit override is stored; effective runtime workspace falls back to the user's home directory.
+- In `hiboss agent register --dry-run`, `token:` is rendered as `(dry-run)` and no agent/token is persisted.
 - First-time interactive `hiboss setup` prints setup summary keys including:
   - `daemon-timezone: <iana>`
   - `boss-timezone: <iana>`

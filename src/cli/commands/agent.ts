@@ -15,8 +15,9 @@ export { setAgentSessionPolicy } from "./agent-session-policy.js";
 export type { SetAgentSessionPolicyOptions } from "./agent-session-policy.js";
 
 interface RegisterAgentResult {
+  dryRun?: boolean;
   agent: Omit<Agent, "token">;
-  token: string;
+  token?: string;
 }
 
 interface AgentWithBindings extends Omit<Agent, "token"> {
@@ -57,6 +58,7 @@ export interface RegisterAgentOptions {
   metadataFile?: string;
   bindAdapterType?: string;
   bindAdapterToken?: string;
+  dryRun?: boolean;
 }
 
 export interface DeleteAgentOptions {
@@ -131,13 +133,24 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
       sessionMaxContextLength: options.sessionMaxContextLength,
       bindAdapterType: options.bindAdapterType,
       bindAdapterToken: options.bindAdapterToken,
+      dryRun: Boolean(options.dryRun),
     });
 
+    if (result.dryRun) {
+      console.log("dry-run: true");
+    }
     console.log(`name: ${result.agent.name}`);
     console.log(`role: ${result.agent.role ?? "(missing)"}`);
     console.log(`description: ${result.agent.description ?? "(none)"}`);
     console.log(`workspace: ${result.agent.workspace ?? "(none)"}`);
-    console.log(`token: ${result.token}`);
+    if (result.dryRun) {
+      console.log("token: (dry-run)");
+    } else {
+      if (typeof result.token !== "string" || !result.token.trim()) {
+        throw new Error("Registration succeeded but token was not returned");
+      }
+      console.log(`token: ${result.token}`);
+    }
   } catch (err) {
     console.error("error:", (err as Error).message);
     process.exit(1);

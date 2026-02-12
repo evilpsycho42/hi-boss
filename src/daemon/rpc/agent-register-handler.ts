@@ -6,7 +6,7 @@ import type { Agent } from "../../agent/types.js";
 import { isValidAgentName, AGENT_NAME_ERROR_MESSAGE } from "../../shared/validation.js";
 import { parseDailyResetAt, parseDurationToMs } from "../../shared/session-policy.js";
 import { setupAgentHome } from "../../agent/home-setup.js";
-import { BACKGROUND_AGENT_NAME } from "../../shared/defaults.js";
+import { BACKGROUND_AGENT_NAME, getDefaultAgentDescription } from "../../shared/defaults.js";
 import { isPermissionLevel } from "../../shared/permissions.js";
 import { isAgentRole } from "../../shared/agent-role.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
@@ -55,6 +55,10 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid role (expected speaker or leader)");
       }
       const role: "speaker" | "leader" = p.role;
+      if (p.dryRun !== undefined && typeof p.dryRun !== "boolean") {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid dry-run");
+      }
+      const isDryRun = Boolean(p.dryRun);
 
       const bindAdapterType = p.bindAdapterType;
       const bindAdapterToken = p.bindAdapterToken;
@@ -170,6 +174,33 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
           rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-max-context-length (must be > 0)");
         }
         sessionPolicy.maxContextLength = Math.trunc(p.sessionMaxContextLength);
+      }
+
+      if (isDryRun) {
+        const normalizedName = p.name.trim();
+        const normalizedDescription =
+          typeof p.description === "string"
+            ? p.description
+            : getDefaultAgentDescription(normalizedName);
+        const normalizedWorkspace = typeof p.workspace === "string" ? p.workspace : undefined;
+
+        logEvent("info", "agent-register", {
+          actor: principal.kind,
+          "agent-name": normalizedName,
+          state: "dry-run",
+          "duration-ms": Date.now() - startedAtMs,
+        });
+
+        return {
+          dryRun: true,
+          agent: {
+            name: normalizedName,
+            role,
+            description: normalizedDescription,
+            workspace: normalizedWorkspace,
+            createdAt: Date.now(),
+          },
+        };
       }
 
       const result = ctx.db.registerAgent({

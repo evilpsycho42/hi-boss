@@ -18,6 +18,25 @@ import { BACKGROUND_AGENT_NAME } from "../../shared/defaults.js";
 import { resolveEnvelopeIdInput } from "./resolve-envelope-id.js";
 import type { Envelope } from "../../envelope/types.js";
 
+function parseEnvelopeListTimeBoundary(params: {
+  raw: unknown;
+  flag: "created-after" | "created-before";
+  bossTimezone: string;
+}): number | undefined {
+  const raw = params.raw;
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== "string" || !raw.trim()) {
+    rpcError(RPC_ERRORS.INVALID_PARAMS, `Invalid ${params.flag}`);
+  }
+  try {
+    return parseDateTimeInputToUnixMsInTimeZone(raw, params.bossTimezone);
+  } catch (err) {
+    const rawMessage = err instanceof Error ? err.message : String(err);
+    const message = rawMessage.replace(/^Invalid deliver-at:/, `Invalid ${params.flag}:`);
+    rpcError(RPC_ERRORS.INVALID_PARAMS, message);
+  }
+}
+
 /**
  * Create envelope RPC handlers.
  */
@@ -215,6 +234,28 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
       return n;
     })();
 
+    const bossTimezone = ctx.db.getBossTimezone();
+    const createdAfter = parseEnvelopeListTimeBoundary({
+      raw: p.createdAfter,
+      flag: "created-after",
+      bossTimezone,
+    });
+    const createdBefore = parseEnvelopeListTimeBoundary({
+      raw: p.createdBefore,
+      flag: "created-before",
+      bossTimezone,
+    });
+    if (
+      typeof createdAfter === "number" &&
+      typeof createdBefore === "number" &&
+      createdAfter > createdBefore
+    ) {
+      rpcError(
+        RPC_ERRORS.INVALID_PARAMS,
+        "Invalid created range (expected created-after <= created-before)"
+      );
+    }
+
     const isIncoming = Boolean(rawFrom);
     const shouldAckIncomingPending = isIncoming && p.status === "pending";
 
@@ -227,6 +268,8 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
       status: p.status,
       limit,
       dueOnly: shouldAckIncomingPending,
+      createdAfter,
+      createdBefore,
     });
 
     if (shouldAckIncomingPending && envelopes.length > 0) {

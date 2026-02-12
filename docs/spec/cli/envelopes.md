@@ -81,7 +81,12 @@ Flags:
   - `--to <address>`: list envelopes sent **by this agent** to `<address>`
   - `--from <address>`: list envelopes sent **to this agent** from `<address>`
 - `--status <pending|done>` (required)
+- `--created-after <time>` (optional; filter `created-at >= time`; ISO 8601 or relative `+2h`, `+30m`, `+1Y2M`, `-15m`; units: `Y/M/D/h/m/s`)
+- `--created-before <time>` (optional; filter `created-at <= time`; same format as `--created-after`)
 - `-n, --limit <n>` (default: `10`, max: `50`)
+
+Validation:
+- If both date filters are present, `created-after` must be less than or equal to `created-before`.
 
 Default permission:
 - `restricted`
