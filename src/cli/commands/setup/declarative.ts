@@ -73,10 +73,10 @@ function buildDefaultDeclarativeConfig(): SetupDeclarativeConfig {
         ],
       },
       {
-        name: "leader",
+        name: "kai",
         role: "leader",
         provider: "claude",
-        description: getDefaultAgentDescription("leader"),
+        description: getDefaultAgentDescription("kai"),
         workspace,
         model: null,
         reasoningEffort: null,

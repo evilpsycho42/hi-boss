@@ -34,7 +34,7 @@ Interactive defaults:
 - `speaker.permission-level`: `standard`
 - `speaker.model`: `null` (provider default)
 - `speaker.reasoning-effort`: `null` (provider default)
-- `leader.name`: `leader`
+- `leader.name`: `kai`
 - `leader.workspace`: speaker workspace
 - `leader.permission-level`: speaker value
 - `leader.model`: `null` (provider default)
@@ -163,7 +163,7 @@ Invariants:
       ]
     },
     {
-      "name": "leader",
+      "name": "kai",
       "role": "leader",
       "provider": "claude",
       "description": "A reliable and collaborative professional...",

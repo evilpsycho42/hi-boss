@@ -164,7 +164,7 @@ export async function runInteractiveSetup(): Promise<void> {
   const leaderAgentName = (
     await input({
       message: "Leader agent name (slug):",
-      default: "leader",
+      default: "kai",
       validate: (value) => {
         const name = value.trim();
         if (!isValidAgentName(name)) return AGENT_NAME_ERROR_MESSAGE;
