@@ -12,7 +12,7 @@
 
 ## 赞助
 
-[![YesCode logo](docs/assets/sponsors/yescode-logo.png)](https://co.yes.vg/register?ref=KKYC1Z0)
+[![YesCode logo](/evilpsycho42/hi-boss/blob/main/docs/assets/sponsors/yescode-logo.png?raw=1)](https://co.yes.vg/register?ref=KKYC1Z0)
 
 YesCode 是稳定可靠、价格合理的 Claude Code/Codex 中转服务提供商。
 
