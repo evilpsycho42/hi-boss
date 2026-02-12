@@ -25,6 +25,7 @@ import { parseDailyResetAt, parseDurationToMs } from "../../shared/session-polic
 import {
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
+  getDefaultRuntimeWorkspace,
 } from "../../shared/defaults.js";
 import { createAgentRegisterHandler } from "./agent-register-handler.js";
 import { parseAgentRoleFromMetadata, resolveAgentRole } from "../../shared/agent-role.js";
@@ -108,7 +109,7 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
 
       const effectiveProvider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
       const effectivePermissionLevel = agent.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL;
-      const effectiveWorkspace = agent.workspace ?? process.cwd();
+      const effectiveWorkspace = agent.workspace ?? getDefaultRuntimeWorkspace();
 
       const isBusy = ctx.executor.isAgentBusy(agent.name);
       const pendingCount = ctx.db.countDuePendingEnvelopesForAgent(agent.name);
@@ -341,7 +342,7 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
       ctx.db.updateAgentLastSeen(agent.name);
 
       const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
-      const workspace = agent.workspace ?? process.cwd();
+      const workspace = agent.workspace ?? getDefaultRuntimeWorkspace();
       const reasoningEffort = agent.reasoningEffort;
 
       return {

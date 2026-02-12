@@ -135,12 +135,8 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
 
     console.log(`name: ${result.agent.name}`);
     console.log(`role: ${result.agent.role ?? "(missing)"}`);
-    if (result.agent.description) {
-      console.log(`description: ${result.agent.description}`);
-    }
-    if (result.agent.workspace) {
-      console.log(`workspace: ${result.agent.workspace}`);
-    }
+    console.log(`description: ${result.agent.description ?? "(none)"}`);
+    console.log(`workspace: ${result.agent.workspace ?? "(none)"}`);
     console.log(`token: ${result.token}`);
   } catch (err) {
     console.error("error:", (err as Error).message);

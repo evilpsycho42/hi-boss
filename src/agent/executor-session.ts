@@ -10,6 +10,7 @@ import type { HiBossDatabase } from "../daemon/db/database.js";
 import { generateSystemInstructions } from "./instruction-generator.js";
 import {
   DEFAULT_AGENT_PROVIDER,
+  getDefaultRuntimeWorkspace,
 } from "../shared/defaults.js";
 import { errorMessage, logEvent } from "../shared/daemon-log.js";
 import {
@@ -94,7 +95,7 @@ export async function getOrCreateAgentSession(params: {
       persisted?.handle.sessionId && (persisted.provider === "claude" || persisted.provider === "codex")
         ? persisted.provider
         : desiredProvider;
-    const workspace = params.agent.workspace ?? process.cwd();
+    const workspace = params.agent.workspace ?? getDefaultRuntimeWorkspace();
     const codexCumulativeUsageTotals =
       provider === "codex"
         ? parseCodexCumulativeUsageTotals(persisted?.handle.metadata?.codexCumulativeUsage)

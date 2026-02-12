@@ -6,6 +6,7 @@ import {
   BACKGROUND_AGENT_NAME,
   DEFAULT_AGENT_PROVIDER,
   DEFAULT_BACKGROUND_MAX_CONCURRENT,
+  getDefaultRuntimeWorkspace,
 } from "../shared/defaults.js";
 import { errorMessage, logEvent } from "../shared/daemon-log.js";
 import { executeBackgroundPrompt } from "./background-turn.js";
@@ -116,7 +117,10 @@ export class BackgroundExecutor {
     }
 
     const provider = senderAgent.provider ?? DEFAULT_AGENT_PROVIDER;
-    const workspace = this.resolveWorkspace(envelope, senderAgent.workspace?.trim() || process.cwd());
+    const workspace = this.resolveWorkspace(
+      envelope,
+      senderAgent.workspace?.trim() || getDefaultRuntimeWorkspace()
+    );
     const prompt = buildBackgroundPrompt(envelope);
 
     logEvent("info", "background-job-start", {

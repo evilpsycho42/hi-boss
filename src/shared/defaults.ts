@@ -75,8 +75,12 @@ export function getDefaultSetupBossName(): string {
   return os.userInfo().username;
 }
 
-export function getDefaultSetupWorkspace(): string {
+export function getDefaultRuntimeWorkspace(): string {
   return os.homedir();
+}
+
+export function getDefaultSetupWorkspace(): string {
+  return getDefaultRuntimeWorkspace();
 }
 
 // ==================== Permissions ====================

@@ -8,7 +8,7 @@ import { formatUnixMsAsTimeZoneOffset } from "./time.js";
 import { getDaemonIanaTimeZone } from "./timezone.js";
 import { HIBOSS_TOKEN_ENV } from "./env.js";
 import { getAgentDir, getHiBossDir } from "../agent/home-setup.js";
-import { DEFAULT_AGENT_PROVIDER } from "./defaults.js";
+import { DEFAULT_AGENT_PROVIDER, getDefaultRuntimeWorkspace } from "./defaults.js";
 import { formatShortId } from "./id-format.js";
 import { parseAgentRoleFromMetadata } from "./agent-role.js";
 
@@ -238,7 +238,7 @@ export function buildSystemPromptContext(params: {
   const workspaceDir =
     params.agent.workspace && params.agent.workspace.trim()
       ? params.agent.workspace.trim()
-      : process.cwd();
+      : getDefaultRuntimeWorkspace();
 
   const hibossFiles = readHiBossCustomizationFiles(hibossDir);
   const agentFiles = readAgentCustomizationFiles({ hibossDir, agentName: params.agent.name });
