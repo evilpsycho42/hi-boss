@@ -176,6 +176,7 @@ Agent defaults:
 - `hiboss agent register --role speaker` requires adapter binding flags (`--bind-adapter-type` + `--bind-adapter-token`).
 - System prompt rendering requires `agent.role`; missing role metadata is a hard error.
 - `agent.model` and `agent.reasoningEffort` are nullable overrides; `NULL` means provider defaults.
+- `agent.workspace` is a nullable override; `NULL` means no explicit workspace is stored. Runtime fallback resolves to the user's home directory.
 - `agent.permissionLevel` defaults to `standard` when not specified.
 - On `hiboss agent set`, switching provider without passing `--model` / `--reasoning-effort` clears both overrides to `NULL`.
 - `hiboss agent set` rejects role or binding mutations that would violate required role coverage (`>=1 speaker` and `>=1 leader`).
@@ -190,7 +191,13 @@ Clearing nullable overrides:
 
 ### CLI Output Keys
 
-- `hiboss agent register` prints `token:` once (there is no “show token” command).
+- `hiboss agent register` prints:
+  - `name:`
+  - `role:`
+  - `description:` (always; generated default when omitted; may be empty string)
+  - `workspace:` (`(none)` when unset)
+  - `token:` (printed once; there is no “show token” command)
+- In `hiboss agent register` output, `workspace: (none)` means no explicit override is stored; effective runtime workspace falls back to the user's home directory.
 - First-time interactive `hiboss setup` prints setup summary keys including:
   - `daemon-timezone: <iana>`
   - `boss-timezone: <iana>`

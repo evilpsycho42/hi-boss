@@ -15,9 +15,9 @@ Core (top-level):
 - `docs/spec/architecture.md` — system architecture + invariants
 - `docs/spec/envelope.md` — envelope concept, lifecycle, and semantics
 - `docs/spec/conventions.md` — naming, IDs, boss marker
-- `docs/spec/definitions.md` — field mappings (TypeScript ↔ SQLite ↔ CLI output keys)
+- `docs/spec/definitions.md` — field mappings (TypeScript <-> SQLite <-> CLI output keys)
 - `docs/spec/cli.md` — CLI index (command summary + links to topic specs)
-- `docs/spec/ipc.md` — CLI ↔ daemon IPC (JSON-RPC over local socket)
+- `docs/spec/ipc.md` — CLI <-> daemon IPC (JSON-RPC over local socket)
 - `docs/spec/configuration.md` — config sources, persistence, permission policy
 - `docs/spec/compatibility.md` — preserved legacy behavior for safe upgrades
 
@@ -40,8 +40,18 @@ CLI topics (details):
 Adapters:
 - `docs/spec/adapters/telegram.md` — Telegram adapter behavior and message schema
 
-Providers:
-- `docs/spec/provider-clis.md` — provider CLI invocation, token usage, and recorded experiments
+Providers (canonical behavior):
+- `docs/spec/provider-clis.md` — provider CLI invocation and token usage semantics
+
+## Experiments
+
+- `docs/experiments/index.md` — experiment index
+- `docs/experiments/provider-clis/manual-experiments.md` — dated provider CLI experiments and gotchas
+
+## References
+
+- `docs/refs/index.md` — reference index
+- `docs/refs/providers/README.md` — provider CLI third-party references
 
 ## Generated
 

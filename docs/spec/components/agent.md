@@ -212,7 +212,7 @@ Behavior (canonical):
 - **Runtime permissions**: runs in the same non-interactive full-access mode as normal agent turns:
   - Codex: `--dangerously-bypass-approvals-and-sandbox`
   - Claude: `--permission-mode bypassPermissions`
-- **Config inheritance**: provider/model/reasoning-effort/workspace default to the **sender agent’s** settings.
+- **Config inheritance**: provider/model/reasoning-effort/workspace default to the **sender agent’s** settings. If sender workspace is unset, effective workspace falls back to the user's home directory.
 - **Feedback (best-effort)**: for valid sender agents, the daemon sends a feedback envelope back to the sender:
   - `from: agent:background`
   - `to: agent:<sender>`

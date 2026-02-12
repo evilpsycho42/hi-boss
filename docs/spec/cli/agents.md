@@ -25,9 +25,12 @@ Flags:
   - `--session-idle-timeout <duration>` (units: `d/h/m/s`)
   - `--session-max-context-length <n>`
 
-Defaults (when flags are omitted):
-- `provider`: none (required)
-- `role`: none (required)
+Behavior when flags are omitted:
+Required flags (validation error):
+- `provider`
+- `role`
+
+Optional flags (defaults):
 - `model`: provider default (`NULL` override)
 - `reasoning-effort`: provider default (`NULL` override)
 - `permission-level`: `standard`
@@ -46,9 +49,12 @@ Provider-home behavior follows `docs/spec/cli/conventions.md#provider-homes`.
 Output (parseable):
 - `name:`
 - `role:`
-- `description:` (optional)
-- `workspace:` (optional)
+- `description:` (always; generated default when omitted; may be empty string)
+- `workspace:` (`(none)` when unset)
 - `token:` (printed once)
+
+Note:
+- In `agent register` output, `workspace: (none)` means no explicit override is stored. Effective runtime workspace falls back to the user's home directory.
 
 ## `hiboss agent set`
 
@@ -162,6 +168,7 @@ Shows runtime status for a single agent (intended for operator UX and dashboards
 Notes:
 - Requires a token (agent or boss). The output must not include secrets (agent token, adapter token).
 - When called with an agent token, only `--name <self>` is allowed (agents cannot query other agents).
+- `workspace:` in status is the effective runtime workspace. If unset on the agent record, it falls back to the user's home directory.
 - `agent-state` is a **busy-ness** signal: `running` means the daemon currently has a queued or in-flight task for this agent (so replies may be delayed).
 - `role:` is shown when available (`speaker` or `leader`).
 - `agent-health` is derived from the most recent finished run: `ok` (last run completed or cancelled), `error` (last run failed), `unknown` (no finished runs yet).
