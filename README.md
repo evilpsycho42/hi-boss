@@ -1,5 +1,7 @@
 # Hi-Boss
 
+[中文说明](README.zh-CN.md)
+
 Orchestrate Codex / Claude Code agents from Telegram — with durable communication, editable memory, and non-blocking parallel execution.
 
 Highlights:
