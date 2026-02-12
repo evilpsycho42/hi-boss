@@ -158,6 +158,7 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 | `agent.reasoningEffort` | `reasoning_effort` | See `src/agent/types.ts` for allowed values; `NULL` means “use provider default reasoning effort” |
 | `agent.permissionLevel` | `permission_level` | `restricted`, `standard`, `privileged`, `boss` |
 | `agent.sessionPolicy` | `session_policy` | JSON (nullable) |
+| `agent.role` | `metadata.role` | `speaker` or `leader` (stored in metadata JSON) |
 | `agent.createdAt` | `created_at` | Unix epoch ms (UTC) |
 | `agent.lastSeenAt` | `last_seen_at` | Unix epoch ms (UTC) (nullable) |
 | `agent.metadata` | `metadata` | JSON (nullable) |
@@ -167,6 +168,8 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 `agent.metadata` is user-extensible, but Hi-Boss reserves some keys for internal state:
 
 - `metadata.sessionHandle`: persisted session resume handle (see `docs/spec/components/session.md`). This key is maintained by the daemon, preserved across `hiboss agent set --metadata-*` and `hiboss agent set --clear-metadata`, and ignored if provided by the user.
+- `metadata.role`: logical agent role (`speaker` or `leader`).
+- On daemon startup, legacy agents with missing/invalid `metadata.role` are backfilled from binding state and persisted (`bound => speaker`, `unbound => leader`).
 
 ### CLI
 
@@ -180,9 +183,15 @@ Provider homes:
 
 Agent defaults:
 - `hiboss agent register` requires `--provider` (`claude` or `codex`).
+- `hiboss agent register --role <speaker|leader>` is required and sets `agent.role` explicitly.
+- `hiboss agent register --role speaker` requires adapter binding flags (`--bind-adapter-type` + `--bind-adapter-token`).
+- System prompt rendering requires `agent.role`; missing role metadata is a hard error.
 - `agent.model` and `agent.reasoningEffort` are nullable overrides; `NULL` means provider defaults.
 - `agent.permissionLevel` defaults to `standard` when not specified.
 - On `hiboss agent set`, switching provider without passing `--model` / `--reasoning-effort` clears both overrides to `NULL`.
+- `hiboss agent set` rejects role or binding mutations that would violate required role coverage (`>=1 speaker` and `>=1 leader`).
+- Speakers must always have at least one binding.
+- On `hiboss agent set`, passing `--bind-adapter-type` + `--bind-adapter-token` for an already-bound adapter type replaces that type’s token for the agent (atomic replace).
 
 Clearing nullable overrides:
 - `hiboss agent set --model default` sets `agent.model = NULL` (provider default model)
@@ -193,11 +202,27 @@ Clearing nullable overrides:
 ### CLI Output Keys
 
 - `hiboss agent register` prints `token:` once (there is no “show token” command).
-- `hiboss setup` prints:
+- First-time interactive `hiboss setup` prints setup summary keys including:
   - `daemon-timezone: <iana>`
   - `boss-timezone: <iana>`
-- `hiboss setup` (interactive or `--config-file`) prints `agent-token:` once.
-- `hiboss setup` (interactive or `--config-file`) also prints `boss-token:` once.
+  - `speaker-agent-token:`
+  - `leader-agent-token:`
+  - `boss-token:`
+- `hiboss setup --config-file ... --dry-run` prints parseable diff keys including:
+  - `dry-run: true`
+  - `first-apply:`
+  - `current-agent-count:`
+  - `desired-agent-count:`
+  - `removed-agents:`
+  - `recreated-agents:`
+  - `new-agents:`
+  - `current-binding-count:`
+  - `desired-binding-count:`
+- `hiboss setup --config-file ...` (apply) prints the same summary keys with `dry-run: false`, plus per-agent token lines:
+  - `agent-name:`
+  - `agent-role:`
+  - `agent-token:` (printed once)
+- `hiboss setup export` never writes `boss-token` or `agent-token` into exported files.
 - `hiboss agent delete` prints:
   - `success: true|false`
   - `agent-name:`
@@ -246,7 +271,17 @@ Binding flags are on `hiboss agent set` (see `docs/spec/cli/agents.md`).
 `hiboss agent set` prints:
 - `success:`
 - `agent-name:`
-- `bindings:` (optional)
+- `role:`
+- `description:` (`(none)` when unset)
+- `workspace:` (`(none)` when unset)
+- `provider:` (`(none)` when unset)
+- `model:` (`default` when unset)
+- `reasoning-effort:` (`default` when unset)
+- `permission-level:`
+- `bindings:` (`(none)` when no bindings)
+- `session-daily-reset-at:` (optional)
+- `session-idle-timeout:` (optional)
+- `session-max-context-length:` (optional)
 
 ---
 
@@ -282,6 +317,10 @@ Command flags:
 - `start-time:` (boss timezone offset or `(none)`)
 - `adapters:`
 - `data-dir:`
+
+`hiboss daemon start` (startup failure path) may print:
+- `error:` (human-readable startup failure details; can include remediation guidance)
+- `log-file:`
 
 ---
 

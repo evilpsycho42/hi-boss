@@ -30,6 +30,12 @@ EOF
 - Agent↔agent and background tasks: when replying to another agent or assigning work to `agent:background`, you MUST include `--reply-to <envelope-id>` (the envelope you are responding to / delegating from) so the envelope thread is traceable.
 - Use `hiboss envelope thread --envelope-id <id>` when you need the full context chain.
 
+**Role-aware guidance (MVP):**
+- Speaker role: when delegating to a leader/background agent, first ensure task intent/constraints are clear; if needed fetch prior thread context via `hiboss envelope thread --envelope-id <id>`.
+- Leader role: before decomposition and verification, fetch complete thread context with `hiboss envelope thread --envelope-id <id>` when requirements or acceptance criteria are ambiguous.
+- Delegation protocol (speaker/leader): when you delegate long-running work, send an immediate acknowledgement to the requester in the current turn, then continue asynchronously.
+- Delegation protocol (speaker/leader): after delegated work finishes (leader/background feedback), send a final result update to the original requester; prefer linking with `--reply-to <original-request-envelope-id>` so the main task thread stays intact.
+
 **Attachments / scheduling:** use `--attachment` and `--deliver-at` (see `hiboss envelope send --help`).
 
 **Background jobs (`agent:background`):**
@@ -37,6 +43,8 @@ EOF
 - The daemon runs it without Hi-Boss tools/system prompt, so include all required context in your task text.
 - You will receive a feedback envelope back to you from `agent:background`.
 - Treat feedback envelopes `from: agent:background` as results; do not send an acknowledgement reply. If you need follow-up work, send a new `--to agent:background` envelope with full context (it has no memory).
+- If the background result is for delegated work you owe to another requester, you MUST forward a final update to that original requester (don't drop delegated results). Prefer `--reply-to <original-request-envelope-id>` to keep the main task thread intact.
+- If needed, use `hiboss envelope thread --envelope-id <id>` to recover the original requester and requirements before sending your final update.
 
 {% if hasTelegram %}
 **Formatting (Telegram):**

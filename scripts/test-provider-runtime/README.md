@@ -26,12 +26,12 @@ hiboss daemon stop --token "<boss-token>" || true
 rm -rf ~/hiboss
 ```
 
-3) Run setup using one of the templates:
+3) Run setup using one of the templates (pass the desired boss token via `--token`):
 
 ```bash
-hiboss setup --config-file scripts/test-provider-runtime/setup-default.codex.gpt-5.2.json
+hiboss setup --config-file scripts/test-provider-runtime/setup-default.codex.gpt-5.2.json --token "<boss-token>"
 # or:
-hiboss setup --config-file scripts/test-provider-runtime/setup-default.claude.sonnet.json
+hiboss setup --config-file scripts/test-provider-runtime/setup-default.claude.sonnet.json --token "<boss-token>"
 ```
 
 4) Start the daemon:
@@ -42,13 +42,14 @@ hiboss daemon start --token "<boss-token>"
 
 Notes:
 - The setup templates include a placeholder Telegram bot token. For envelope-only tests it’s OK to leave it as-is (Telegram will fail to launch but the daemon keeps running). If you want Telegram I/O, replace it with a real bot token.
+- The setup templates are config schema `version: 2` and intentionally do not include boss/agent tokens.
 - The templates configure semantic memory to use a local GGUF embedding model. Update the `memory.model-path` if you move the file.
 
 ## Optional: test both providers in one run
 
 If you want to validate **both** providers (Codex + Claude) against the Hi-Boss envelope system in the same `~/hiboss` instance:
 
-1) Run setup with one template (it creates one agent).
+1) Run setup with one template (it creates a speaker + leader baseline).
 2) Register the other provider agent:
 
 ```bash
@@ -79,4 +80,3 @@ Verify results (sink inbox should contain the new pending envelope):
 ```bash
 hiboss envelope list --token "<boss-token>" --address agent:test-sink --box inbox --status pending -n 50
 ```
-

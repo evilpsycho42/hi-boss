@@ -20,7 +20,6 @@ Tables (high level):
 - `boss_name`: boss display name used in prompts/templates
 - `boss_timezone`: boss timezone (IANA) used for displayed timestamps
 - `boss_token_hash`: hashed boss token (printed once by setup)
-- `default_provider`: `"claude"` or `"codex"` (written by setup; informational today)
 - `permission_policy`: JSON mapping operations → required permission level
 - `adapter_boss_id_<adapter-type>`: boss identity on an adapter (e.g., `adapter_boss_id_telegram`)
 - Semantic memory:

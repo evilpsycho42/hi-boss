@@ -10,123 +10,202 @@ See also:
 
 ## `hiboss setup`
 
-Runs the interactive first-time setup wizard (default).
+Runs the interactive first-time setup wizard.
 
 Behavior:
-- Initializes the SQLite database at `~/hiboss/.daemon/hiboss.db` (WAL sidecars like `hiboss.db-wal` / `hiboss.db-shm` may appear)
-- Creates the agent home directories under `~/hiboss/agents/<agent-name>/`
-- Creates an empty `~/hiboss/BOSS.md` placeholder (best-effort; not rendered in minimal system prompt)
-- Creates an empty `~/hiboss/agents/<agent-name>/SOUL.md` placeholder (best-effort)
-- Provider CLIs use shared default homes (`~/.claude` / `~/.codex`). Hi-Boss clears `CLAUDE_CONFIG_DIR` / `CODEX_HOME` when spawning provider processes, and does not create per-agent provider homes or import/copy provider config files.
-- Creates the first agent and prints `agent-token:` once (no “show token” command)
-- Prints `boss-token:` once
-- Prompts for `boss-timezone` (IANA) used for all displayed timestamps; defaults to the daemon host timezone
-- Configures and binds a Telegram adapter for the first agent
+- If setup is already healthy (`setup_completed=true`, at least one `speaker`, at least one `leader`, and valid speaker bindings), prints "Setup is already complete" and exits.
+- Interactive setup is **bootstrap-only**. If persisted state already exists but is invalid/incomplete, interactive repair is not used.
+- For invalid/incomplete persisted state, users must use config export/apply flow:
+  1. `hiboss setup export`
+  2. edit JSON
+  3. `hiboss setup --config-file <path> --token <boss-token> --dry-run`
+  4. `hiboss setup --config-file <path> --token <boss-token>`
+- Initializes SQLite at `~/hiboss/.daemon/hiboss.db` (WAL sidecars may appear).
+- Creates agent home directories under `~/hiboss/agents/<agent-name>/`.
+- Creates empty `~/hiboss/BOSS.md` (best-effort).
+- Creates one `speaker` and one `leader`.
+- Prints speaker/leader/boss tokens once.
 
-Interactive defaults (when you press Enter):
-- `provider`: no default; required input (`claude` or `codex`)
-- `boss-name`: current OS username
+Interactive defaults:
+- `boss-name`: OS username
 - `boss-timezone`: daemon host timezone (IANA)
-- `agent.name`: `nex`
-- `agent.description`: generated default description
+- `agent.name` (speaker): `nex`
 - `agent.workspace`: user home directory
-- `agent.model`: `null` (use provider default)
-- `agent.reasoning-effort`: `null` (use provider default)
 - `agent.permission-level`: `standard`
-- `session-policy`: unset
-- `metadata`: unset
-- `memory.mode`: `default` (download default embedding model)
-
-## `hiboss setup --config-file <path>`
-
-Runs non-interactive setup from a JSON file (no prompts; errors on invalid/missing fields):
-
-- `--config-file <path>` (required)
-
-Usage:
-- `hiboss setup --config-file setup.json`
-
-Config file must include:
-- `version: 1`
-- `boss-token: <token>`
-- `provider: <claude|codex>`
-- `boss-timezone: <iana>` (optional; defaults to daemon host timezone)
-- `agent: { ... }`
-- `telegram: { adapter-token, adapter-boss-id }`
-
-Optional:
-- `memory: { mode, model-path }`
-  - `mode`: `default` (download the default embedding model) or `local` (use a local GGUF)
-  - `model-path`: required when `mode: local` (absolute path to a `.gguf`)
-
-Config-file defaults (when omitted):
-- `boss-name`: current OS username
-- `boss-timezone`: daemon host timezone (IANA)
-- `agent.name`: `nex`
-- `agent.description`: generated default description
-- `agent.workspace`: user home directory
-- `agent.model`: `null` (use provider default)
-- `agent.reasoning-effort`: `null` (use provider default)
-- `agent.permission-level`: `standard`
+- `leader.name`: `leader`
+- `leader.workspace`: speaker workspace
 - `memory.mode`: `default`
 
-Example (`setup.json`):
+## `hiboss setup export`
+
+Exports the current setup configuration to JSON schema `version: 2`.
+
+Usage:
+- `hiboss setup export`
+- `hiboss setup export --out /path/to/config.json`
+
+Defaults:
+- Output path defaults to `${HIBOSS_DIR}/config.json`.
+- If no setup DB exists yet, export writes a bootstrap template.
+
+Security:
+- Export never includes `boss-token`.
+- Export never includes agent tokens.
+- Adapter tokens (for bindings) are included, because bindings are part of setup configuration.
+
+## `hiboss setup --config-file <path> --token <boss-token> [--dry-run]`
+
+Applies a declarative setup config from JSON schema `version: 2`.
+
+Flags:
+- `--config-file <path>`: required
+- `--token <boss-token>`: required (or `HIBOSS_TOKEN`)
+- `--dry-run`: optional (validate + diff only, no mutation)
+
+Behavior:
+- **v2-only**: `version: 1` is rejected; no backward compatibility path.
+- Full reconcile apply (not missing-only patch): config file is treated as desired state.
+- Apply is transactional.
+- Setup-managed rows are reset and recreated from file (agents/bindings/cron schedules under setup-managed flow).
+- Agent tokens are regenerated on apply and printed once.
+- Existing agent directories are not removed automatically.
+- Daemon must be stopped before apply.
+
+Token semantics:
+- If boss token hash already exists, `--token` must verify against stored boss token.
+- If boss token hash does not exist yet, `--token` becomes the initial boss token.
+
+### Config Schema (Version 2)
+
+Top-level required fields:
+- `version: 2`
+- `boss-name`
+- `boss-timezone`
+- `telegram.adapter-boss-id`
+- `memory`
+- `agents[]`
+
+`memory` fields:
+- `enabled: boolean`
+- `mode: "default" | "local"`
+- `model-path: string`
+- `model-uri: string`
+- `dims: number`
+- `last-error: string`
+
+`agents[]` fields:
+- `name`
+- `role` (`speaker` or `leader`)
+- `provider` (`claude` or `codex`)
+- `description`
+- `workspace` (absolute path)
+- `model` (`string | null`; `"default"` accepted and normalized to `null`)
+- `reasoning-effort` (`none|low|medium|high|xhigh|default|null`)
+- `permission-level` (`restricted|standard|privileged|boss`)
+- `session-policy`:
+  - `daily-reset-at`
+  - `idle-timeout`
+  - `max-context-length`
+- `metadata` (object)
+- `bindings[]`:
+  - `adapter-type`
+  - `adapter-token`
+
+Invariants:
+- At least one `speaker` and one `leader`.
+- Every `speaker` has at least one binding.
+- Adapter token identity (`adapter-type` + `adapter-token`) must be unique across agents.
+- For current adapter support, telegram token format must be valid when `adapter-type=telegram`.
+
+### Example (Version 2)
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "boss-name": "your-name",
   "boss-timezone": "Asia/Shanghai",
-  "boss-token": "your-boss-token",
-  "provider": "claude",
-  "memory": {
-    "mode": "local",
-    "model-path": "/absolute/path/to/embedding-model.gguf"
-  },
-	  "agent": {
-	    "name": "nex",
-	    "description": "A reliable and collaborative professional who delivers results with clarity and respect for others, and consistently makes teamwork more effective and enjoyable.",
-	    "workspace": "/absolute/path/to/workspace",
-	    "model": null,
-	    "reasoning-effort": null,
-	    "permission-level": "standard"
-	  },
   "telegram": {
-    "adapter-token": "123456789:ABCdef...",
     "adapter-boss-id": "your_telegram_username"
-  }
+  },
+  "memory": {
+    "enabled": false,
+    "mode": "default",
+    "model-path": "",
+    "model-uri": "",
+    "dims": 0,
+    "last-error": "Memory model is not configured"
+  },
+  "agents": [
+    {
+      "name": "nex",
+      "role": "speaker",
+      "provider": "claude",
+      "description": "A reliable and collaborative professional...",
+      "workspace": "/absolute/path/to/workspace",
+      "model": null,
+      "reasoning-effort": null,
+      "permission-level": "standard",
+      "session-policy": {
+        "daily-reset-at": "06:00",
+        "idle-timeout": "30m",
+        "max-context-length": 32000
+      },
+      "metadata": {
+        "team": "ops"
+      },
+      "bindings": [
+        {
+          "adapter-type": "telegram",
+          "adapter-token": "123456789:ABCdef..."
+        }
+      ]
+    },
+    {
+      "name": "leader",
+      "role": "leader",
+      "provider": "claude",
+      "description": "A reliable and collaborative professional...",
+      "workspace": "/absolute/path/to/workspace",
+      "model": null,
+      "reasoning-effort": null,
+      "permission-level": "standard",
+      "bindings": []
+    }
+  ]
 }
 ```
 
-Notes:
-- `agent.model: null` means “use the provider default model”.
-- `agent.reasoning-effort: null` means “use the provider default reasoning effort”.
-- For parity with `hiboss agent set`, the string `"default"` is also accepted for both fields (treated as `null`).
-- Setup model choices are provider-specific plus `null` plus custom input:
-  - `codex`: `null`, `gpt-5.2`, `gpt-5.2-codex`, `gpt-5.3-codex`, custom model id
-  - `claude`: `null`, `haiku`, `sonnet`, `opus`, custom model id
-
-Output:
-- Setup prints tokens once, plus a small block of stable key/value lines (keys are kebab-case and may be indented in the human UI).
-- `hiboss setup` (interactive) prints: `daemon-timezone:`, `boss-timezone:`, `agent-name:`, `agent-token:`, `boss-token:`, `memory-enabled:`, and (when applicable) `memory-model-path:`, `memory-model-dims:`, `memory-last-error:`.
-- `hiboss setup --config-file ...` prints: `daemon-timezone:`, `boss-timezone:`, `boss-name:`, `agent-name:`, `agent-token:`, `boss-token:`, `provider:`, `model:`, `memory-enabled:`.
+Output keys:
+- Dry-run prints parseable summary keys like:
+  - `dry-run: true`
+  - `first-apply:`
+  - `current-agent-count:`
+  - `desired-agent-count:`
+  - `removed-agents:`
+  - `recreated-agents:`
+  - `new-agents:`
+  - `current-binding-count:`
+  - `desired-binding-count:`
+- Apply prints the same summary keys with `dry-run: false`, plus per-agent token lines:
+  - `agent-name:`
+  - `agent-role:`
+  - `agent-token:` (printed once)
 
 ---
 
-## Persistence (canonical)
+## Persistence (Canonical)
 
-Setup persists configuration into SQLite (`{{HIBOSS_DIR}}/.daemon/hiboss.db`).
+Setup config apply writes to `{{HIBOSS_DIR}}/.daemon/hiboss.db`.
 
-From the setup config JSON:
+Core mappings:
 - `boss-name` → `config.boss_name`
-- `boss-timezone` → `config.boss_timezone` (IANA; used for displayed timestamps)
-- `boss-token` → hashed into `config.boss_token_hash` (token is printed once; no “show token” command)
-- `provider` → `config.default_provider` (informational today)
+- `boss-timezone` → `config.boss_timezone`
 - `telegram.adapter-boss-id` → `config.adapter_boss_id_telegram` (stored without `@`)
+- `memory.*` → `config.memory_*`
+- `agents[]` → `agents` table rows
+- `agents[].bindings[]` → `agent_bindings` rows
 
-Other side effects:
-- Creates the first agent row in `agents` and prints `agent-token:` once.
-- Creates an initial `agent_bindings` row for the first agent from `telegram.adapter-token`.
-- Writes semantic memory config keys when memory is configured:
-  - `config.memory_enabled`, `config.memory_model_source`, `config.memory_model_uri`, `config.memory_model_path`, `config.memory_model_dims`, `config.memory_model_last_error`
-- Marks setup complete: `config.setup_completed = "true"`.
+Additional effects:
+- Boss token hash set/updated from CLI `--token`.
+- Setup-managed rows are rebuilt from desired config on apply.
+- `config.setup_completed = "true"` is set after successful apply.

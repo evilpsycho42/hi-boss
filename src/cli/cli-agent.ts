@@ -18,6 +18,7 @@ export function registerAgentCommands(program: Command): void {
     .command("register")
     .description("Register a new agent")
     .requiredOption("--name <name>", "Agent name (alphanumeric with hyphens)")
+    .requiredOption("--role <role>", "Agent role (speaker or leader)")
     .requiredOption("--provider <provider>", "Provider (claude or codex)")
     .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
     .option("--description <description>", "Agent description")
@@ -52,6 +53,7 @@ export function registerAgentCommands(program: Command): void {
       registerAgent({
         token: options.token,
         name: options.name,
+        role: options.role,
         description: options.description,
         workspace: options.workspace,
         provider: options.provider,
@@ -73,6 +75,7 @@ export function registerAgentCommands(program: Command): void {
     .description("Update agent settings and bindings")
     .requiredOption("--name <name>", "Agent name")
     .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+    .option("--role <role>", "Agent role (speaker or leader)")
     .option("--description <description>", "Agent description")
     .option("--workspace <path>", "Workspace directory for provider CLI runs")
     .option("--provider <provider>", "Provider (claude or codex)")
@@ -105,13 +108,20 @@ export function registerAgentCommands(program: Command): void {
     .option("--metadata-json <json>", "Agent metadata JSON object")
     .option("--metadata-file <path>", "Path to agent metadata JSON file")
     .option("--clear-metadata", "Clear agent metadata")
-    .option("--bind-adapter-type <type>", "Bind adapter type (e.g., telegram)")
-    .option("--bind-adapter-token <token>", "Bind adapter token (e.g., bot token)")
+    .option(
+      "--bind-adapter-type <type>",
+      "Bind/replace adapter type (e.g., telegram)"
+    )
+    .option(
+      "--bind-adapter-token <token>",
+      "Bind/replace adapter token (e.g., bot token)"
+    )
     .option("--unbind-adapter-type <type>", "Unbind adapter type (e.g., telegram)")
     .action((options) => {
       setAgent({
         token: options.token,
         name: options.name,
+        role: options.role,
         description: options.description,
         workspace: options.workspace,
         provider: options.provider,

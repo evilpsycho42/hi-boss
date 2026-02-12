@@ -37,7 +37,7 @@ Built-in defaults are centralized in:
 
 Some settings exist in the database/schema but do not yet have dedicated CLI setters:
 
-- Updating `boss_name`, `default_provider`, `adapter_boss_id_<type>` after setup
+- Updating `boss_name`, `adapter_boss_id_<type>` after setup
 - Editing `config.permission_policy`
 - Changing the default data directory from `~/hiboss/` (override via `HIBOSS_DIR`)
 

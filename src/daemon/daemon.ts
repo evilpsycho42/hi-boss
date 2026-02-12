@@ -44,6 +44,12 @@ import {
   createAgentDeleteHandler,
 } from "./rpc/index.js";
 import { createChannelCommandHandler } from "./channel-commands.js";
+import { buildMissingAgentRolesGuidance } from "../shared/agent-role.js";
+import {
+  getSpeakerBindingIntegrity,
+  hasSpeakerBindingIntegrityViolations,
+  toSpeakerBindingIntegrityView,
+} from "../shared/speaker-binding-invariant.js";
 
 // Re-export for CLI and external use
 export { isDaemonRunning, isSocketAcceptingConnections };
@@ -304,6 +310,48 @@ export class Daemon {
         // IPC-only daemon for generating deterministic docs (no schedulers/adapters/auto-execution).
         logEvent("info", "daemon-started", { "data-dir": this.config.dataDir, "adapters-count": 0, mode: "examples" });
         return;
+      }
+
+      const roleBackfill = this.db.backfillLegacyAgentRolesFromBindings();
+      if (roleBackfill.updated > 0) {
+        logEvent("info", "daemon-agent-role-backfill", {
+          updated: roleBackfill.updated,
+          speaker: roleBackfill.speaker,
+          leader: roleBackfill.leader,
+        });
+      }
+
+      const roleCounts = this.db.getAgentRoleCounts();
+      const missingSpeaker = roleCounts.speaker < 1;
+      const missingLeader = roleCounts.leader < 1;
+      if (missingSpeaker || missingLeader) {
+        const agentCount = this.db.listAgents().length;
+
+        logEvent("error", "daemon-startup-blocked-roles", {
+          "speaker-count": roleCounts.speaker,
+          "leader-count": roleCounts.leader,
+          "agent-count": agentCount,
+        });
+
+        const guidance = buildMissingAgentRolesGuidance({
+          missingSpeaker,
+          missingLeader,
+        });
+
+        throw new Error(guidance);
+      }
+
+      const integrity = getSpeakerBindingIntegrity({
+        agents: this.db.listAgents(),
+        bindings: this.db.listBindings(),
+      });
+      if (hasSpeakerBindingIntegrityViolations(integrity)) {
+        const view = toSpeakerBindingIntegrityView(integrity);
+        logEvent("error", "daemon-startup-blocked-speaker-bindings", {
+          "speaker-without-bindings": view.speakerWithoutBindings.join(",") || undefined,
+          "duplicate-speaker-binding-count": view.duplicateSpeakerBindings.length,
+        });
+        throw new Error(buildMissingAgentRolesGuidance({ missingSpeaker: false, missingLeader: false }));
       }
 
       // Set up command handler for /new etc.

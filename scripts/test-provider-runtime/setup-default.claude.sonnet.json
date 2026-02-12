@@ -1,23 +1,45 @@
 {
-  "version": 1,
+  "version": 2,
   "boss-name": "Kevin",
-  "boss-token": "boss-test-token",
-  "provider": "claude",
-  "memory": {
-    "mode": "local",
-    "model-path": "/Users/kky/Qwen3-Embedding-0.6B-Q8_0.gguf"
-  },
-  "agent": {
-    "name": "test-claude",
-    "description": "test-claude (claude/sonnet)",
-    "workspace": "/Users/kky/Dev/hi-boss.test-provider-runtime",
-    "model": "sonnet",
-    "reasoning-effort": "medium",
-    "permission-level": "standard"
-  },
+  "boss-timezone": "Asia/Shanghai",
   "telegram": {
-    "adapter-token": "123456789:REPLACE_ME_WITH_REAL_TELEGRAM_BOT_TOKEN",
     "adapter-boss-id": "kky1024"
-  }
+  },
+  "memory": {
+    "enabled": false,
+    "mode": "local",
+    "model-path": "/Users/kky/Qwen3-Embedding-0.6B-Q8_0.gguf",
+    "model-uri": "",
+    "dims": 0,
+    "last-error": "Memory model is not configured"
+  },
+  "agents": [
+    {
+      "name": "test-claude",
+      "role": "speaker",
+      "provider": "claude",
+      "description": "test-claude (claude/sonnet)",
+      "workspace": "/Users/kky/Dev/hi-boss.test-provider-runtime",
+      "model": "sonnet",
+      "reasoning-effort": "medium",
+      "permission-level": "standard",
+      "bindings": [
+        {
+          "adapter-type": "telegram",
+          "adapter-token": "123456789:REPLACE_ME_WITH_REAL_TELEGRAM_BOT_TOKEN"
+        }
+      ]
+    },
+    {
+      "name": "leader",
+      "role": "leader",
+      "provider": "claude",
+      "description": "leader for provider runtime validation",
+      "workspace": "/Users/kky/Dev/hi-boss.test-provider-runtime",
+      "model": null,
+      "reasoning-effort": null,
+      "permission-level": "standard",
+      "bindings": []
+    }
+  ]
 }
-

@@ -1,58 +1,165 @@
-import * as fs from "fs";
-import * as path from "path";
-import { getDefaultConfig } from "../../../daemon/daemon.js";
+import * as fs from "node:fs";
+import * as path from "node:path";
+
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../../shared/validation.js";
-import { parseDailyResetAt, parseDurationToMs } from "../../../shared/session-policy.js";
 import {
-  DEFAULT_SETUP_AGENT_NAME,
   DEFAULT_SETUP_PERMISSION_LEVEL,
   getDefaultAgentDescription,
   getDefaultSetupBossName,
   getDefaultSetupWorkspace,
 } from "../../../shared/defaults.js";
-import { resolveAndValidateMemoryModel, type MemoryModelMode, type ResolvedMemoryModelConfig } from "../../memory-model.js";
-import { checkSetupStatus, executeSetup, normalizeMemoryConfig } from "./core.js";
-import type { SetupConfig } from "./types.js";
+import { parseDailyResetAt, parseDurationToMs } from "../../../shared/session-policy.js";
+import { isAgentRole } from "../../../shared/agent-role.js";
+import { resolveToken } from "../../token.js";
+import type {
+  SetupDeclarativeAgentConfig,
+  SetupDeclarativeConfig,
+  SetupPermissionLevel,
+  SetupReasoningEffort,
+} from "./types.js";
+import { reconcileSetupConfig } from "./declarative.js";
 import { isPlainObject } from "./utils.js";
 
-interface SetupConfigFileV1 {
-  version: 1;
+interface SetupConfigFileV2 {
+  version: 2;
   "boss-name"?: string;
   "boss-timezone"?: string;
-  "boss-token": string;
-  provider: "claude" | "codex";
-  memory?: {
-    mode?: "default" | "local";
-    "model-path"?: string;
+  telegram: {
+    "adapter-boss-id": string;
   };
-  agent: {
-    name?: string;
+  memory: {
+    enabled: boolean;
+    mode: "default" | "local";
+    "model-path": string;
+    "model-uri": string;
+    dims: number;
+    "last-error": string;
+  };
+  agents: Array<{
+    name: string;
+    role: "speaker" | "leader";
+    provider: "claude" | "codex";
     description?: string;
     workspace?: string;
     model?: string | null;
-    "reasoning-effort"?:
-      | "none"
-      | "low"
-      | "medium"
-      | "high"
-      | "xhigh"
-      | "default"
-      | null;
-    "permission-level"?: "restricted" | "standard" | "privileged" | "boss";
+    "reasoning-effort"?: SetupReasoningEffort | "default" | null;
+    "permission-level"?: SetupPermissionLevel;
     "session-policy"?: {
       "daily-reset-at"?: string;
       "idle-timeout"?: string;
       "max-context-length"?: number;
     };
     metadata?: Record<string, unknown>;
-  };
-  telegram: {
-    "adapter-token": string;
-    "adapter-boss-id": string;
-  };
+    bindings: Array<{
+      "adapter-type": string;
+      "adapter-token": string;
+    }>;
+  }>;
 }
 
-function parseSetupConfigFileV1(json: string): SetupConfig {
+function parseSetupPermissionLevel(raw: unknown): SetupPermissionLevel | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === "restricted" || raw === "standard" || raw === "privileged" || raw === "boss") {
+    return raw;
+  }
+  throw new Error("Invalid setup config (agent.permission-level must be restricted|standard|privileged|boss)");
+}
+
+function parseSetupReasoningEffort(raw: unknown): SetupReasoningEffort | null {
+  if (raw === null || raw === undefined || raw === "default") return null;
+  if (raw === "none" || raw === "low" || raw === "medium" || raw === "high" || raw === "xhigh") {
+    return raw;
+  }
+  throw new Error(
+    "Invalid setup config (agent.reasoning-effort must be none|low|medium|high|xhigh|default|null)"
+  );
+}
+
+function parseSetupModel(raw: unknown): string | null {
+  if (raw === null || raw === undefined) return null;
+  if (typeof raw === "string") {
+    const trimmed = raw.trim();
+    if (!trimmed || trimmed === "default") return null;
+    if (trimmed === "provider_default") {
+      throw new Error("Invalid setup config (agent.model no longer supports 'provider_default')");
+    }
+    return trimmed;
+  }
+  throw new Error("Invalid setup config (agent.model must be string|null)");
+}
+
+function parseSessionPolicy(raw: unknown, agentName: string): SetupDeclarativeAgentConfig["sessionPolicy"] {
+  if (raw === undefined) return undefined;
+  if (!isPlainObject(raw)) {
+    throw new Error(`Invalid setup config (agent.session-policy for '${agentName}' must be object)`);
+  }
+
+  const next: NonNullable<SetupDeclarativeAgentConfig["sessionPolicy"]> = {};
+
+  if (raw["daily-reset-at"] !== undefined) {
+    if (typeof raw["daily-reset-at"] !== "string") {
+      throw new Error(`Invalid setup config (agent.session-policy.daily-reset-at for '${agentName}')`);
+    }
+    next.dailyResetAt = parseDailyResetAt(raw["daily-reset-at"]).normalized;
+  }
+
+  if (raw["idle-timeout"] !== undefined) {
+    if (typeof raw["idle-timeout"] !== "string") {
+      throw new Error(`Invalid setup config (agent.session-policy.idle-timeout for '${agentName}')`);
+    }
+    parseDurationToMs(raw["idle-timeout"]);
+    next.idleTimeout = raw["idle-timeout"].trim();
+  }
+
+  if ((raw as Record<string, unknown>)["max-tokens"] !== undefined) {
+    throw new Error(
+      `Invalid setup config (agent.session-policy.max-tokens for '${agentName}' is no longer supported; use max-context-length)`
+    );
+  }
+
+  if (raw["max-context-length"] !== undefined) {
+    if (typeof raw["max-context-length"] !== "number" || !Number.isFinite(raw["max-context-length"])) {
+      throw new Error(`Invalid setup config (agent.session-policy.max-context-length for '${agentName}')`);
+    }
+    if (raw["max-context-length"] <= 0) {
+      throw new Error(
+        `Invalid setup config (agent.session-policy.max-context-length for '${agentName}' must be > 0)`
+      );
+    }
+    next.maxContextLength = Math.trunc(raw["max-context-length"]);
+  }
+
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
+function parseBindings(raw: unknown, agentName: string): SetupDeclarativeAgentConfig["bindings"] {
+  if (!Array.isArray(raw)) {
+    throw new Error(`Invalid setup config (agent.bindings for '${agentName}' must be an array)`);
+  }
+
+  return raw.map((item, index) => {
+    if (!isPlainObject(item)) {
+      throw new Error(`Invalid setup config (agent.bindings[${index}] for '${agentName}' must be object)`);
+    }
+
+    const adapterType = typeof item["adapter-type"] === "string" ? item["adapter-type"].trim() : "";
+    if (!adapterType) {
+      throw new Error(`Invalid setup config (agent.bindings[${index}].adapter-type for '${agentName}' is required)`);
+    }
+
+    const adapterToken = typeof item["adapter-token"] === "string" ? item["adapter-token"].trim() : "";
+    if (!adapterToken) {
+      throw new Error(`Invalid setup config (agent.bindings[${index}].adapter-token for '${agentName}' is required)`);
+    }
+
+    return {
+      adapterType,
+      adapterToken,
+    };
+  });
+}
+
+function parseSetupConfigFileV2(json: string): SetupDeclarativeConfig {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
@@ -65,246 +172,163 @@ function parseSetupConfigFileV1(json: string): SetupConfig {
   }
 
   const version = parsed.version;
-  if (version !== 1) {
-    throw new Error("Invalid setup config version (expected 1)");
+  if (version !== 2) {
+    if (version === 1) {
+      throw new Error("Invalid setup config version (v1 is no longer supported; expected 2)");
+    }
+    throw new Error("Invalid setup config version (expected 2)");
   }
 
-  if (Object.prototype.hasOwnProperty.call(parsed, "provider-source-home")) {
-    throw new Error("Invalid setup config (provider-source-home is no longer supported)");
+  if (Object.prototype.hasOwnProperty.call(parsed, "boss-token")) {
+    throw new Error("Invalid setup config (boss-token must not be present in v2 config file)");
   }
 
-  const bossToken = typeof parsed["boss-token"] === "string" ? parsed["boss-token"].trim() : "";
-  if (!bossToken) {
-    throw new Error("Invalid setup config (boss-token is required)");
-  }
-  if (bossToken.length < 4) {
-    throw new Error("Invalid setup config (boss-token must be at least 4 characters)");
-  }
-
-  const providerRaw = parsed.provider;
-  const provider = providerRaw === "claude" || providerRaw === "codex" ? providerRaw : undefined;
-  if (!provider) {
-    throw new Error("Invalid setup config (provider is required; expected 'claude' or 'codex')");
-  }
+  const daemonTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   const bossNameRaw = parsed["boss-name"];
   const bossName =
-    typeof bossNameRaw === "string" && bossNameRaw.trim()
-      ? bossNameRaw.trim()
-      : getDefaultSetupBossName();
+    typeof bossNameRaw === "string" && bossNameRaw.trim() ? bossNameRaw.trim() : getDefaultSetupBossName();
+  if (!bossName) {
+    throw new Error("Invalid setup config (boss-name is required)");
+  }
 
-  const daemonTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const bossTimezoneRaw = (parsed as Record<string, unknown>)["boss-timezone"];
+  const bossTimezoneRaw = parsed["boss-timezone"];
   const bossTimezone =
-    typeof bossTimezoneRaw === "string" && bossTimezoneRaw.trim()
-      ? bossTimezoneRaw.trim()
-      : daemonTz;
+    typeof bossTimezoneRaw === "string" && bossTimezoneRaw.trim() ? bossTimezoneRaw.trim() : daemonTz;
   try {
     new Intl.DateTimeFormat("en-US", { timeZone: bossTimezone }).format(new Date(0));
   } catch {
     throw new Error("Invalid setup config (boss-timezone must be a valid IANA timezone)");
   }
 
-  const agentRaw = parsed.agent;
-  if (!isPlainObject(agentRaw)) {
-    throw new Error("Invalid setup config (agent is required)");
-  }
-
-  const agentNameRaw = agentRaw.name;
-  const agentName =
-    typeof agentNameRaw === "string" && agentNameRaw.trim()
-      ? agentNameRaw.trim()
-      : DEFAULT_SETUP_AGENT_NAME;
-  if (!isValidAgentName(agentName)) {
-    throw new Error(`Invalid setup config (agent.name): ${AGENT_NAME_ERROR_MESSAGE}`);
-  }
-
-  const agentDescriptionRaw = agentRaw.description;
-  const agentDescription =
-    typeof agentDescriptionRaw === "string"
-      ? agentDescriptionRaw
-      : getDefaultAgentDescription(agentName);
-
-  const workspaceRaw = agentRaw.workspace;
-  const workspace =
-    typeof workspaceRaw === "string" && workspaceRaw.trim()
-      ? workspaceRaw.trim()
-      : getDefaultSetupWorkspace();
-  if (!path.isAbsolute(workspace)) {
-    throw new Error("Invalid setup config (agent.workspace must be an absolute path)");
-  }
-
-  const modelRaw = agentRaw.model;
-  const model: SetupConfig["agent"]["model"] = (() => {
-    if (modelRaw === null) return null;
-    if (typeof modelRaw === "string" && modelRaw.trim()) {
-      const trimmed = modelRaw.trim();
-      if (trimmed === "provider_default") {
-        throw new Error("Invalid setup config (agent.model no longer supports 'provider_default'; use 'default' or null)");
-      }
-      if (trimmed === "default") return null;
-      return trimmed;
-    }
-    return null;
-  })();
-
-  const reasoningEffortRaw = agentRaw["reasoning-effort"];
-  const reasoningEffort: SetupConfig["agent"]["reasoningEffort"] = (() => {
-    if (reasoningEffortRaw === null) return null;
-    if (reasoningEffortRaw === "provider_default") {
-      throw new Error(
-        "Invalid setup config (agent.reasoning-effort no longer supports 'provider_default'; use 'default' or null)"
-      );
-    }
-    if (reasoningEffortRaw === "default") return null;
-    if (
-      reasoningEffortRaw === "none" ||
-      reasoningEffortRaw === "low" ||
-      reasoningEffortRaw === "medium" ||
-      reasoningEffortRaw === "high" ||
-      reasoningEffortRaw === "xhigh"
-    ) {
-      return reasoningEffortRaw;
-    }
-    return null;
-  })();
-
-  const permissionLevelRaw = agentRaw["permission-level"];
-  const permissionLevel =
-    permissionLevelRaw === "restricted" ||
-    permissionLevelRaw === "standard" ||
-    permissionLevelRaw === "privileged" ||
-    permissionLevelRaw === "boss"
-      ? permissionLevelRaw
-      : DEFAULT_SETUP_PERMISSION_LEVEL;
-
-  let sessionPolicy: SetupConfig["agent"]["sessionPolicy"] | undefined;
-  const sessionPolicyRaw = agentRaw["session-policy"];
-  if (sessionPolicyRaw !== undefined) {
-    if (!isPlainObject(sessionPolicyRaw)) {
-      throw new Error("Invalid setup config (agent.session-policy must be an object)");
-    }
-
-    const nextPolicy: NonNullable<SetupConfig["agent"]["sessionPolicy"]> = {};
-
-    if (sessionPolicyRaw["daily-reset-at"] !== undefined) {
-      if (typeof sessionPolicyRaw["daily-reset-at"] !== "string") {
-        throw new Error("Invalid setup config (agent.session-policy.daily-reset-at must be a string)");
-      }
-      nextPolicy.dailyResetAt = parseDailyResetAt(sessionPolicyRaw["daily-reset-at"]).normalized;
-    }
-    if (sessionPolicyRaw["idle-timeout"] !== undefined) {
-      if (typeof sessionPolicyRaw["idle-timeout"] !== "string") {
-        throw new Error("Invalid setup config (agent.session-policy.idle-timeout must be a string)");
-      }
-      parseDurationToMs(sessionPolicyRaw["idle-timeout"]);
-      nextPolicy.idleTimeout = sessionPolicyRaw["idle-timeout"].trim();
-    }
-    if (sessionPolicyRaw["max-tokens"] !== undefined) {
-      throw new Error("Invalid setup config (agent.session-policy.max-tokens is no longer supported; use max-context-length)");
-    }
-    if (sessionPolicyRaw["max-context-length"] !== undefined) {
-      if (typeof sessionPolicyRaw["max-context-length"] !== "number" || !Number.isFinite(sessionPolicyRaw["max-context-length"])) {
-        throw new Error("Invalid setup config (agent.session-policy.max-context-length must be a number)");
-      }
-      if (sessionPolicyRaw["max-context-length"] <= 0) {
-        throw new Error("Invalid setup config (agent.session-policy.max-context-length must be > 0)");
-      }
-      nextPolicy.maxContextLength = Math.trunc(sessionPolicyRaw["max-context-length"]);
-    }
-
-    if (Object.keys(nextPolicy).length > 0) {
-      sessionPolicy = nextPolicy;
-    }
-  }
-
-  const metadataRaw = agentRaw.metadata;
-  let metadata: Record<string, unknown> | undefined;
-  if (metadataRaw !== undefined) {
-    if (!isPlainObject(metadataRaw)) {
-      throw new Error("Invalid setup config (agent.metadata must be a JSON object)");
-    }
-    metadata = metadataRaw;
-  }
-
-  const telegramRaw = (parsed as Record<string, unknown>).telegram;
+  const telegramRaw = parsed.telegram;
   if (!isPlainObject(telegramRaw)) {
     throw new Error("Invalid setup config (telegram is required)");
   }
-
-  const adapterToken =
-    typeof telegramRaw["adapter-token"] === "string" ? telegramRaw["adapter-token"].trim() : "";
-  if (!adapterToken) {
-    throw new Error("Invalid setup config (telegram.adapter-token is required)");
-  }
-  if (!/^\d+:[A-Za-z0-9_-]+$/.test(adapterToken)) {
-    throw new Error("Invalid setup config (telegram.adapter-token has invalid format)");
-  }
-
   const adapterBossIdRaw =
     typeof telegramRaw["adapter-boss-id"] === "string" ? telegramRaw["adapter-boss-id"].trim() : "";
   if (!adapterBossIdRaw) {
     throw new Error("Invalid setup config (telegram.adapter-boss-id is required)");
   }
-  const adapterBossId = adapterBossIdRaw.replace(/^@/, "");
+  const telegramBossId = adapterBossIdRaw.replace(/^@/, "");
 
-  const config: SetupConfig = {
-    provider,
-    bossName,
-    bossTimezone,
-    agent: {
-      name: agentName,
-      description: agentDescription,
-      workspace,
-      model,
-      reasoningEffort,
-      permissionLevel,
-      sessionPolicy,
-      metadata,
-    },
-    adapter: {
-      adapterType: "telegram",
-      adapterToken,
-      adapterBossId,
-    },
-    bossToken,
-  };
-
-  const memoryRaw = (parsed as Record<string, unknown>).memory;
-  if (isPlainObject(memoryRaw)) {
-    const modeRaw = memoryRaw.mode;
-    const mode: MemoryModelMode =
-      modeRaw === "local" || modeRaw === "default" ? modeRaw : "default";
-    const modelPathRaw = memoryRaw["model-path"];
-    const modelPath =
-      typeof modelPathRaw === "string" && modelPathRaw.trim() ? modelPathRaw.trim() : undefined;
-    config.memorySelection = { mode, modelPath };
+  const memoryRaw = parsed.memory;
+  if (!isPlainObject(memoryRaw)) {
+    throw new Error("Invalid setup config (memory is required)");
   }
 
-  return config;
+  const memoryEnabled = memoryRaw.enabled;
+  if (typeof memoryEnabled !== "boolean") {
+    throw new Error("Invalid setup config (memory.enabled must be boolean)");
+  }
+
+  const memoryMode = memoryRaw.mode;
+  if (memoryMode !== "default" && memoryMode !== "local") {
+    throw new Error("Invalid setup config (memory.mode must be default or local)");
+  }
+
+  const memoryModelPath = typeof memoryRaw["model-path"] === "string" ? memoryRaw["model-path"].trim() : "";
+  const memoryModelUri = typeof memoryRaw["model-uri"] === "string" ? memoryRaw["model-uri"].trim() : "";
+
+  if (typeof memoryRaw.dims !== "number" || !Number.isFinite(memoryRaw.dims) || memoryRaw.dims < 0) {
+    throw new Error("Invalid setup config (memory.dims must be >= 0)");
+  }
+  const memoryDims = Math.trunc(memoryRaw.dims);
+
+  const memoryLastError =
+    typeof memoryRaw["last-error"] === "string" ? memoryRaw["last-error"].trim() : "";
+
+  if (memoryEnabled && (!memoryModelPath || memoryDims <= 0)) {
+    throw new Error("Invalid setup config (enabled memory requires model-path and dims > 0)");
+  }
+
+  const agentsRaw = parsed.agents;
+  if (!Array.isArray(agentsRaw) || agentsRaw.length === 0) {
+    throw new Error("Invalid setup config (agents must contain at least one agent)");
+  }
+
+  const agents: SetupDeclarativeAgentConfig[] = agentsRaw.map((agentRaw, index) => {
+    if (!isPlainObject(agentRaw)) {
+      throw new Error(`Invalid setup config (agents[${index}] must be object)`);
+    }
+
+    const nameRaw = typeof agentRaw.name === "string" ? agentRaw.name.trim() : "";
+    if (!nameRaw || !isValidAgentName(nameRaw)) {
+      throw new Error(`Invalid setup config (agents[${index}].name): ${AGENT_NAME_ERROR_MESSAGE}`);
+    }
+
+    const role = agentRaw.role;
+    if (!isAgentRole(role)) {
+      throw new Error(`Invalid setup config (agents[${index}].role must be speaker or leader)`);
+    }
+
+    const provider = agentRaw.provider;
+    if (provider !== "claude" && provider !== "codex") {
+      throw new Error(`Invalid setup config (agents[${index}].provider must be claude or codex)`);
+    }
+
+    const description =
+      typeof agentRaw.description === "string"
+        ? agentRaw.description
+        : getDefaultAgentDescription(nameRaw);
+
+    const workspaceRaw =
+      typeof agentRaw.workspace === "string" && agentRaw.workspace.trim()
+        ? agentRaw.workspace.trim()
+        : getDefaultSetupWorkspace();
+    if (!path.isAbsolute(workspaceRaw)) {
+      throw new Error(`Invalid setup config (agents[${index}].workspace must be absolute path)`);
+    }
+
+    const metadataRaw = agentRaw.metadata;
+    if (metadataRaw !== undefined && !isPlainObject(metadataRaw)) {
+      throw new Error(`Invalid setup config (agents[${index}].metadata must be object)`);
+    }
+
+    return {
+      name: nameRaw,
+      role,
+      provider,
+      description,
+      workspace: workspaceRaw,
+      model: parseSetupModel(agentRaw.model),
+      reasoningEffort: parseSetupReasoningEffort(agentRaw["reasoning-effort"]),
+      permissionLevel: parseSetupPermissionLevel(agentRaw["permission-level"]) ?? DEFAULT_SETUP_PERMISSION_LEVEL,
+      sessionPolicy: parseSessionPolicy(agentRaw["session-policy"], nameRaw),
+      metadata: metadataRaw,
+      bindings: parseBindings(agentRaw.bindings, nameRaw),
+    };
+  });
+
+  return {
+    version: 2,
+    bossName,
+    bossTimezone,
+    telegramBossId,
+    memory: {
+      enabled: memoryEnabled,
+      mode: memoryMode,
+      modelPath: memoryModelPath,
+      modelUri: memoryModelUri,
+      dims: memoryDims,
+      lastError: memoryLastError,
+    },
+    agents,
+  };
+}
+
+function listOrNone(values: string[]): string {
+  return values.length > 0 ? values.join(", ") : "(none)";
 }
 
 export interface ConfigFileSetupOptions {
   configFile: string;
+  token?: string;
+  dryRun?: boolean;
 }
 
 export async function runConfigFileSetup(options: ConfigFileSetupOptions): Promise<void> {
   console.log("\n⚡ Running setup from config file...\n");
-
-  // Check if setup is already complete
-  let isComplete: boolean;
-  try {
-    isComplete = await checkSetupStatus();
-  } catch (err) {
-    console.error(`\n❌ Setup check failed: ${(err as Error).message}\n`);
-    process.exit(1);
-  }
-  if (isComplete) {
-    console.log("✅ Setup is already complete!");
-    console.log("\nTo start over: hiboss daemon stop && rm -rf ~/hiboss && hiboss setup\n");
-    console.log("(Advanced: override the Hi-Boss dir with HIBOSS_DIR.)\n");
-    return;
-  }
 
   const filePath = path.resolve(process.cwd(), options.configFile);
   let json: string;
@@ -315,48 +339,71 @@ export async function runConfigFileSetup(options: ConfigFileSetupOptions): Promi
     process.exit(1);
   }
 
-  let config: SetupConfig;
+  let config: SetupDeclarativeConfig;
   try {
-    config = parseSetupConfigFileV1(json);
+    config = parseSetupConfigFileV2(json);
   } catch (err) {
     console.error(`❌ ${(err as Error).message}\n`);
     process.exit(1);
   }
 
-  // Resolve semantic memory model from config file (best-effort; setup still completes if it fails).
-  const daemonConfig = getDefaultConfig();
-  const sel = config.memorySelection ?? { mode: "default" as const };
-  config.memory = await resolveAndValidateMemoryModel({
-    daemonDir: daemonConfig.daemonDir,
-    mode: sel.mode,
-    modelPath: sel.modelPath,
-  });
-  const memory: ResolvedMemoryModelConfig = normalizeMemoryConfig(config);
+  const token = (() => {
+    try {
+      return resolveToken(options.token);
+    } catch (err) {
+      console.error(`❌ ${(err as Error).message}\n`);
+      process.exit(1);
+    }
+  })();
 
   try {
-    const agentToken = await executeSetup(config);
+    const result = await reconcileSetupConfig({
+      config,
+      token,
+      dryRun: Boolean(options.dryRun),
+    });
 
-    console.log("✅ Setup complete!\n");
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log(`   daemon-timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}`);
-    console.log(`   boss-timezone:   ${config.bossTimezone}`);
-    console.log(`   boss-name:   ${config.bossName}`);
-    console.log(`   agent-name:  ${config.agent.name}`);
-    console.log(`   agent-token: ${agentToken}`);
-    console.log(`   boss-token:  ${config.bossToken}`);
-    console.log(`   provider:    ${config.provider}`);
-    console.log(
-      `   model:       ${config.agent.model === null ? "(provider default)" : config.agent.model}`
-    );
-    console.log(`   memory-enabled: ${memory.enabled ? "true" : "false"}`);
-    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    console.log("\n⚠️  Save the agent token and boss token! They won't be shown again.\n");
+    if (result.dryRun) {
+      console.log("✅ Setup config is valid (dry run).\n");
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log("   dry-run: true");
+      console.log(`   first-apply: ${result.diff.firstApply ? "true" : "false"}`);
+      console.log(`   current-agent-count: ${result.diff.currentAgentNames.length}`);
+      console.log(`   desired-agent-count: ${result.diff.desiredAgentNames.length}`);
+      console.log(`   removed-agents: ${listOrNone(result.diff.removedAgentNames)}`);
+      console.log(`   recreated-agents: ${listOrNone(result.diff.recreatedAgentNames)}`);
+      console.log(`   new-agents: ${listOrNone(result.diff.newlyCreatedAgentNames)}`);
+      console.log(`   current-binding-count: ${result.diff.currentBindingCount}`);
+      console.log(`   desired-binding-count: ${result.diff.desiredBindingCount}`);
+      console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+      console.log("\nApply with:");
+      console.log(`   hiboss setup --config-file ${JSON.stringify(options.configFile)} --token <boss-token>\n`);
+      return;
+    }
 
-    console.log("📱 Telegram bot is configured. Start the daemon with:");
+    console.log("✅ Setup applied successfully!\n");
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+    console.log("   dry-run: false");
+    console.log(`   first-apply: ${result.diff.firstApply ? "true" : "false"}`);
+    console.log(`   current-agent-count: ${result.diff.currentAgentNames.length}`);
+    console.log(`   desired-agent-count: ${result.diff.desiredAgentNames.length}`);
+    console.log(`   removed-agents: ${listOrNone(result.diff.removedAgentNames)}`);
+    console.log(`   recreated-agents: ${listOrNone(result.diff.recreatedAgentNames)}`);
+    console.log(`   new-agents: ${listOrNone(result.diff.newlyCreatedAgentNames)}`);
+    console.log(`   generated-agent-token-count: ${result.generatedAgentTokens.length}`);
+    console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+
+    for (const tokenInfo of result.generatedAgentTokens) {
+      console.log(`   agent-name: ${tokenInfo.name}`);
+      console.log(`   agent-role: ${tokenInfo.role}`);
+      console.log(`   agent-token: ${tokenInfo.token}`);
+    }
+
+    console.log("\n⚠️  Save these agent tokens. They won't be shown again.\n");
+    console.log("Start the daemon with:");
     console.log("   hiboss daemon start\n");
   } catch (err) {
-    const error = err as Error;
-    console.error(`\n❌ Setup failed: ${error.message}\n`);
+    console.error(`\n❌ Setup failed: ${(err as Error).message}\n`);
     process.exit(1);
   }
 }

@@ -9,6 +9,7 @@ Registers a new agent.
 Flags:
 - `--name <name>` (required)
 - `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
+- `--role <speaker|leader>` (required)
 - `--description <description>` (optional)
 - `--workspace <path>` (optional)
 - `--provider <claude|codex>` (required)
@@ -26,6 +27,7 @@ Flags:
 
 Defaults (when flags are omitted):
 - `provider`: none (required)
+- `role`: none (required)
 - `model`: provider default (`NULL` override)
 - `reasoning-effort`: provider default (`NULL` override)
 - `permission-level`: `standard`
@@ -35,6 +37,7 @@ Defaults (when flags are omitted):
 - `metadata`: unset
 
 Notes:
+- `--role speaker` requires binding at registration (`--bind-adapter-type` + `--bind-adapter-token`).
 - `--model default` on register clears the model override to provider default (`NULL`).
 - `--reasoning-effort default` on register clears the reasoning-effort override to provider default (`NULL`).
 
@@ -45,6 +48,7 @@ Provider homes:
 
 Output (parseable):
 - `name:`
+- `role:`
 - `description:` (optional)
 - `workspace:` (optional)
 - `token:` (printed once)
@@ -56,6 +60,7 @@ Updates agent settings and (optionally) binds/unbinds adapters.
 Flags:
 - `--name <name>` (required)
 - `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
+- `--role <speaker|leader>` (optional; explicit role assignment)
 - `--description <description>` (optional)
 - `--workspace <path>` (optional)
 - `--provider <claude|codex>` (optional)
@@ -78,6 +83,11 @@ Notes:
 - Updating `--provider`, `--model`, or `--reasoning-effort` does **not** force a session refresh. Existing/resumed sessions may continue using the previous session config until a refresh (`/new`) or policy refresh opens a new session.
 - When switching providers without specifying `--model` / `--reasoning-effort`, Hi-Boss clears these overrides so the new provider can use its defaults when a fresh session is eventually opened.
 - `--clear-metadata` clears user metadata but preserves the internal session resume handle (`metadata.sessionHandle`). The `sessionHandle` key is reserved and is ignored if provided via `--metadata-*`.
+- Role/binding mutations are rejected when they would violate the required role invariant (`>=1 speaker` and `>=1 leader`).
+- Speakers must keep at least one binding.
+- `--role speaker` requires at least one resulting binding in the same command.
+- `--bind-adapter-*` and `--unbind-adapter-type` may be used together for same-command binding swaps.
+- `--bind-adapter-*` alone replaces an existing binding token for that same adapter type on the target agent (atomic replace).
 
 Provider homes:
 - Provider CLIs use shared default homes (`~/.claude`, `~/.codex`).
@@ -86,8 +96,17 @@ Provider homes:
 Output (parseable):
 - `success: true|false`
 - `agent-name:`
-- Updated fields when present (e.g., `provider:`, `model:`, `reasoning-effort:`, `permission-level:`)
-- `bindings:` (optional; comma-separated adapter types)
+- `role:`
+- `description:` (`(none)` when unset)
+- `workspace:` (`(none)` when unset)
+- `provider:` (`(none)` when unset)
+- `model:` (`default` when unset)
+- `reasoning-effort:` (`default` when unset)
+- `permission-level:`
+- `bindings:` (`(none)` when no bindings; otherwise comma-separated adapter types)
+- `session-daily-reset-at:` (optional)
+- `session-idle-timeout:` (optional)
+- `session-max-context-length:` (optional)
 
 ## `hiboss agent delete`
 
@@ -115,11 +134,12 @@ hiboss agent list
 
 ```text
 name: nex
-description: AI assistant
+role: speaker
 workspace: /path/to/workspace
 created-at: 2026-02-03T14:22:10-08:00
 
 name: ops-bot
+role: leader
 created-at: 2026-02-01T09:05:44-08:00
 ```
 
@@ -131,7 +151,7 @@ no-agents: true
 
 Output (parseable, one block per agent):
 - `name:`
-- `description:` (optional)
+- `role:` (`speaker|leader`)
 - `workspace:` (optional)
 - `created-at:` (boss timezone offset)
 
@@ -148,6 +168,7 @@ Notes:
 - Requires a token (agent or boss). The output must not include secrets (agent token, adapter token).
 - When called with an agent token, only `--name <self>` is allowed (agents cannot query other agents).
 - `agent-state` is a **busy-ness** signal: `running` means the daemon currently has a queued or in-flight task for this agent (so replies may be delayed).
+- `role:` is shown when available (`speaker` or `leader`).
 - `agent-health` is derived from the most recent finished run: `ok` (last run completed or cancelled), `error` (last run failed), `unknown` (no finished runs yet).
 - `pending-count` counts **due** pending envelopes (`status=pending` and `deliver_at` is missing or `<= now`).
 
@@ -185,7 +206,7 @@ last-run-context-length: 4123
 Output (parseable):
 - `name:`
 - `workspace:`
-- `provider:`
+- `provider:` (`(none)` when unset)
 - `model:` (`default` when unset)
 - `reasoning-effort:` (`default` when unset)
 - `permission-level:`

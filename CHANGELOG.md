@@ -6,6 +6,12 @@ This project uses date-based npm versions (see `AGENTS.md`).
 
 ## [Unreleased]
 
+### Changed
+- Channel reply quoting now resolves from `metadata.replyToEnvelopeId` only; legacy `metadata.replyToMessageId` is ignored at runtime.
+
+### Docs
+- Updated compatibility/envelope/routing specs to document canonical envelope-linked reply behavior and legacy reply-id ignore semantics.
+
 ## [2026.2.10] - 2026-02-10
 
 ### Changed

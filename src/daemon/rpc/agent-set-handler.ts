@@ -16,6 +16,12 @@ import {
   DEFAULT_AGENT_PROVIDER,
 } from "../../shared/defaults.js";
 import { isPermissionLevel } from "../../shared/permissions.js";
+import { isAgentRole, resolveAgentRole } from "../../shared/agent-role.js";
+import {
+  predictRoleAfterBindingMutation,
+  predictRoleAfterExplicitMutation,
+  buildMutationInvariantViolationMessage,
+} from "../../shared/agent-role-mutation.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 
 /**
@@ -54,6 +60,7 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
       const wantsUnbind = p.unbindAdapterType !== undefined;
 
       const hasAnyUpdate =
+        p.role !== undefined ||
         p.description !== undefined ||
         p.workspace !== undefined ||
         p.provider !== undefined ||
@@ -70,6 +77,7 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
       }
 
       changedKeys = [
+        ...(p.role !== undefined ? ["role"] : []),
         ...(p.description !== undefined ? ["description"] : []),
         ...(p.workspace !== undefined ? ["workspace"] : []),
         ...(p.provider !== undefined ? ["provider"] : []),
@@ -91,14 +99,123 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         }
       }
 
+      const bindAdapterType = wantsBind ? (p.bindAdapterType as string).trim() : undefined;
+      const bindAdapterToken = wantsBind ? (p.bindAdapterToken as string).trim() : undefined;
+      const unbindAdapterType = wantsUnbind ? (p.unbindAdapterType as string).trim() : undefined;
+
+      const allAgents = ctx.db.listAgents();
+      const allBindings = ctx.db.listBindings();
+      const bindingsForAgent = allBindings.filter((binding) => binding.agentName === agentName);
+      const currentBindingCount = bindingsForAgent.length;
+
+      const unbindBinding =
+        unbindAdapterType !== undefined
+          ? ctx.db.getAgentBindingByType(agentName, unbindAdapterType)
+          : null;
       if (wantsUnbind) {
         if (typeof p.unbindAdapterType !== "string" || !p.unbindAdapterType.trim()) {
           rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid unbind-adapter-type");
         }
+        if (!unbindBinding) {
+          rpcError(RPC_ERRORS.NOT_FOUND, "Binding not found");
+        }
       }
 
-      if (wantsBind && wantsUnbind) {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "Cannot bind and unbind in the same request");
+      const existingBindingByType =
+        bindAdapterType !== undefined
+          ? ctx.db.getAgentBindingByType(agentName, bindAdapterType)
+          : null;
+      if (bindAdapterType && bindAdapterToken) {
+        const existingBindingByToken = ctx.db.getBindingByAdapter(bindAdapterType, bindAdapterToken);
+        if (existingBindingByToken && existingBindingByToken.agentName !== agentName) {
+          rpcError(
+            RPC_ERRORS.ALREADY_EXISTS,
+            `This ${bindAdapterType} bot is already bound to agent '${existingBindingByToken.agentName}'`
+          );
+        }
+      }
+
+      const currentBindingTypes = new Set(bindingsForAgent.map((binding) => binding.adapterType));
+      const nextBindingTypes = new Set(currentBindingTypes);
+      if (unbindAdapterType) nextBindingTypes.delete(unbindAdapterType);
+      if (bindAdapterType) nextBindingTypes.add(bindAdapterType);
+      const nextBindingCount = nextBindingTypes.size;
+      const bindingCountDelta = nextBindingCount - currentBindingCount;
+
+      let role: "speaker" | "leader" | undefined;
+      if (p.role !== undefined) {
+        if (!isAgentRole(p.role)) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid role (expected speaker or leader)");
+        }
+        role = p.role;
+
+        // Validate post-role-change invariant
+        const prediction = predictRoleAfterExplicitMutation({
+          agent,
+          newRole: p.role,
+          allAgents,
+          allBindings,
+        });
+
+        if (prediction.breaking) {
+          const message = buildMutationInvariantViolationMessage({
+            operation: "set-role",
+            agentName: agentName,
+            prediction,
+          });
+          logEvent("warn", "agent-set-role-blocked-invariant", {
+            "agent-name": agentName,
+            "current-role": prediction.before,
+            "requested-role": prediction.after,
+            "missing-role": prediction.missingRole,
+          });
+          rpcError(RPC_ERRORS.INVALID_PARAMS, message);
+        }
+      }
+
+      if (role === "speaker" && nextBindingCount < 1) {
+        rpcError(
+          RPC_ERRORS.INVALID_PARAMS,
+          "Setting role to speaker requires at least one adapter binding in the same command."
+        );
+      }
+
+      const roleAfterMutation =
+        role ??
+        resolveAgentRole({
+          metadata: agent.metadata,
+          bindingCount: nextBindingCount,
+        });
+
+      if (wantsUnbind && roleAfterMutation === "speaker" && nextBindingCount < 1) {
+        rpcError(
+          RPC_ERRORS.INVALID_PARAMS,
+          "Cannot unbind the last adapter from speaker agent. Bind another adapter or change role to leader in the same command."
+        );
+      }
+
+      if (wantsUnbind && role !== "leader" && bindingCountDelta < 0) {
+        const prediction = predictRoleAfterBindingMutation({
+          agent,
+          bindingCountDelta,
+          allAgents,
+          allBindings,
+        });
+
+        if (prediction.breaking) {
+          const message = buildMutationInvariantViolationMessage({
+            operation: "unbind",
+            agentName: agentName,
+            prediction,
+          });
+          logEvent("warn", "agent-set-unbind-blocked-invariant", {
+            "agent-name": agentName,
+            "current-role": prediction.before,
+            "would-flip-to": prediction.after,
+            "missing-role": prediction.missingRole,
+          });
+          rpcError(RPC_ERRORS.INVALID_PARAMS, message);
+        }
       }
 
       let provider: "claude" | "codex" | null | undefined;
@@ -214,70 +331,94 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         await setupAgentHome(agentName, ctx.config.dataDir);
       }
 
-      // Bind/unbind are async due to adapter start/stop; do those outside the DB transaction.
-      if (wantsUnbind) {
-        const adapterType = (p.unbindAdapterType as string).trim();
-        const binding = ctx.db.getAgentBindingByType(agentName, adapterType);
-        if (!binding) {
-          rpcError(RPC_ERRORS.NOT_FOUND, "Binding not found");
-        }
+      const unbindSameType = Boolean(
+        unbindAdapterType && bindAdapterType && unbindAdapterType === bindAdapterType
+      );
+      const bindWouldCreateOrReplace = Boolean(
+        bindAdapterType &&
+          bindAdapterToken &&
+          (
+            !existingBindingByType ||
+            existingBindingByType.adapterToken !== bindAdapterToken ||
+            unbindSameType
+          )
+      );
 
-        await ctx.removeAdapter(binding.adapterToken);
-        ctx.db.deleteBinding(agentName, adapterType);
-      }
-
-      if (wantsBind) {
-        const adapterType = (p.bindAdapterType as string).trim();
-        const adapterToken = (p.bindAdapterToken as string).trim();
-
-        const existingBinding = ctx.db.getBindingByAdapter(adapterType, adapterToken);
-        if (existingBinding && existingBinding.agentName !== agentName) {
-          rpcError(
-            RPC_ERRORS.ALREADY_EXISTS,
-            `This ${adapterType} bot is already bound to agent '${existingBinding.agentName}'`
-          );
-        }
-
-        const agentBinding = ctx.db.getAgentBindingByType(agentName, adapterType);
-        if (agentBinding) {
-          rpcError(RPC_ERRORS.ALREADY_EXISTS, `Agent '${agentName}' already has a ${adapterType} binding`);
-        }
-
-        const hadAdapterAlready = ctx.adapters.has(adapterToken);
-        let createdAdapterForSet = false;
-
-        if (ctx.running) {
-          try {
-            const adapter = await ctx.createAdapterForBinding(adapterType, adapterToken);
-            if (!adapter) {
-              rpcError(RPC_ERRORS.INVALID_PARAMS, `Unknown adapter type: ${adapterType}`);
-            }
-            createdAdapterForSet = !hadAdapterAlready;
-          } catch (err) {
-            if (!hadAdapterAlready) {
-              await ctx.removeAdapter(adapterToken).catch(() => undefined);
-            }
-            throw err;
-          }
-        }
-
+      let createdAdapterForSet = false;
+      if (bindAdapterType && bindAdapterToken && bindWouldCreateOrReplace && ctx.running) {
+        const hadAdapterAlready = ctx.adapters.has(bindAdapterToken);
         try {
-          ctx.db.createBinding(agentName, adapterType, adapterToken);
+          const adapter = await ctx.createAdapterForBinding(bindAdapterType, bindAdapterToken);
+          if (!adapter) {
+            rpcError(RPC_ERRORS.INVALID_PARAMS, `Unknown adapter type: ${bindAdapterType}`);
+          }
+          createdAdapterForSet = !hadAdapterAlready;
         } catch (err) {
-          if (createdAdapterForSet) {
-            await ctx.removeAdapter(adapterToken).catch(() => undefined);
+          if (!hadAdapterAlready) {
+            await ctx.removeAdapter(bindAdapterToken).catch(() => undefined);
           }
           throw err;
         }
       }
 
+      try {
+        if (wantsUnbind || wantsBind) {
+          ctx.db.runInTransaction(() => {
+            if (wantsUnbind && unbindAdapterType) {
+              ctx.db.deleteBinding(agentName, unbindAdapterType);
+            }
+
+            if (bindAdapterType && bindAdapterToken) {
+              if (!existingBindingByType) {
+                ctx.db.createBinding(agentName, bindAdapterType, bindAdapterToken);
+              } else if (existingBindingByType.adapterToken === bindAdapterToken) {
+                if (unbindSameType) {
+                  ctx.db.createBinding(agentName, bindAdapterType, bindAdapterToken);
+                }
+              } else {
+                if (!unbindSameType) {
+                  ctx.db.deleteBinding(agentName, bindAdapterType);
+                }
+                ctx.db.createBinding(agentName, bindAdapterType, bindAdapterToken);
+              }
+            }
+          });
+        }
+      } catch (err) {
+        if (createdAdapterForSet && bindAdapterToken) {
+          await ctx.removeAdapter(bindAdapterToken).catch(() => undefined);
+        }
+        throw err;
+      }
+
+      const adapterTokensToRemove = new Set<string>();
+      if (unbindBinding && (!bindAdapterToken || bindAdapterToken !== unbindBinding.adapterToken)) {
+        adapterTokensToRemove.add(unbindBinding.adapterToken);
+      }
+      if (
+        existingBindingByType &&
+        bindWouldCreateOrReplace &&
+        bindAdapterToken &&
+        existingBindingByType.adapterToken !== bindAdapterToken
+      ) {
+        adapterTokensToRemove.add(existingBindingByType.adapterToken);
+      }
+      for (const adapterToken of adapterTokensToRemove) {
+        await ctx.removeAdapter(adapterToken);
+      }
+
       const updates: {
+        role?: "speaker" | "leader";
         description?: string | null;
         workspace?: string | null;
         provider?: "claude" | "codex" | null;
         model?: string | null;
         reasoningEffort?: Agent["reasoningEffort"] | null;
       } = {};
+
+      if (role !== undefined) {
+        updates.role = role;
+      }
 
       if (p.description !== undefined) {
         if (p.description !== null && typeof p.description !== "string") {
@@ -368,6 +509,7 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         success: true,
         agent: {
           name: updated.name,
+          role: updated.role,
           description: updated.description,
           workspace: updated.workspace,
           provider: updated.provider ?? DEFAULT_AGENT_PROVIDER,

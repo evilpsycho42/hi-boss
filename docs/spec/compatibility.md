@@ -12,10 +12,12 @@ Hi-Boss preserves a small set of legacy behaviors so an upgraded install can sti
 
 - Best-effort migration from legacy `internal_space/Note.md` to `internal_space/MEMORY.md` is preserved so internal memory continues to load after upgrade.
 
-### Telegram message-id formats in stored metadata
+### Legacy outgoing reply-id metadata (`replyToMessageId`)
 
-- Telegram message IDs are rendered/handled in compact base36 for ergonomics.
-- Best-effort handling/migration remains for older stored formats so upgraded installs don’t misinterpret reply-to IDs.
+- Some older stored envelopes may contain `metadata.replyToMessageId`.
+- Runtime no longer uses this field for outbound channel quoting.
+- Canonical outbound quoting uses `metadata.replyToEnvelopeId` linkage only.
+- If only legacy `replyToMessageId` exists, delivery still succeeds but sends without quote/reply context.
 
 ### Reply context metadata keys
 

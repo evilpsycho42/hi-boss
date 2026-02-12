@@ -190,7 +190,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     JSON.stringify({ dailyResetAt: "03:00", idleTimeout: "30m", maxContextLength: 180000 }),
     Date.parse("2026-01-15T10:30:00.000Z"),
     Date.parse("2026-01-29T14:22:00.000Z"),
-    JSON.stringify({})
+    JSON.stringify({ role: "speaker" })
   );
 
   insertAgent.run(
@@ -205,7 +205,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
     null,
     Date.parse("2026-01-10T09:00:00.000Z"),
     null,
-    JSON.stringify({})
+    JSON.stringify({ role: "leader" })
   );
 
   const insertBinding = db.prepare(

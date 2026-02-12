@@ -313,12 +313,6 @@ export class MessageRouter {
     const md = envelope.metadata;
     if (!md || typeof md !== "object") return undefined;
 
-    // Legacy: direct platform message id stored on the outgoing envelope.
-    const legacy = (md as Record<string, unknown>).replyToMessageId;
-    if (typeof legacy === "string" && legacy.trim()) {
-      return legacy.trim();
-    }
-
     const replyToEnvelopeId = (md as Record<string, unknown>).replyToEnvelopeId;
     if (typeof replyToEnvelopeId !== "string" || !replyToEnvelopeId.trim()) return undefined;
     const parent = this.db.getEnvelopeById(replyToEnvelopeId.trim());

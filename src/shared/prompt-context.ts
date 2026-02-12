@@ -10,6 +10,7 @@ import { HIBOSS_TOKEN_ENV } from "./env.js";
 import { getAgentDir, getHiBossDir } from "../agent/home-setup.js";
 import { DEFAULT_AGENT_PROVIDER } from "./defaults.js";
 import { formatShortId } from "./id-format.js";
+import { parseAgentRoleFromMetadata } from "./agent-role.js";
 
 const MAX_CUSTOM_FILE_CHARS = 10_000;
 
@@ -242,6 +243,14 @@ export function buildSystemPromptContext(params: {
   const hibossFiles = readHiBossCustomizationFiles(hibossDir);
   const agentFiles = readAgentCustomizationFiles({ hibossDir, agentName: params.agent.name });
 
+  const agentRole = parseAgentRoleFromMetadata(params.agent.metadata);
+  if (!agentRole) {
+    throw new Error(
+      `Agent '${params.agent.name}' is missing required metadata.role (speaker|leader). ` +
+        "Run `hiboss agent set --name <agent> --role <speaker|leader>`."
+    );
+  }
+
   return {
     environment: {
       time: formatUnixMsAsTimeZoneOffset(Date.now(), bossTimeZone),
@@ -267,6 +276,7 @@ export function buildSystemPromptContext(params: {
     },
     agent: {
       name: params.agent.name,
+      role: agentRole,
       description: params.agent.description ?? "",
       workspace: workspaceDir,
       provider: params.agent.provider ?? DEFAULT_AGENT_PROVIDER,

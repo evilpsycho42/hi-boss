@@ -26,6 +26,7 @@ Notes:
 | `boss.name` | string | Boss name (how agent should address the user, or empty) |
 | `boss.adapterIds` | object | Boss identity per adapter type (e.g. `{ telegram: "kevin" }`, or `{}`) |
 | `agent.name` | string | Agent name |
+| `agent.role` | string | `speaker|leader` (required) |
 | `agent.description` | string | Agent description (or empty) |
 | `agent.workspace` | string | Agent workspace directory (resolved; falls back to `process.cwd()`) |
 | `agent.provider` | string | `claude` or `codex` |

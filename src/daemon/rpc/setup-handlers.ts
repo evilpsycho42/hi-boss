@@ -14,6 +14,101 @@ import { parseDailyResetAt, parseDurationToMs } from "../../shared/session-polic
 import { setupAgentHome } from "../../agent/home-setup.js";
 import { isValidIanaTimeZone, getDaemonIanaTimeZone } from "../../shared/timezone.js";
 import { BACKGROUND_AGENT_NAME } from "../../shared/defaults.js";
+import {
+  getSpeakerBindingIntegrity,
+  toSpeakerBindingIntegrityView,
+} from "../../shared/speaker-binding-invariant.js";
+
+function validateSetupAgentName(name: unknown): string {
+  if (typeof name !== "string" || !isValidAgentName(name)) {
+    rpcError(RPC_ERRORS.INVALID_PARAMS, AGENT_NAME_ERROR_MESSAGE);
+  }
+  const normalized = name.trim();
+  if (normalized.toLowerCase() === BACKGROUND_AGENT_NAME) {
+    rpcError(RPC_ERRORS.INVALID_PARAMS, `Reserved agent name: ${BACKGROUND_AGENT_NAME}`);
+  }
+  return normalized;
+}
+
+function validateSetupAgentConfig(
+  agent: SetupExecuteParams["speakerAgent"] | SetupExecuteParams["leaderAgent"],
+  label: "speaker-agent" | "leader-agent"
+): void {
+  if (agent.reasoningEffort !== undefined) {
+    if (
+      agent.reasoningEffort !== null &&
+      agent.reasoningEffort !== "none" &&
+      agent.reasoningEffort !== "low" &&
+      agent.reasoningEffort !== "medium" &&
+      agent.reasoningEffort !== "high" &&
+      agent.reasoningEffort !== "xhigh"
+    ) {
+      rpcError(
+        RPC_ERRORS.INVALID_PARAMS,
+        `Invalid ${label}.reasoning-effort (expected none, low, medium, high, xhigh)`
+      );
+    }
+  }
+
+  if (agent.permissionLevel !== undefined) {
+    if (
+      agent.permissionLevel !== "restricted" &&
+      agent.permissionLevel !== "standard" &&
+      agent.permissionLevel !== "privileged" &&
+      agent.permissionLevel !== "boss"
+    ) {
+      rpcError(
+        RPC_ERRORS.INVALID_PARAMS,
+        `Invalid ${label}.permission-level (expected restricted, standard, privileged, boss)`
+      );
+    }
+  }
+
+  if (agent.sessionPolicy !== undefined) {
+    if (typeof agent.sessionPolicy !== "object" || agent.sessionPolicy === null) {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, `Invalid ${label}.session-policy (expected object)`);
+    }
+
+    const sp = agent.sessionPolicy as Record<string, unknown>;
+    if (sp.dailyResetAt !== undefined) {
+      if (typeof sp.dailyResetAt !== "string") {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, `Invalid ${label}.session-policy.daily-reset-at`);
+      }
+      sp.dailyResetAt = parseDailyResetAt(sp.dailyResetAt).normalized;
+    }
+    if (sp.idleTimeout !== undefined) {
+      if (typeof sp.idleTimeout !== "string") {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, `Invalid ${label}.session-policy.idle-timeout`);
+      }
+      parseDurationToMs(sp.idleTimeout);
+      sp.idleTimeout = sp.idleTimeout.trim();
+    }
+    if ((sp as any).maxTokens !== undefined) {
+      rpcError(
+        RPC_ERRORS.INVALID_PARAMS,
+        `Invalid ${label}.session-policy.max-tokens (use max-context-length)`
+      );
+    }
+    if (sp.maxContextLength !== undefined) {
+      if (typeof sp.maxContextLength !== "number" || !Number.isFinite(sp.maxContextLength)) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, `Invalid ${label}.session-policy.max-context-length`);
+      }
+      if (sp.maxContextLength <= 0) {
+        rpcError(
+          RPC_ERRORS.INVALID_PARAMS,
+          `Invalid ${label}.session-policy.max-context-length (must be > 0)`
+        );
+      }
+      (sp as any).maxContextLength = Math.trunc(sp.maxContextLength);
+    }
+  }
+
+  if (agent.metadata !== undefined) {
+    if (typeof agent.metadata !== "object" || agent.metadata === null || Array.isArray(agent.metadata)) {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, `Invalid ${label}.metadata (expected object)`);
+    }
+  }
+}
 
 function ensureBossProfileFile(hibossDir: string): void {
   try {
@@ -38,7 +133,62 @@ function ensureBossProfileFile(hibossDir: string): void {
 export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
   return {
     "setup.check": async () => {
-      return { completed: ctx.db.isSetupComplete() };
+      const completed = ctx.db.isSetupComplete();
+      const agents = ctx.db.listAgents();
+      const bindings = ctx.db.listBindings();
+      const roleCounts = ctx.db.getAgentRoleCounts();
+      const missingRoles: Array<"speaker" | "leader"> = [];
+      if (roleCounts.speaker < 1) missingRoles.push("speaker");
+      if (roleCounts.leader < 1) missingRoles.push("leader");
+      const integrityView = toSpeakerBindingIntegrityView(
+        getSpeakerBindingIntegrity({
+          agents,
+          bindings,
+        })
+      );
+
+      const bossName = (ctx.db.getBossName() ?? "").trim();
+      const bossTimezone = (ctx.db.getConfig("boss_timezone") ?? "").trim();
+      const telegramBossId = (ctx.db.getAdapterBossId("telegram") ?? "").trim();
+      const hasBossToken = Boolean((ctx.db.getConfig("boss_token_hash") ?? "").trim());
+      const missingUserInfo = {
+        bossName: bossName.length === 0,
+        bossTimezone: bossTimezone.length === 0,
+        telegramBossId: telegramBossId.length === 0,
+        bossToken: !hasBossToken,
+      };
+      const memoryConfigured = Boolean((ctx.db.getConfig("memory_model_source") ?? "").trim());
+      const hasMissingUserInfo = Object.values(missingUserInfo).some(Boolean);
+      const hasIntegrityViolations =
+        integrityView.speakerWithoutBindings.length > 0 ||
+        integrityView.duplicateSpeakerBindings.length > 0;
+
+      return {
+        completed,
+        ready:
+          completed &&
+          missingRoles.length === 0 &&
+          !hasMissingUserInfo &&
+          memoryConfigured &&
+          !hasIntegrityViolations,
+        roleCounts,
+        missingRoles,
+        integrity: integrityView,
+        agents: agents.map((agent) => ({
+          name: agent.name,
+          role: agent.role,
+          workspace: agent.workspace,
+          provider: agent.provider,
+        })),
+        userInfo: {
+          bossName: bossName || undefined,
+          bossTimezone: bossTimezone || undefined,
+          telegramBossId: telegramBossId || undefined,
+          hasBossToken,
+          missing: missingUserInfo,
+        },
+        memoryConfigured,
+      };
     },
 
     "setup.execute": async (params) => {
@@ -65,83 +215,19 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid boss-timezone (expected IANA timezone)");
       }
 
-      if (typeof p.agent.name !== "string" || !isValidAgentName(p.agent.name)) {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, AGENT_NAME_ERROR_MESSAGE);
+      const speakerAgentName = validateSetupAgentName(p.speakerAgent.name);
+      const leaderAgentName = validateSetupAgentName(p.leaderAgent.name);
+      if (speakerAgentName.toLowerCase() === leaderAgentName.toLowerCase()) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid setup agents (speaker-agent and leader-agent must be different)");
       }
-      if (p.agent.name.trim().toLowerCase() === BACKGROUND_AGENT_NAME) {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, `Reserved agent name: ${BACKGROUND_AGENT_NAME}`);
+      validateSetupAgentConfig(p.speakerAgent, "speaker-agent");
+      validateSetupAgentConfig(p.leaderAgent, "leader-agent");
+
+      if (p.speakerAgent.provider !== "claude" && p.speakerAgent.provider !== "codex") {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid speaker-agent.provider (expected claude or codex)");
       }
-
-      if (p.agent.reasoningEffort !== undefined) {
-        if (
-          p.agent.reasoningEffort !== null &&
-          p.agent.reasoningEffort !== "none" &&
-          p.agent.reasoningEffort !== "low" &&
-          p.agent.reasoningEffort !== "medium" &&
-          p.agent.reasoningEffort !== "high" &&
-          p.agent.reasoningEffort !== "xhigh"
-        ) {
-          rpcError(
-            RPC_ERRORS.INVALID_PARAMS,
-            "Invalid reasoning-effort (expected none, low, medium, high, xhigh)"
-          );
-        }
-      }
-
-      if (p.agent.permissionLevel !== undefined) {
-        if (
-          p.agent.permissionLevel !== "restricted" &&
-          p.agent.permissionLevel !== "standard" &&
-          p.agent.permissionLevel !== "privileged" &&
-          p.agent.permissionLevel !== "boss"
-        ) {
-          rpcError(
-            RPC_ERRORS.INVALID_PARAMS,
-            "Invalid permission-level (expected restricted, standard, privileged, boss)"
-          );
-        }
-      }
-
-      if (p.agent.sessionPolicy !== undefined) {
-        if (typeof p.agent.sessionPolicy !== "object" || p.agent.sessionPolicy === null) {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy (expected object)");
-        }
-
-        const sp = p.agent.sessionPolicy as Record<string, unknown>;
-        if (sp.dailyResetAt !== undefined) {
-          if (typeof sp.dailyResetAt !== "string") {
-            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.daily-reset-at");
-          }
-          sp.dailyResetAt = parseDailyResetAt(sp.dailyResetAt).normalized;
-        }
-        if (sp.idleTimeout !== undefined) {
-          if (typeof sp.idleTimeout !== "string") {
-            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.idle-timeout");
-          }
-          parseDurationToMs(sp.idleTimeout);
-          sp.idleTimeout = sp.idleTimeout.trim();
-        }
-        if ((sp as any).maxTokens !== undefined) {
-          rpcError(
-            RPC_ERRORS.INVALID_PARAMS,
-            "Invalid session-policy.max-tokens (use max-context-length)"
-          );
-        }
-        if (sp.maxContextLength !== undefined) {
-          if (typeof sp.maxContextLength !== "number" || !Number.isFinite(sp.maxContextLength)) {
-            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.max-context-length");
-          }
-          if (sp.maxContextLength <= 0) {
-            rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid session-policy.max-context-length (must be > 0)");
-          }
-          (sp as any).maxContextLength = Math.trunc(sp.maxContextLength);
-        }
-      }
-
-      if (p.agent.metadata !== undefined) {
-        if (typeof p.agent.metadata !== "object" || p.agent.metadata === null || Array.isArray(p.agent.metadata)) {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid metadata (expected object)");
-        }
+      if (p.leaderAgent.provider !== "claude" && p.leaderAgent.provider !== "codex") {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid leader-agent.provider (expected claude or codex)");
       }
 
       if (p.adapter.adapterType !== "telegram") {
@@ -186,8 +272,9 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
         }
       }
 
-      // Setup agent home directory
-      await setupAgentHome(p.agent.name, ctx.config.dataDir);
+      // Setup agent home directories
+      await setupAgentHome(speakerAgentName, ctx.config.dataDir);
+      await setupAgentHome(leaderAgentName, ctx.config.dataDir);
       ensureBossProfileFile(ctx.config.dataDir);
 
       // If an adapter is provided and the daemon is running, create/start it first.
@@ -213,17 +300,15 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
         }
       }
 
-      let createdAgentToken: string;
+      let createdSpeakerAgentToken: string;
+      let createdLeaderAgentToken: string;
       try {
-        createdAgentToken = ctx.db.runInTransaction(() => {
+        const createdTokens = ctx.db.runInTransaction(() => {
           // Set boss name
           ctx.db.setBossName(p.bossName);
 
           // Set boss timezone (used for all displayed timestamps)
           ctx.db.setConfig("boss_timezone", bossTimezone || getDaemonIanaTimeZone());
-
-          // Set default provider
-          ctx.db.setDefaultProvider(p.provider);
 
           // Store semantic memory configuration (best-effort; can be disabled)
           const memory = p.memory ?? {
@@ -236,30 +321,55 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
           };
           ctx.writeMemoryConfigToDb(memory);
 
-          // Create the first agent
-          const metadata =
-            p.agent.metadata && typeof p.agent.metadata === "object" && !Array.isArray(p.agent.metadata)
+          // Create speaker agent
+          const speakerMetadata =
+            p.speakerAgent.metadata && typeof p.speakerAgent.metadata === "object" && !Array.isArray(p.speakerAgent.metadata)
               ? (() => {
-                  const copy = { ...(p.agent.metadata as Record<string, unknown>) };
+                  const copy = { ...(p.speakerAgent.metadata as Record<string, unknown>) };
                   // Reserved internal metadata key (best-effort session resume handle).
                   delete copy.sessionHandle;
                   return copy;
                 })()
               : undefined;
-          const agentResult = ctx.db.registerAgent({
-            name: p.agent.name,
-            description: p.agent.description,
-            workspace: p.agent.workspace,
-            provider: p.provider,
-            model: p.agent.model,
-            reasoningEffort: p.agent.reasoningEffort,
-            permissionLevel: p.agent.permissionLevel,
-            sessionPolicy: p.agent.sessionPolicy,
-            metadata,
+
+          const speakerAgentResult = ctx.db.registerAgent({
+            name: speakerAgentName,
+            role: "speaker",
+            description: p.speakerAgent.description,
+            workspace: p.speakerAgent.workspace,
+            provider: p.speakerAgent.provider,
+            model: p.speakerAgent.model,
+            reasoningEffort: p.speakerAgent.reasoningEffort,
+            permissionLevel: p.speakerAgent.permissionLevel,
+            sessionPolicy: p.speakerAgent.sessionPolicy,
+            metadata: speakerMetadata,
+          });
+
+          // Create leader agent
+          const leaderMetadata =
+            p.leaderAgent.metadata && typeof p.leaderAgent.metadata === "object" && !Array.isArray(p.leaderAgent.metadata)
+              ? (() => {
+                  const copy = { ...(p.leaderAgent.metadata as Record<string, unknown>) };
+                  delete copy.sessionHandle;
+                  return copy;
+                })()
+              : undefined;
+
+          const leaderAgentResult = ctx.db.registerAgent({
+            name: leaderAgentName,
+            role: "leader",
+            description: p.leaderAgent.description,
+            workspace: p.leaderAgent.workspace,
+            provider: p.leaderAgent.provider,
+            model: p.leaderAgent.model,
+            reasoningEffort: p.leaderAgent.reasoningEffort,
+            permissionLevel: p.leaderAgent.permissionLevel,
+            sessionPolicy: p.leaderAgent.sessionPolicy,
+            metadata: leaderMetadata,
           });
 
           // Create adapter binding if provided
-          ctx.db.createBinding(p.agent.name, p.adapter.adapterType, p.adapter.adapterToken);
+          ctx.db.createBinding(speakerAgentName, p.adapter.adapterType, p.adapter.adapterToken);
 
           // Store boss ID for this adapter
           ctx.db.setAdapterBossId(p.adapter.adapterType, p.adapter.adapterBossId.trim().replace(/^@/, ""));
@@ -270,8 +380,13 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
           // Mark setup as complete
           ctx.db.markSetupComplete();
 
-          return agentResult.token;
+          return {
+            speakerAgentToken: speakerAgentResult.token,
+            leaderAgentToken: leaderAgentResult.token,
+          };
         });
+        createdSpeakerAgentToken = createdTokens.speakerAgentToken;
+        createdLeaderAgentToken = createdTokens.leaderAgentToken;
       } catch (err) {
         // Roll back any adapter started during setup if DB commit fails.
         if (createdAdapterForSetup && adapterToken) {
@@ -281,9 +396,13 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
       }
 
       // Register agent handler for auto-execution
-      ctx.registerAgentHandler(p.agent.name);
+      ctx.registerAgentHandler(speakerAgentName);
+      ctx.registerAgentHandler(leaderAgentName);
 
-      return { agentToken: createdAgentToken };
+      return {
+        speakerAgentToken: createdSpeakerAgentToken,
+        leaderAgentToken: createdLeaderAgentToken,
+      };
     },
 
     // Boss methods

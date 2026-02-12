@@ -27,11 +27,27 @@ import {
   DEFAULT_AGENT_PROVIDER,
 } from "../../shared/defaults.js";
 import { createAgentRegisterHandler } from "./agent-register-handler.js";
+import { parseAgentRoleFromMetadata, resolveAgentRole } from "../../shared/agent-role.js";
+import {
+  predictRoleAfterBindingMutation,
+  buildMutationInvariantViolationMessage,
+} from "../../shared/agent-role-mutation.js";
 
 /**
  * Create agent RPC handlers (excluding agent.set which is in its own file).
  */
 export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
+  const requireRole = (agentName: string, metadata: Record<string, unknown> | undefined): "speaker" | "leader" => {
+    const role = parseAgentRoleFromMetadata(metadata);
+    if (!role) {
+      rpcError(
+        RPC_ERRORS.INTERNAL_ERROR,
+        `Agent '${agentName}' is missing required role metadata. Run: hiboss agent set --name ${agentName} --role <speaker|leader>`
+      );
+    }
+    return role;
+  };
+
   return {
     "agent.register": createAgentRegisterHandler(ctx),
 
@@ -55,6 +71,7 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
       return {
         agents: agents.map((a) => ({
           name: a.name,
+          role: requireRole(a.name, a.metadata),
           description: a.description,
           workspace: a.workspace,
           provider: a.provider,
@@ -96,6 +113,7 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const isBusy = ctx.executor.isAgentBusy(agent.name);
       const pendingCount = ctx.db.countDuePendingEnvelopesForAgent(agent.name);
       const bindings = ctx.db.getBindingsByAgentName(agent.name).map((b) => b.adapterType);
+      const resolvedRole = requireRole(agent.name, agent.metadata);
 
       const currentRun = isBusy ? ctx.db.getCurrentRunningAgentRun(agent.name) : null;
       const lastRun = ctx.db.getLastFinishedAgentRun(agent.name);
@@ -103,6 +121,7 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const result: AgentStatusResult = {
         agent: {
           name: agent.name,
+          role: resolvedRole,
           ...(agent.description ? { description: agent.description } : {}),
           ...(agent.workspace ? { workspace: agent.workspace } : {}),
           ...(agent.provider ? { provider: agent.provider } : {}),
@@ -252,6 +271,37 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const binding = ctx.db.getAgentBindingByType(agentName, p.adapterType);
       if (!binding) {
         rpcError(RPC_ERRORS.NOT_FOUND, "Binding not found");
+      }
+
+      const allAgents = ctx.db.listAgents();
+      const allBindings = ctx.db.listBindings();
+      const currentBindingCount = allBindings.filter((b) => b.agentName === agentName).length;
+      const nextBindingCount = currentBindingCount - 1;
+      const roleAfterMutation = resolveAgentRole({
+        metadata: agent.metadata,
+        bindingCount: nextBindingCount,
+      });
+
+      if (roleAfterMutation === "speaker" && nextBindingCount < 1) {
+        rpcError(
+          RPC_ERRORS.INVALID_PARAMS,
+          "Cannot unbind the last adapter from speaker agent. Bind another adapter or change role to leader with `hiboss agent set`."
+        );
+      }
+
+      const prediction = predictRoleAfterBindingMutation({
+        agent,
+        bindingCountDelta: -1,
+        allAgents,
+        allBindings,
+      });
+      if (prediction.breaking) {
+        const message = buildMutationInvariantViolationMessage({
+          operation: "unbind",
+          agentName,
+          prediction,
+        });
+        rpcError(RPC_ERRORS.INVALID_PARAMS, message);
       }
 
       // Remove adapter
