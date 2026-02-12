@@ -26,6 +26,8 @@ Via npm:
 
 ```bash
 npm i -g hiboss
+hiboss setup
+hiboss daemon start --token <boss-token>
 ```
 
 First run (setup + start daemon):
