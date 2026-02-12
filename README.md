@@ -87,6 +87,57 @@ hiboss setup --config-file ./hiboss.setup.json --token <boss-token>
 hiboss daemon start --token <boss-token>
 ```
 
+- Canonical repair for older single-agent Telegram setups (speaker only, missing leader). Save this as `./hiboss.repair.v2.json` and fill placeholders:
+
+```json
+{
+  "version": 2,
+  "boss-name": "<your-name>",
+  "boss-timezone": "<IANA-timezone>",
+  "telegram": {
+    "adapter-boss-id": "<telegram-username-without-@>"
+  },
+  "agents": [
+    {
+      "name": "nex",
+      "role": "speaker",
+      "provider": "<claude-or-codex>",
+      "description": "Telegram speaker agent",
+      "workspace": "<absolute-workspace-path>",
+      "model": null,
+      "reasoning-effort": null,
+      "permission-level": "standard",
+      "bindings": [
+        {
+          "adapter-type": "telegram",
+          "adapter-token": "<telegram-bot-token>"
+        }
+      ]
+    },
+    {
+      "name": "kai",
+      "role": "leader",
+      "provider": "<claude-or-codex>",
+      "description": "Background leader agent",
+      "workspace": "<absolute-workspace-path>",
+      "model": null,
+      "reasoning-effort": null,
+      "permission-level": "standard",
+      "bindings": []
+    }
+  ]
+}
+```
+
+```bash
+hiboss daemon stop --token <boss-token>
+hiboss setup --config-file ./hiboss.repair.v2.json --token <boss-token> --dry-run
+hiboss setup --config-file ./hiboss.repair.v2.json --token <boss-token>
+hiboss daemon start --token <boss-token>
+```
+
+Note: setup config apply is a full reconcile and will regenerate agent tokens (printed once).
+
 Full reset (destructive):
 
 ```bash
