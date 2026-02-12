@@ -77,37 +77,54 @@ Token semantics:
 
 ### Config Schema (Version 2)
 
-Top-level required fields:
+Top-level fields:
+
+Required:
 - `version: 2`
-- `boss-name`
-- `boss-timezone`
 - `telegram.adapter-boss-id`
 - `memory`
 - `agents[]`
 
+Optional (defaults applied if omitted):
+- `boss-name` (default: OS username)
+- `boss-timezone` (default: daemon host timezone; IANA)
+
+Forbidden:
+- `boss-token` (must not be present in v2 config files)
+
 `memory` fields:
+
+Required:
 - `enabled: boolean`
 - `mode: "default" | "local"`
-- `model-path: string`
-- `model-uri: string`
-- `dims: number`
-- `last-error: string`
+- `dims: number` (must be `>= 0`; must be `> 0` when `enabled=true`)
+
+Optional (defaults applied if omitted):
+- `model-path: string` (default: `""`; required when `enabled=true`)
+- `model-uri: string` (default: `""`)
+- `last-error: string` (default: `""`)
 
 `agents[]` fields:
+
+Required:
 - `name`
 - `role` (`speaker` or `leader`)
 - `provider` (`claude` or `codex`)
-- `description`
-- `workspace` (absolute path)
-- `model` (`string | null`; `"default"` accepted and normalized to `null`)
-- `reasoning-effort` (`none|low|medium|high|xhigh|default|null`)
-- `permission-level` (`restricted|standard|privileged|boss`)
-- `session-policy`:
+- `bindings[]` (array; may be empty for leaders)
+
+Optional (defaults applied if omitted):
+- `description` (default: generated description)
+- `workspace` (default: user home directory; must be absolute path)
+- `model` (`string | null`; `"default"` accepted and normalized to `null`; default: `null`)
+- `reasoning-effort` (`none|low|medium|high|xhigh|default|null`; `"default"` normalized to `null`; default: `null`)
+- `permission-level` (`restricted|standard|privileged|boss`; default: `standard`)
+- `session-policy` (object; keys optional):
   - `daily-reset-at`
   - `idle-timeout`
   - `max-context-length`
 - `metadata` (object)
-- `bindings[]`:
+
+`bindings[]` fields (required per binding):
   - `adapter-type`
   - `adapter-token`
 
@@ -116,6 +133,10 @@ Invariants:
 - Every `speaker` has at least one binding.
 - Adapter token identity (`adapter-type` + `adapter-token`) must be unique across agents.
 - For current adapter support, telegram token format must be valid when `adapter-type=telegram`.
+
+Note:
+- Config apply is full reconcile. Missing optional fields are defaulted before apply (so defaults become desired state).
+- For re-setup, start from `hiboss setup export` to preserve existing values.
 
 ### Example (Version 2)
 
@@ -208,4 +229,5 @@ Core mappings:
 Additional effects:
 - Boss token hash set/updated from CLI `--token`.
 - Setup-managed rows are rebuilt from desired config on apply.
+- Run audit rows in `agent_runs` are cleared on apply.
 - `config.setup_completed = "true"` is set after successful apply.

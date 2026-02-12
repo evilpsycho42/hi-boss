@@ -282,7 +282,8 @@ export class HiBossDatabase {
    * Clear setup-managed rows so a declarative setup import can recreate them.
    *
    * Notes:
-   * - Keeps envelopes/history/config keys intact.
+   * - Keeps envelopes (including envelope history) and config keys intact.
+   * - Clears agent run audit in `agent_runs`.
    * - Clears cron schedules to avoid orphan schedules that reference removed agents.
    */
   clearSetupManagedState(): void {
@@ -452,24 +453,6 @@ export class HiBossDatabase {
     }
 
     return this.getAgentByName(agent.name)!;
-  }
-
-  /**
-   * Update agent metadata.
-   */
-  updateAgentMetadata(name: string, metadata: Record<string, unknown> | null): void {
-    const agent = this.getAgentByNameCaseInsensitive(name);
-    if (!agent) {
-      throw new Error("Agent not found");
-    }
-    const role = parseAgentRoleFromMetadata(agent.metadata);
-    const next = withAgentRoleMetadata({
-      metadata: metadata ?? undefined,
-      role,
-      stripSessionHandle: true,
-    });
-    const stmt = this.db.prepare("UPDATE agents SET metadata = ? WHERE name = ?");
-    stmt.run(next ? JSON.stringify(next) : null, agent.name);
   }
 
   /**

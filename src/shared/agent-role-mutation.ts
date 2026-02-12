@@ -52,11 +52,6 @@ export function predictRoleAfterBindingMutation(params: {
     bindingCount: newBindingCount,
   });
 
-  // Check if mutation would break invariant
-  const bindingsAfter = allBindings.map((b) =>
-    b.agentName === agent.name ? { agentName: b.agentName } : b
-  );
-
   // Remove bindings for this agent and re-add with new count
   const bindingsWithoutThisAgent = allBindings.filter((b) => b.agentName !== agent.name);
   const newBindings = [

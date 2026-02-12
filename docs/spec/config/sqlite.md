@@ -12,7 +12,7 @@ Tables (high level):
 - `agent_bindings` — adapter credentials bound to agents (e.g., Telegram bot token)
 - `envelopes` — durable message queue + audit
 - `cron_schedules` — durable cron definitions (materialize envelopes)
-- `agent_runs` — run audit records
+- `agent_runs` — run audit records (cleared by `hiboss setup --config-file` apply)
 
 ## `config` keys (selected)
 

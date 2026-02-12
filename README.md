@@ -56,9 +56,9 @@ hiboss setup
 Setup:
 - initializes local state (SQLite + per-agent homes)
 - prompts for your boss name and timezone
-- creates your first agent
-- configures a Telegram bot + boss Telegram username for that first agent
-- prints `boss-token:` and `agent-token:` **once** (save them somewhere safe)
+- creates a `speaker` agent (chat-facing) and a `leader` agent (orchestration)
+- configures a Telegram bot + boss Telegram username for the `speaker`
+- prints `boss-token:`, `speaker-agent-token:`, and `leader-agent-token:` **once** (save them somewhere safe)
 
 State directory:
 - default: `~/hiboss/`
@@ -87,10 +87,10 @@ Hi-Boss connects an agent to Telegram via a bot.
 
 1) Create a Telegram bot token via @BotFather.
 
-2) Bind the bot to an agent (the first agent is bound during `hiboss setup`; use this for additional agents):
+2) Bind the bot to a `speaker` agent (the setup-created speaker is bound during `hiboss setup`; use this for additional speaker agents):
 
 ```bash
-hiboss agent set --token <boss-token> --name <agent-name> --bind-adapter-type telegram --bind-adapter-token <telegram-bot-token>
+hiboss agent set --token <boss-token> --name <speaker-agent-name> --role speaker --bind-adapter-type telegram --bind-adapter-token <telegram-bot-token>
 ```
 
 3) Talk to your agent by messaging the bot in Telegram.
@@ -107,26 +107,26 @@ Manage agents via the CLI (create / update / remove), and optionally delegate ad
 Create/register a new agent:
 
 ```bash
-hiboss agent register --token <boss-token> --name nex --provider codex --description "AI assistant" --workspace "$PWD"
+hiboss agent register --token <boss-token> --name ops-bot --role leader --provider codex --description "AI assistant" --workspace "$PWD"
 ```
 
 Update an agent (manual configuration):
 
 ```bash
-hiboss agent set --token <boss-token> --name nex --provider codex --permission-level privileged
+hiboss agent set --token <boss-token> --name ops-bot --provider codex --permission-level privileged
 ```
 
 Remove an agent:
 
 ```bash
-hiboss agent delete --token <boss-token> --name nex
+hiboss agent delete --token <boss-token> --name ops-bot
 ```
 
 List / status:
 
 ```bash
 hiboss agent list --token <boss-token>
-hiboss agent status --token <boss-token> --name nex
+hiboss agent status --token <boss-token> --name ops-bot
 ```
 
 ### Permission levels

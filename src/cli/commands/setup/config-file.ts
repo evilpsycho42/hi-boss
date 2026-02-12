@@ -390,6 +390,8 @@ export async function runConfigFileSetup(options: ConfigFileSetupOptions): Promi
     console.log(`   removed-agents: ${listOrNone(result.diff.removedAgentNames)}`);
     console.log(`   recreated-agents: ${listOrNone(result.diff.recreatedAgentNames)}`);
     console.log(`   new-agents: ${listOrNone(result.diff.newlyCreatedAgentNames)}`);
+    console.log(`   current-binding-count: ${result.diff.currentBindingCount}`);
+    console.log(`   desired-binding-count: ${result.diff.desiredBindingCount}`);
     console.log(`   generated-agent-token-count: ${result.generatedAgentTokens.length}`);
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 
