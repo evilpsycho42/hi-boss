@@ -45,10 +45,6 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid agent-name");
       }
 
-      if ((p as any).providerSourceHome !== undefined) {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "provider-source-home is no longer supported");
-      }
-
       const agent = ctx.db.getAgentByNameCaseInsensitive(p.agentName.trim());
       if (!agent) {
         rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");

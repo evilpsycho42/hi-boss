@@ -81,13 +81,8 @@ function buildAmbiguousMemoryIdPrefixData(params: {
 
 function requireAgentForMemory(
   ctx: DaemonContext,
-  principal: Principal,
-  params: Record<string, unknown>
+  principal: Principal
 ): string {
-  const legacyAgentName = params.agentName;
-  if (legacyAgentName !== undefined) {
-    rpcError(RPC_ERRORS.INVALID_PARAMS, "agentName is no longer supported");
-  }
   if (principal.kind !== "agent") {
     rpcError(RPC_ERRORS.UNAUTHORIZED, "Boss tokens cannot access agent memory (use an agent token)");
   }
@@ -113,7 +108,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid category");
       }
 
-      const agentName = requireAgentForMemory(ctx, principal, params);
+      const agentName = requireAgentForMemory(ctx, principal);
       const memory = await ctx.ensureMemoryService();
       const startedAtMs = Date.now();
       try {
@@ -163,7 +158,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
         limit = Math.trunc(p.limit);
       }
 
-      const agentName = requireAgentForMemory(ctx, principal, params);
+      const agentName = requireAgentForMemory(ctx, principal);
       const memory = await ctx.ensureMemoryService();
       const memories = await memory.search(agentName, p.query, { category: p.category, limit });
       const result: MemorySearchResult = { memories };
@@ -191,7 +186,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
         limit = Math.trunc(p.limit);
       }
 
-      const agentName = requireAgentForMemory(ctx, principal, params);
+      const agentName = requireAgentForMemory(ctx, principal);
       const memory = await ctx.ensureMemoryStore();
       const memories = await memory.list(agentName, { category: p.category, limit });
       const result: MemoryListResult = { memories };
@@ -204,7 +199,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const principal = ctx.resolvePrincipal(token);
       ctx.assertOperationAllowed("memory.categories", principal);
 
-      const agentName = requireAgentForMemory(ctx, principal, params);
+      const agentName = requireAgentForMemory(ctx, principal);
       const memory = await ctx.ensureMemoryStore();
       const categories = await memory.categories(agentName);
       const result: MemoryCategoriesResult = { categories };
@@ -221,7 +216,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid category");
       }
 
-      const agentName = requireAgentForMemory(ctx, principal, params);
+      const agentName = requireAgentForMemory(ctx, principal);
       const memory = await ctx.ensureMemoryStore();
       const startedAtMs = Date.now();
       try {
@@ -257,7 +252,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid id");
       }
 
-      const agentName = requireAgentForMemory(ctx, principal, params);
+      const agentName = requireAgentForMemory(ctx, principal);
       const memory = await ctx.ensureMemoryStore();
       const rawId = p.id.trim();
       const exact = await memory.get(agentName, rawId);
@@ -295,7 +290,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid id");
       }
 
-      const agentName = requireAgentForMemory(ctx, principal, params);
+      const agentName = requireAgentForMemory(ctx, principal);
       const memory = await ctx.ensureMemoryStore();
       const startedAtMs = Date.now();
       const rawId = p.id.trim();
@@ -348,7 +343,7 @@ export function createMemoryHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const principal = ctx.resolvePrincipal(token);
       ctx.assertOperationAllowed("memory.clear", principal);
 
-      const agentName = requireAgentForMemory(ctx, principal, params);
+      const agentName = requireAgentForMemory(ctx, principal);
       const memory = await ctx.ensureMemoryStore();
       const startedAtMs = Date.now();
       try {

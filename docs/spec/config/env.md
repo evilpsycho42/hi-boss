@@ -22,6 +22,7 @@ Notes:
 
 ## Provider CLI homes
 
-Hi-Boss uses shared default provider homes (`~/.claude`, `~/.codex`).
+Provider-home behavior is canonical in `docs/spec/provider-clis.md#provider-homes-shared-forced`.
 
-When spawning provider processes, Hi-Boss clears `CLAUDE_CONFIG_DIR` and `CODEX_HOME` so provider-home overrides do not change behavior.
+Environment guarantee:
+- Hi-Boss clears `CLAUDE_CONFIG_DIR` and `CODEX_HOME` when spawning provider processes.

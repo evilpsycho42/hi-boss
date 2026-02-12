@@ -5,15 +5,7 @@ This document defines the field mappings between code (TypeScript), SQLite, and 
 For command flags and examples, see `docs/spec/cli.md` and the topic files under `docs/spec/cli/`.
 For generated prompt/envelope instruction examples, run `npm run examples:prompts` (outputs under `examples/prompts/` and `prompts/examples/`).
 
-Naming conventions:
-- CLI flags: kebab-case, lowercase
-- CLI output keys: kebab-case, lowercase
-
-Short IDs:
-- Many internal IDs are UUIDs.
-- The CLI renders UUID-backed ids as **short ids** by default:
-  - short id = first 8 lowercase hex characters of the UUID with hyphens removed.
-  - full UUIDs are still accepted as input where an `--id` flag exists.
+Cross-cutting naming, boss-marker, and short-id conventions are canonical in `docs/spec/conventions.md`.
 
 Canonical mapping (selected):
 - `envelope.deliverAt` → SQLite `deliver_at` → `--deliver-at` → `deliver-at:`
@@ -176,10 +168,7 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 Command flags:
 - `hiboss agent ...`: `docs/spec/cli/agents.md`
 
-Provider homes:
-- Provider CLIs use shared default homes (`~/.claude`, `~/.codex`).
-- When spawning provider processes, Hi-Boss clears `CLAUDE_CONFIG_DIR` and `CODEX_HOME` so overrides do not change behavior.
-- Hi-Boss does not copy/import provider config files into per-agent directories (per-agent provider homes were removed).
+Provider homes and provider-home override env handling are canonical in `docs/spec/provider-clis.md`.
 
 Agent defaults:
 - `hiboss agent register` requires `--provider` (`claude` or `codex`).

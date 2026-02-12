@@ -41,10 +41,7 @@ Notes:
 - `--model default` on register clears the model override to provider default (`NULL`).
 - `--reasoning-effort default` on register clears the reasoning-effort override to provider default (`NULL`).
 
-Provider homes:
-- Provider CLIs use shared default homes (`~/.claude`, `~/.codex`).
-- Hi-Boss clears `CLAUDE_CONFIG_DIR` / `CODEX_HOME` when spawning provider processes so overrides do not change behavior.
-- Hi-Boss does not import/copy provider config files into per-agent directories.
+Provider-home behavior follows `docs/spec/cli/conventions.md#provider-homes`.
 
 Output (parseable):
 - `name:`
@@ -89,9 +86,7 @@ Notes:
 - `--bind-adapter-*` and `--unbind-adapter-type` may be used together for same-command binding swaps.
 - `--bind-adapter-*` alone replaces an existing binding token for that same adapter type on the target agent (atomic replace).
 
-Provider homes:
-- Provider CLIs use shared default homes (`~/.claude`, `~/.codex`).
-- Hi-Boss clears `CLAUDE_CONFIG_DIR` / `CODEX_HOME` when spawning provider processes so overrides do not change behavior.
+Provider-home behavior follows `docs/spec/cli/conventions.md#provider-homes`.
 
 Output (parseable):
 - `success: true|false`

@@ -33,10 +33,6 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
     const requestedAgentName = typeof p.name === "string" ? p.name.trim() : "";
 
     try {
-      if ((p as any).providerSourceHome !== undefined) {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "provider-source-home is no longer supported");
-      }
-
       if (typeof p.name !== "string" || !isValidAgentName(p.name)) {
         rpcError(RPC_ERRORS.INVALID_PARAMS, AGENT_NAME_ERROR_MESSAGE);
       }

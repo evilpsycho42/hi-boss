@@ -51,7 +51,7 @@ Hi-Boss supports two provider CLIs:
 | claude | `claude` (Claude Code CLI) | `~/.claude` (shared) |
 | codex | `codex` (Codex CLI) | `~/.codex` (shared) |
 
-Hi-Boss does not create per-agent provider directories. When spawning provider processes, Hi-Boss clears `CLAUDE_CONFIG_DIR` and `CODEX_HOME` so provider homes remain the shared defaults. System prompts are injected via CLI flags:
+Provider-home behavior (shared defaults, no per-agent provider homes, and cleared override env vars) is canonical in `docs/spec/provider-clis.md`. System prompts are injected via CLI flags:
 - Claude: `--append-system-prompt`
 - Codex: `-c developer_instructions=...`
 
@@ -87,7 +87,7 @@ Policy:
 
 ## Home Directories
 
-Each agent has a home directory for persona and memory files. Provider CLIs use shared default homes (`~/.claude`, `~/.codex`).
+Each agent has a home directory for persona and memory files.
 
 ### Structure
 

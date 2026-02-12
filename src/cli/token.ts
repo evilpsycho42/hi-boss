@@ -12,6 +12,3 @@ export function resolveToken(token?: string): string {
     `Token is required. Provide --token <token> or set ${HIBOSS_TOKEN_ENV}.`
   );
 }
-
-// Backwards-compatible alias (deprecated)
-export const resolveAgentToken = resolveToken;

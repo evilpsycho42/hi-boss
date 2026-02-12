@@ -199,10 +199,6 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
         rpcError(RPC_ERRORS.ALREADY_EXISTS, "Setup already completed");
       }
 
-      if ((p as any).providerSourceHome !== undefined) {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "provider-source-home is no longer supported");
-      }
-
       if (typeof p.bossName !== "string" || !p.bossName.trim()) {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid boss-name");
       }
