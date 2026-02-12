@@ -12,7 +12,7 @@ Highlights:
 
 ## Sponsor
 
-<a href="https://co.yes.vg" target="_blank" rel="noopener noreferrer">
+<a href="https://co.yes.vg/register?ref=KKYC1Z0" target="_blank" rel="noopener noreferrer">
   <img src="docs/assets/sponsors/yescode-logo.png" alt="YesCode logo" width="280" />
 </a>
 
