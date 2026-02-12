@@ -116,16 +116,19 @@ Real provider verification policy (required for provider/dependency/runtime chan
 Terminology:
 - `rc` = release candidate (preview build that may become stable)
 - Stable installs use `latest`; preview installs use `next`
+- `CHANGELOG.md` is retired; GitHub Releases are the canonical changelog surface.
 
 Routine:
-1. Update `CHANGELOG.md` for the version being published.
-2. Bump `package.json#version` (and `package-lock.json`) to the exact version string.
-3. Publish:
+1. Bump `package.json#version` (and `package-lock.json`) to the exact version string.
+2. Publish to npm:
    - Preview: `npm publish --tag next`
    - Stable: `npm publish --tag latest`
+3. Create a GitHub release with the same version tag (`v<version>`):
+   - Preview release: changelog body is optional/minimal.
+   - Stable release: include changelog/release notes in the GitHub release body.
 
 Suggestion helper:
-- `npm run version:suggest -- --type preview` (or `stable`) prints a suggested version based on `CHANGELOG.md` + today’s date.
+- `npm run version:suggest -- --type preview` (or `stable`) prints a suggested version for today’s date.
 
 ## Repo layout (what lives where)
 
