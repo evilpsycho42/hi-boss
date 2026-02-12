@@ -49,6 +49,7 @@ export function registerAgentCommands(program: Command): void {
     .option("--metadata-file <path>", "Path to agent metadata JSON file")
     .option("--bind-adapter-type <type>", "Bind adapter type at creation (e.g., telegram)")
     .option("--bind-adapter-token <token>", "Bind adapter token at creation (e.g., bot token)")
+    .option("--dry-run", "Validate registration without creating the agent")
     .action((options) => {
       registerAgent({
         token: options.token,
@@ -67,6 +68,7 @@ export function registerAgentCommands(program: Command): void {
         metadataFile: options.metadataFile,
         bindAdapterType: options.bindAdapterType,
         bindAdapterToken: options.bindAdapterToken,
+        dryRun: Boolean(options.dryRun),
       });
     });
 

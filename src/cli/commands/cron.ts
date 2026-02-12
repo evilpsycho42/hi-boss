@@ -3,6 +3,8 @@ import { IpcClient } from "../ipc-client.js";
 import { resolveToken } from "../token.js";
 import type { CronSchedule } from "../../cron/types.js";
 import { formatUnixMsAsTimeZoneOffset } from "../../shared/time.js";
+import { computeNextCronUnixMsSeries } from "../../shared/cron.js";
+import { isValidIanaTimeZone } from "../../shared/timezone.js";
 import { extractTelegramFileId, normalizeAttachmentSource, resolveText } from "./envelope-input.js";
 import { tryPrintAmbiguousIdPrefixError } from "../ambiguous-id.js";
 import { formatShortId } from "../../shared/id-format.js";
@@ -39,6 +41,13 @@ export interface CronListOptions {
 export interface CronIdOptions {
   token?: string;
   id: string;
+}
+
+export interface CronExplainOptions {
+  token?: string;
+  cron: string;
+  timezone?: string;
+  count?: number;
 }
 
 function formatMaybeOffset(ms: number | undefined, bossTimezone: string): string {
@@ -147,6 +156,71 @@ export async function listCrons(options: CronListOptions): Promise<void> {
     for (const schedule of result.schedules) {
       console.log(formatCronScheduleDetail(schedule, time.bossTimezone));
       console.log();
+    }
+  } catch (err) {
+    console.error("error:", (err as Error).message);
+    process.exit(1);
+  }
+}
+
+export async function explainCron(options: CronExplainOptions): Promise<void> {
+  const requestedTimezone = options.timezone?.trim();
+
+  try {
+    const count = (() => {
+      const raw = options.count;
+      if (raw === undefined || raw === null) return 5;
+      if (typeof raw !== "number" || !Number.isFinite(raw)) {
+        throw new Error("Invalid --count");
+      }
+      const n = Math.trunc(raw);
+      if (n <= 0) throw new Error("Invalid --count (must be >= 1)");
+      if (n > 20) throw new Error("Invalid --count (max 20)");
+      return n;
+    })();
+
+    if (typeof options.cron !== "string" || !options.cron.trim()) {
+      throw new Error("Invalid --cron");
+    }
+
+    if (requestedTimezone) {
+      if (!isValidIanaTimeZone(requestedTimezone)) {
+        throw new Error("Invalid --timezone (expected IANA timezone)");
+      }
+    }
+
+    const config = getDefaultConfig();
+    const client = new IpcClient(getSocketPath(config));
+
+    let effectiveTimezone = requestedTimezone;
+    if (!effectiveTimezone) {
+      const token = resolveToken(options.token);
+      effectiveTimezone = (
+        await getDaemonTimeContext({
+          client,
+          token,
+        })
+      ).bossTimezone;
+    }
+    if (!effectiveTimezone) {
+      throw new Error("Failed to resolve timezone");
+    }
+
+    const now = Date.now();
+    const runs = computeNextCronUnixMsSeries({
+      cron: options.cron.trim(),
+      timezone: effectiveTimezone,
+      bossTimezone: effectiveTimezone,
+      afterDate: new Date(now),
+      count,
+    });
+
+    console.log(`cron: ${options.cron.trim()}`);
+    console.log(`timezone: ${effectiveTimezone}`);
+    console.log(`count: ${count}`);
+    console.log(`evaluated-at: ${formatUnixMsAsTimeZoneOffset(now, effectiveTimezone)}`);
+    for (let i = 0; i < runs.length; i++) {
+      console.log(`next-run-${i + 1}: ${formatUnixMsAsTimeZoneOffset(runs[i], effectiveTimezone)}`);
     }
   } catch (err) {
     console.error("error:", (err as Error).message);

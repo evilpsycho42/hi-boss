@@ -840,11 +840,23 @@ export class HiBossDatabase {
     status: EnvelopeStatus;
     limit: number;
     dueOnly?: boolean;
+    createdAfter?: number;
+    createdBefore?: number;
   }): Envelope[] {
-    const { from, to, status, limit, dueOnly } = options;
+    const { from, to, status, limit, dueOnly, createdAfter, createdBefore } = options;
 
     let sql = `SELECT * FROM envelopes WHERE "from" = ? AND "to" = ? AND status = ?`;
     const params: (string | number)[] = [from, to, status];
+
+    if (typeof createdAfter === "number") {
+      sql += " AND created_at >= ?";
+      params.push(createdAfter);
+    }
+
+    if (typeof createdBefore === "number") {
+      sql += " AND created_at <= ?";
+      params.push(createdBefore);
+    }
 
     if (dueOnly) {
       const nowMs = Date.now();

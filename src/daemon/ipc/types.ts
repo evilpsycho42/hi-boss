@@ -72,6 +72,8 @@ export interface EnvelopeListParams {
   from?: string;
   status: "pending" | "done";
   limit?: number;
+  createdAfter?: string;
+  createdBefore?: string;
 }
 
 export interface EnvelopeThreadParams {
@@ -136,6 +138,7 @@ export interface AgentRegisterParams {
   sessionMaxContextLength?: number;
   bindAdapterType?: string;
   bindAdapterToken?: string;
+  dryRun?: boolean;
 }
 
 export interface AgentDeleteParams {

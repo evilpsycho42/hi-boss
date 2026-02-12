@@ -33,6 +33,7 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | `hiboss envelope list` | List envelopes | Yes (agent token) | restricted |
 | `hiboss envelope thread` | Show envelope thread | Yes (agent token) | restricted |
 | `hiboss cron create` | Create a cron schedule | Yes (agent token) | restricted |
+| `hiboss cron explain` | Validate cron + preview upcoming run times | Yes when `--timezone` omitted; otherwise no | n/a |
 | `hiboss cron list` | List cron schedules | Yes (agent token) | restricted |
 | `hiboss cron enable` | Enable a cron schedule | Yes (agent token) | restricted |
 | `hiboss cron disable` | Disable a cron schedule | Yes (agent token) | restricted |

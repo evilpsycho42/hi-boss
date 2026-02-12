@@ -29,6 +29,31 @@ cron-id: <cron-id>  # short id
 Default permission:
 - `restricted`
 
+Errors:
+- Invalid cron expressions return a normalized message:
+  - `error: Invalid cron: <expr> (...)`
+  - The message includes accepted formats (`5-field/6-field` or presets like `@daily`).
+
+## `hiboss cron explain`
+
+Validates a cron expression and prints upcoming run times without creating a schedule.
+
+Flags:
+- `--cron <expr>` (required; 5-field or 6-field with optional seconds; `@daily` etc supported)
+- `--timezone <iana>` (optional; when omitted, resolves boss timezone from daemon)
+- `--count <n>` (optional; default `5`, max `20`)
+- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`; only needed when `--timezone` is omitted)
+
+Output (parseable):
+- `cron:`
+- `timezone:`
+- `count:`
+- `evaluated-at:` (selected timezone offset)
+- `next-run-1:` ... `next-run-N:` (selected timezone offset)
+
+Default permission:
+- n/a (local evaluation); resolving implicit boss timezone uses `daemon.time` and therefore requires a token
+
 ## `hiboss cron list`
 
 Lists cron schedules for the current agent.

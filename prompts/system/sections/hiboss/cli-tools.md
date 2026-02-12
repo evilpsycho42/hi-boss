@@ -63,8 +63,10 @@ EOF
 **Listing messages (when needed):**
 - The daemon already gathers pending envelopes into your turn input; you usually do **not** need `hiboss envelope list`.
 - Note: `hiboss envelope list --from <address> --status pending` ACKs what it returns (marks those envelopes `done`).
+- For targeted history windows, use `--created-after <time>` / `--created-before <time>` on `hiboss envelope list`.
 
 For details/examples, use:
 - `hiboss envelope send --help`
 - `hiboss envelope list --help`
 - `hiboss cron --help`
+- `hiboss cron explain --help`

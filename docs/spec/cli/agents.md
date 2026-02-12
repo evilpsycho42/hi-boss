@@ -24,6 +24,7 @@ Flags:
   - `--session-daily-reset-at HH:MM`
   - `--session-idle-timeout <duration>` (units: `d/h/m/s`)
   - `--session-max-context-length <n>`
+- `--dry-run` (optional; validate only, no mutation)
 
 Behavior when flags are omitted:
 Required flags (validation error):
@@ -52,9 +53,11 @@ Output (parseable):
 - `description:` (always; generated default when omitted; may be empty string)
 - `workspace:` (`(none)` when unset)
 - `token:` (printed once)
+- `dry-run: true` (only when `--dry-run` is set)
 
 Note:
 - In `agent register` output, `workspace: (none)` means no explicit override is stored. Effective runtime workspace falls back to the user's home directory.
+- In dry-run mode, `token:` is rendered as `(dry-run)` and no agent/token is persisted.
 
 ## `hiboss agent set`
 
