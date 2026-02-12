@@ -15,6 +15,15 @@ interface ListEnvelopesResult {
   envelopes: Envelope[];
 }
 
+interface EnvelopeThreadResult {
+  maxDepth: number;
+  totalCount: number;
+  returnedCount: number;
+  truncated: boolean;
+  truncatedIntermediateCount: number;
+  envelopes: Envelope[];
+}
+
 export interface SendEnvelopeOptions {
   to: string;
   token?: string;
@@ -32,6 +41,11 @@ export interface ListEnvelopesOptions {
   from?: string;
   status: "pending" | "done";
   limit?: number;
+}
+
+export interface ThreadEnvelopeOptions {
+  token?: string;
+  envelopeId: string;
 }
 
 /**
@@ -61,7 +75,7 @@ export async function sendEnvelope(options: SendEnvelopeOptions): Promise<void> 
       }),
       deliverAt: options.deliverAt,
       parseMode,
-      replyToMessageId: options.replyTo,
+      replyToEnvelopeId: options.replyTo,
     });
 
     console.log(`id: ${formatShortId(result.id)}`);
@@ -83,9 +97,6 @@ export async function sendEnvelope(options: SendEnvelopeOptions): Promise<void> 
       }
       if (typeof d.parseMode === "string") {
         console.error(`parse-mode: ${d.parseMode}`);
-      }
-      if (typeof d.replyToMessageId === "string" && d.replyToMessageId.trim()) {
-        console.error(`reply-to-channel-message-id: ${d.replyToMessageId.trim()}`);
       }
 
       const adapterError = d.adapterError;
@@ -109,6 +120,62 @@ export async function sendEnvelope(options: SendEnvelopeOptions): Promise<void> 
         }
       }
     }
+    process.exit(1);
+  }
+}
+
+/**
+ * Show an envelope thread (chain to root).
+ */
+export async function threadEnvelope(options: ThreadEnvelopeOptions): Promise<void> {
+  const config = getDefaultConfig();
+  const client = new IpcClient(getSocketPath(config));
+
+  try {
+    const token = resolveToken(options.token);
+    const time = await getDaemonTimeContext({ client, token });
+
+    if (!options.envelopeId || !options.envelopeId.trim()) {
+      throw new Error("Missing --envelope-id");
+    }
+
+    const result = await client.call<EnvelopeThreadResult>("envelope.thread", {
+      token,
+      envelopeId: options.envelopeId.trim(),
+    });
+
+    console.log(`thread-max-depth: ${result.maxDepth}`);
+    console.log(`thread-total-count: ${result.totalCount}`);
+    console.log(`thread-returned-count: ${result.returnedCount}`);
+    console.log(`thread-truncated: ${result.truncated ? "true" : "false"}`);
+    if (result.truncated) {
+      console.log(`thread-truncated-intermediate-count: ${result.truncatedIntermediateCount}`);
+    }
+
+    if (result.envelopes.length === 0) {
+      return;
+    }
+
+    console.log();
+    for (let i = 0; i < result.envelopes.length; i++) {
+      const env = result.envelopes[i];
+      const isRoot = result.truncated && i === result.envelopes.length - 1;
+      if (result.truncated && isRoot) {
+        console.log(`...${result.truncatedIntermediateCount} intermediate envelopes truncated...`);
+        console.log();
+      }
+
+      // Suppress channel in-reply-to in thread output (the chain itself provides context)
+      const envForThread = env.metadata && typeof env.metadata === "object" && "inReplyTo" in env.metadata
+        ? { ...env, metadata: (() => { const { inReplyTo: _, ...rest } = env.metadata as Record<string, unknown>; return Object.keys(rest).length > 0 ? rest : undefined; })() }
+        : env;
+      console.log(formatEnvelopeInstruction(envForThread, time.bossTimezone));
+      if (i < result.envelopes.length - 1) {
+        console.log();
+      }
+    }
+  } catch (err) {
+    console.error("error:", (err as Error).message);
     process.exit(1);
   }
 }

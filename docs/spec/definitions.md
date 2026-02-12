@@ -3,17 +3,9 @@
 This document defines the field mappings between code (TypeScript), SQLite, and stable CLI output keys for core Hi-Boss entities.
 
 For command flags and examples, see `docs/spec/cli.md` and the topic files under `docs/spec/cli/`.
-For envelope instruction examples, see `docs/spec/examples/envelope-instructions.md`.
+For generated prompt/envelope instruction examples, run `npm run examples:prompts` (outputs under `examples/prompts/` and `prompts/examples/`).
 
-Naming conventions:
-- CLI flags: kebab-case, lowercase
-- CLI output keys: kebab-case, lowercase
-
-Short IDs:
-- Many internal IDs are UUIDs.
-- The CLI renders UUID-backed ids as **short ids** by default:
-  - short id = first 8 lowercase hex characters of the UUID with hyphens removed.
-  - full UUIDs are still accepted as input where an `--id` flag exists.
+Cross-cutting naming, boss-marker, and short-id conventions are canonical in `docs/spec/conventions.md`.
 
 Canonical mapping (selected):
 - `envelope.deliverAt` → SQLite `deliver_at` → `--deliver-at` → `deliver-at:`
@@ -32,6 +24,9 @@ Derived (not stored):
 |------|--------|---------|
 | Agent | `agent:<name>` | `agent:nex` |
 | Channel | `channel:<adapter>:<chat-id>` | `channel:telegram:123456` |
+
+Reserved agent addresses:
+- `agent:background` — one-shot daemon-executed background job (see `docs/spec/components/agent.md`).
 
 ---
 
@@ -71,15 +66,15 @@ Command flags:
 `hiboss envelope list` renders an agent-facing “envelope instruction” (see `src/cli/instructions/format-envelope.ts` and `prompts/envelope/instruction.md`).
 
 **Header keys**
+- `envelope-id:` (always; short id derived from the internal envelope UUID)
 - `from:` (always; raw address)
+- `to:` (always; raw destination address)
 - `sender:` (only for channel messages; `Author [boss] in group "<name>"` or `Author [boss] in private chat`)
-- `channel-message-id:` (only for channel messages; platform message id. For Telegram, rendered in compact base36 (no prefix); accepted by `--reply-to` and `hiboss reaction set --channel-message-id` using the displayed value. Raw decimal can be passed as `dec:<id>`.)
 - `created-at:` (always; boss timezone offset)
 - `deliver-at:` (optional; shown when present, in boss timezone offset)
 - `cron-id:` (optional; shown when present; short id derived from the internal cron schedule UUID)
 
 **Reply/quote keys** (only when the incoming channel message is a reply)
-- `in-reply-to-channel-message-id:` (Telegram uses the same compact base36 (no prefix) form)
 - `in-reply-to-from-name:` (optional)
 - `in-reply-to-text:` (multiline)
   - Note: adapters may truncate `in-reply-to-text` for safety/size (see adapter specs).
@@ -96,7 +91,9 @@ Command flags:
 `hiboss envelope send` prints:
 - `id: <envelope-id>` (short id; derived from the internal envelope UUID)
 
-Envelope instructions printed by `hiboss envelope list` do **not** include the internal envelope id.
+Notes:
+- Channel platform message ids (e.g., Telegram `message_id`) are stored internally in `envelope.metadata.channelMessageId` for adapter delivery, but are intentionally **not rendered** in agent prompts/CLI envelope instructions.
+- Agents should use `envelope-id:` + `hiboss envelope send --reply-to <envelope-id>` for quoting (channels) and threading (agent↔agent).
 
 ### CLI Output (Cron Schedules)
 
@@ -153,6 +150,7 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 | `agent.reasoningEffort` | `reasoning_effort` | See `src/agent/types.ts` for allowed values; `NULL` means “use provider default reasoning effort” |
 | `agent.permissionLevel` | `permission_level` | `restricted`, `standard`, `privileged`, `boss` |
 | `agent.sessionPolicy` | `session_policy` | JSON (nullable) |
+| `agent.role` | `metadata.role` | `speaker` or `leader` (stored in metadata JSON) |
 | `agent.createdAt` | `created_at` | Unix epoch ms (UTC) |
 | `agent.lastSeenAt` | `last_seen_at` | Unix epoch ms (UTC) (nullable) |
 | `agent.metadata` | `metadata` | JSON (nullable) |
@@ -162,22 +160,28 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 `agent.metadata` is user-extensible, but Hi-Boss reserves some keys for internal state:
 
 - `metadata.sessionHandle`: persisted session resume handle (see `docs/spec/components/session.md`). This key is maintained by the daemon, preserved across `hiboss agent set --metadata-*` and `hiboss agent set --clear-metadata`, and ignored if provided by the user.
+- `metadata.role`: logical agent role (`speaker` or `leader`).
+- On daemon startup, legacy agents with missing/invalid `metadata.role` are backfilled from binding state and persisted (`bound => speaker`, `unbound => leader`).
 
 ### CLI
 
 Command flags:
 - `hiboss agent ...`: `docs/spec/cli/agents.md`
 
-Provider homes:
-- Provider CLIs use shared default homes (`~/.claude`, `~/.codex`).
-- When spawning provider processes, Hi-Boss clears `CLAUDE_CONFIG_DIR` and `CODEX_HOME` so overrides do not change behavior.
-- Hi-Boss does not copy/import provider config files into per-agent directories (per-agent provider homes were removed).
+Provider homes and provider-home override env handling are canonical in `docs/spec/provider-clis.md`.
 
 Agent defaults:
 - `hiboss agent register` requires `--provider` (`claude` or `codex`).
+- `hiboss agent register --role <speaker|leader>` is required and sets `agent.role` explicitly.
+- `hiboss agent register --role speaker` requires adapter binding flags (`--bind-adapter-type` + `--bind-adapter-token`).
+- System prompt rendering requires `agent.role`; missing role metadata is a hard error.
 - `agent.model` and `agent.reasoningEffort` are nullable overrides; `NULL` means provider defaults.
+- `agent.workspace` is a nullable override; `NULL` means no explicit workspace is stored. Runtime fallback resolves to the user's home directory.
 - `agent.permissionLevel` defaults to `standard` when not specified.
 - On `hiboss agent set`, switching provider without passing `--model` / `--reasoning-effort` clears both overrides to `NULL`.
+- `hiboss agent set` rejects role or binding mutations that would violate required role coverage (`>=1 speaker` and `>=1 leader`).
+- Speakers must always have at least one binding.
+- On `hiboss agent set`, passing `--bind-adapter-type` + `--bind-adapter-token` for an already-bound adapter type replaces that type’s token for the agent (atomic replace).
 
 Clearing nullable overrides:
 - `hiboss agent set --model default` sets `agent.model = NULL` (provider default model)
@@ -187,12 +191,34 @@ Clearing nullable overrides:
 
 ### CLI Output Keys
 
-- `hiboss agent register` prints `token:` once (there is no “show token” command).
-- `hiboss setup` prints:
+- `hiboss agent register` prints:
+  - `name:`
+  - `role:`
+  - `description:` (always; generated default when omitted; may be empty string)
+  - `workspace:` (`(none)` when unset)
+  - `token:` (printed once; there is no “show token” command)
+- In `hiboss agent register` output, `workspace: (none)` means no explicit override is stored; effective runtime workspace falls back to the user's home directory.
+- First-time interactive `hiboss setup` prints setup summary keys including:
   - `daemon-timezone: <iana>`
   - `boss-timezone: <iana>`
-- `hiboss setup` (interactive or `--config-file`) prints `agent-token:` once.
-- `hiboss setup` (interactive or `--config-file`) also prints `boss-token:` once.
+  - `speaker-agent-token:`
+  - `leader-agent-token:`
+  - `boss-token:`
+- `hiboss setup --config-file ... --dry-run` prints parseable diff keys including:
+  - `dry-run: true`
+  - `first-apply:`
+  - `current-agent-count:`
+  - `desired-agent-count:`
+  - `removed-agents:`
+  - `recreated-agents:`
+  - `new-agents:`
+  - `current-binding-count:`
+  - `desired-binding-count:`
+- `hiboss setup --config-file ...` (apply) prints the same summary keys with `dry-run: false`, plus per-agent token lines:
+  - `agent-name:`
+  - `agent-role:`
+  - `agent-token:` (printed once)
+- `hiboss setup export` never writes `boss-token` or `agent-token` into exported files.
 - `hiboss agent delete` prints:
   - `success: true|false`
   - `agent-name:`
@@ -241,7 +267,17 @@ Binding flags are on `hiboss agent set` (see `docs/spec/cli/agents.md`).
 `hiboss agent set` prints:
 - `success:`
 - `agent-name:`
-- `bindings:` (optional)
+- `role:`
+- `description:` (`(none)` when unset)
+- `workspace:` (`(none)` when unset)
+- `provider:` (`(none)` when unset)
+- `model:` (`default` when unset)
+- `reasoning-effort:` (`default` when unset)
+- `permission-level:`
+- `bindings:` (`(none)` when no bindings)
+- `session-daily-reset-at:` (optional)
+- `session-idle-timeout:` (optional)
+- `session-max-context-length:` (optional)
 
 ---
 
@@ -277,6 +313,10 @@ Command flags:
 - `start-time:` (boss timezone offset or `(none)`)
 - `adapters:`
 - `data-dir:`
+
+`hiboss daemon start` (startup failure path) may print:
+- `error:` (human-readable startup failure details; can include remediation guidance)
+- `log-file:`
 
 ---
 

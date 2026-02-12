@@ -38,7 +38,7 @@ Notes:
 
 Reply-to (quoting):
 - Most users reply without quoting; do **not** add `--reply-to` by default
-- Use `--reply-to <channel-message-id>` only when it prevents confusion (busy groups, multiple questions)
+- Use `--reply-to <envelope-id>` only when it prevents confusion (busy groups, multiple questions)
 
 Reactions:
 - `hiboss reaction set ...` is a Telegram **emoji reaction** (not a text reply); use sparingly

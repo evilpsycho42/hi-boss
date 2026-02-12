@@ -12,7 +12,7 @@ Tables (high level):
 - `agent_bindings` — adapter credentials bound to agents (e.g., Telegram bot token)
 - `envelopes` — durable message queue + audit
 - `cron_schedules` — durable cron definitions (materialize envelopes)
-- `agent_runs` — run audit records
+- `agent_runs` — run audit records (cleared by `hiboss setup --config-file` apply)
 
 ## `config` keys (selected)
 
@@ -20,7 +20,6 @@ Tables (high level):
 - `boss_name`: boss display name used in prompts/templates
 - `boss_timezone`: boss timezone (IANA) used for displayed timestamps
 - `boss_token_hash`: hashed boss token (printed once by setup)
-- `default_provider`: `"claude"` or `"codex"` (written by setup; informational today)
 - `permission_policy`: JSON mapping operations → required permission level
 - `adapter_boss_id_<adapter-type>`: boss identity on an adapter (e.g., `adapter_boss_id_telegram`)
 

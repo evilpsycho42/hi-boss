@@ -32,6 +32,11 @@ export const DEFAULT_AGENT_PROVIDER = "claude" as const;
 export const DEFAULT_AGENT_REASONING_EFFORT = "medium" as const;
 export const DEFAULT_AGENT_PERMISSION_LEVEL = "standard" as const;
 
+// ==================== Reserved Agents ====================
+
+export const BACKGROUND_AGENT_NAME = "background" as const;
+export const DEFAULT_BACKGROUND_MAX_CONCURRENT = 4 as const;
+
 // ==================== DB/Envelope Defaults ====================
 
 export const DEFAULT_ENVELOPE_STATUS = "pending" as const;
@@ -58,8 +63,12 @@ export function getDefaultSetupBossName(): string {
   return os.userInfo().username;
 }
 
-export function getDefaultSetupWorkspace(): string {
+export function getDefaultRuntimeWorkspace(): string {
   return os.homedir();
+}
+
+export function getDefaultSetupWorkspace(): string {
+  return getDefaultRuntimeWorkspace();
 }
 
 // ==================== Permissions ====================
@@ -70,6 +79,7 @@ export const DEFAULT_PERMISSION_POLICY: PermissionPolicyV1 = {
     // Envelope operations (agents)
     "envelope.send": "restricted",
     "envelope.list": "restricted",
+    "envelope.thread": "restricted",
 
     // Reactions
     "reaction.set": "restricted",

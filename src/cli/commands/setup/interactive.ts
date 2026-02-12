@@ -1,11 +1,9 @@
 import * as path from "path";
-import { input, select, password } from "@inquirer/prompts";
+import { input, password } from "@inquirer/prompts";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../../shared/validation.js";
-import { parseDailyResetAt, parseDurationToMs } from "../../../shared/session-policy.js";
 import {
   DEFAULT_SETUP_AGENT_NAME,
   DEFAULT_SETUP_PERMISSION_LEVEL,
-  SETUP_MODEL_CHOICES_BY_PROVIDER,
   getDefaultAgentDescription,
   getDefaultSetupBossName,
   getDefaultSetupWorkspace,
@@ -13,53 +11,60 @@ import {
 import { getDaemonIanaTimeZone, isValidIanaTimeZone } from "../../../shared/timezone.js";
 import { checkSetupStatus, executeSetup } from "./core.js";
 import type { SetupConfig } from "./types.js";
-import { isPlainObject } from "./utils.js";
+import {
+  promptAgentAdvancedOptions,
+  promptAgentModel,
+  promptAgentPermissionLevel,
+  promptAgentProvider,
+  promptAgentReasoningEffort,
+} from "./agent-options-prompts.js";
 
-/**
- * Run interactive setup.
- */
 export async function runInteractiveSetup(): Promise<void> {
   console.log("\n🚀 Hi-Boss Setup Wizard\n");
-  console.log("This wizard will help you configure Hi-Boss for first use.\n");
+  console.log("This wizard will help you configure Hi-Boss.\n");
 
-  // Check if setup is already complete
-  let isComplete: boolean;
+  let setupStatus: Awaited<ReturnType<typeof checkSetupStatus>>;
   try {
-    isComplete = await checkSetupStatus();
+    setupStatus = await checkSetupStatus();
   } catch (err) {
     console.error(`\n❌ Setup check failed: ${(err as Error).message}\n`);
     process.exit(1);
   }
-  if (isComplete) {
+
+  if (setupStatus.ready) {
     console.log("✅ Setup is already complete!");
     console.log("\nTo start over: hiboss daemon stop && rm -rf ~/hiboss && hiboss setup\n");
     console.log("(Advanced: override the Hi-Boss dir with HIBOSS_DIR.)\n");
     return;
   }
 
-  // Step 1: Choose provider (required; no implicit default)
-  const provider = await select<"claude" | "codex">({
-    message: "Choose provider:",
-    choices: [
-      { value: "claude", name: "claude" },
-      { value: "codex", name: "codex" },
-    ],
-  });
+  const hasPersistedState =
+    setupStatus.completed ||
+    setupStatus.agents.length > 0 ||
+    Object.values(setupStatus.userInfo.missing).some((v) => !v);
 
-  // Step 2: Boss name
-  const bossName = await input({
-    message: "Your name (how the agent should address you):",
-    default: getDefaultSetupBossName(),
-    validate: (value) => {
-      if (value.trim().length === 0) {
-        return "Boss name cannot be empty";
-      }
-      return true;
-    },
-  });
+  if (hasPersistedState) {
+    console.error("\n❌ Interactive setup only supports first-time bootstrap on a clean state.\n");
+    console.error("Use the config-file reconciliation flow instead:");
+    console.error("  1. hiboss setup export");
+    console.error("  2. edit the exported JSON config");
+    console.error("  3. hiboss setup --config-file <path> --token <boss-token> --dry-run");
+    console.error("  4. hiboss setup --config-file <path> --token <boss-token>\n");
+    process.exit(1);
+  }
 
-  // Step 2b: Boss timezone
   const daemonTimeZone = getDaemonIanaTimeZone();
+
+  console.log("\n👤 User Information\n");
+
+  const bossName = (
+    await input({
+      message: "Your name (how the agent should address you):",
+      default: getDefaultSetupBossName(),
+      validate: (value) => (value.trim().length === 0 ? "Boss name cannot be empty" : true),
+    })
+  ).trim();
+
   console.log(`\n🕒 Detected daemon timezone: ${daemonTimeZone}\n`);
   const bossTimezone = (
     await input({
@@ -69,234 +74,20 @@ export async function runInteractiveSetup(): Promise<void> {
         const trimmed = value.trim();
         if (!trimmed) return "Boss timezone is required";
         if (!isValidIanaTimeZone(trimmed)) {
-          return "Invalid timezone (expected an IANA name like Asia/Shanghai, America/Los_Angeles, UTC)";
+          return "Invalid timezone (expected IANA name like Asia/Shanghai, America/Los_Angeles, UTC)";
         }
         return true;
       },
     })
   ).trim();
 
-  // Step 3: Create first agent
-  console.log("\n📦 Create your first agent\n");
-
-  const agentName = (
+  const adapterBossId = (
     await input({
-      message: "Agent name (slug):",
-      default: DEFAULT_SETUP_AGENT_NAME,
-      validate: (value) => {
-        const name = value.trim();
-        if (!isValidAgentName(name)) {
-          return AGENT_NAME_ERROR_MESSAGE;
-        }
-        return true;
-      },
+      message: "Your Telegram username (to identify you as the boss):",
+      validate: (value) => (value.trim().length === 0 ? "Telegram username is required" : true),
     })
-  ).trim();
+  ).trim().replace(/^@/, "");
 
-  const defaultAgentDescription = getDefaultAgentDescription(agentName);
-  const agentDescription = (
-    await input({
-      message: "Agent description:",
-      default: defaultAgentDescription,
-    })
-  ).trim();
-
-  const workspace = await input({
-    message: "Workspace directory:",
-    default: getDefaultSetupWorkspace(),
-    validate: (value) => {
-      if (!path.isAbsolute(value)) {
-        return "Please provide an absolute path";
-      }
-      return true;
-    },
-  });
-
-  // Model selection based on provider
-  const MODEL_PROVIDER_DEFAULT = "default";
-  const MODEL_CUSTOM = "__custom__";
-
-  const modelChoice = await select<string>({
-    message: "Select model:",
-    choices: [
-      { value: MODEL_PROVIDER_DEFAULT, name: "null (use provider default; do not override)" },
-      ...(provider === "claude"
-        ? SETUP_MODEL_CHOICES_BY_PROVIDER.claude.map((value) => ({
-            value,
-            name: value,
-          }))
-        : SETUP_MODEL_CHOICES_BY_PROVIDER.codex.map((value) => ({
-            value,
-            name: value,
-          }))),
-      { value: MODEL_CUSTOM, name: "Custom model id..." },
-    ],
-    default: MODEL_PROVIDER_DEFAULT,
-  });
-
-  let model: string | null;
-  if (modelChoice === MODEL_PROVIDER_DEFAULT) {
-    model = null;
-  } else if (modelChoice === MODEL_CUSTOM) {
-    const customModel = (
-      await input({
-        message: "Custom model id:",
-        validate: (value) => {
-          const trimmed = value.trim();
-          if (!trimmed) return "Model id cannot be empty";
-          if (trimmed === "provider_default") return "Use 'default' to clear; or enter a real model id";
-          return true;
-        },
-      })
-    ).trim();
-    model = customModel === "default" ? null : customModel;
-  } else {
-    model = modelChoice;
-  }
-
-  const reasoningEffortChoice = await select<
-    "default" | "none" | "low" | "medium" | "high" | "xhigh"
-  >({
-    message: "Reasoning effort:",
-    choices: [
-      { value: "default", name: "default (use provider default; do not override)" },
-      { value: "none", name: "None - No reasoning (fastest)" },
-      { value: "low", name: "Low - Quick responses" },
-      { value: "medium", name: "Medium - Balanced (recommended)" },
-      { value: "high", name: "High - Thorough analysis" },
-      { value: "xhigh", name: "XHigh - Extra thorough (slowest)" },
-    ],
-    default: "default",
-  });
-  const reasoningEffort: SetupConfig["agent"]["reasoningEffort"] =
-    reasoningEffortChoice === "default" ? null : reasoningEffortChoice;
-
-  const permissionLevel = await select<"restricted" | "standard" | "privileged" | "boss">({
-    message: "Agent permission level:",
-    choices: [
-      { value: "restricted", name: "Restricted" },
-      { value: "standard", name: "Standard (recommended)" },
-      { value: "privileged", name: "Privileged" },
-      { value: "boss", name: "Boss" },
-    ],
-    default: DEFAULT_SETUP_PERMISSION_LEVEL,
-  });
-
-  const sessionDailyResetAt = (
-    await input({
-      message: "Session daily reset at (HH:MM) (optional):",
-      default: "",
-      validate: (value) => {
-        const trimmed = value.trim();
-        if (!trimmed) return true;
-        try {
-          parseDailyResetAt(trimmed);
-          return true;
-        } catch (err) {
-          return (err as Error).message;
-        }
-      },
-    })
-  ).trim();
-
-  const sessionIdleTimeout = (
-    await input({
-      message: "Session idle timeout (e.g., 2h, 30m) (optional):",
-      default: "",
-      validate: (value) => {
-        const trimmed = value.trim();
-        if (!trimmed) return true;
-        try {
-          parseDurationToMs(trimmed);
-          return true;
-        } catch (err) {
-          return (err as Error).message;
-        }
-      },
-    })
-  ).trim();
-
-  const sessionMaxContextLengthRaw = (
-    await input({
-      message: "Session max context length (optional):",
-      default: "",
-      validate: (value) => {
-        const trimmed = value.trim();
-        if (!trimmed) return true;
-        const n = Number(trimmed);
-        if (!Number.isFinite(n) || n <= 0) return "Session max context length must be a positive number";
-        return true;
-      },
-    })
-  ).trim();
-
-  const sessionMaxContextLength = sessionMaxContextLengthRaw
-    ? Math.trunc(Number(sessionMaxContextLengthRaw))
-    : undefined;
-
-  const metadataRaw = (
-    await input({
-      message: "Agent metadata JSON (optional):",
-      default: "",
-      validate: (value) => {
-        const trimmed = value.trim();
-        if (!trimmed) return true;
-        try {
-          const parsed = JSON.parse(trimmed) as unknown;
-          if (!isPlainObject(parsed)) return "Metadata must be a JSON object";
-          return true;
-        } catch {
-          return "Invalid JSON";
-        }
-      },
-    })
-  ).trim();
-
-  const metadata = metadataRaw ? (JSON.parse(metadataRaw) as Record<string, unknown>) : undefined;
-
-  const sessionPolicy =
-    sessionDailyResetAt || sessionIdleTimeout || sessionMaxContextLength !== undefined
-      ? {
-          dailyResetAt: sessionDailyResetAt ? parseDailyResetAt(sessionDailyResetAt).normalized : undefined,
-          idleTimeout: sessionIdleTimeout || undefined,
-          maxContextLength: sessionMaxContextLength,
-        }
-      : undefined;
-
-  // Step 4: Telegram binding (required)
-  console.log("\n📱 Telegram Integration\n");
-  console.log("\n📋 To create a Telegram bot:");
-  console.log("   1. Open Telegram and search for @BotFather");
-  console.log("   2. Send /newbot and follow the instructions");
-  console.log("   3. Copy the bot token (looks like: 123456789:ABCdef...)\n");
-
-  const adapterToken = await input({
-    message: "Enter your Telegram bot token:",
-    validate: (value) => {
-      if (!/^\d+:[A-Za-z0-9_-]+$/.test(value.trim())) {
-        return "Invalid token format. Should look like: 123456789:ABCdef...";
-      }
-      return true;
-    },
-  });
-
-  const adapterBossId = await input({
-    message: "Your Telegram username (to identify you as the boss):",
-    validate: (value) => {
-      if (value.trim().length === 0) {
-        return "Telegram username is required";
-      }
-      return true;
-    },
-  });
-
-  const adapter: SetupConfig["adapter"] = {
-    adapterType: "telegram",
-    adapterToken: adapterToken.trim(),
-    adapterBossId: adapterBossId.trim().replace(/^@/, ""), // Store without @
-  };
-
-  // Step 5: Boss token
   console.log("\n🔐 Boss Token\n");
   console.log("The boss token identifies you as the boss for administrative tasks.");
   console.log("Choose something short you'll remember.\n");
@@ -305,55 +96,161 @@ export async function runInteractiveSetup(): Promise<void> {
   while (true) {
     bossToken = await password({
       message: "Enter your boss token:",
-      validate: (value) => {
-        if (value.length < 4) {
-          return "Boss token must be at least 4 characters";
-        }
-        return true;
-      },
+      validate: (value) => (value.length < 4 ? "Boss token must be at least 4 characters" : true),
     });
 
-    const confirmToken = await password({
-      message: "Confirm boss token:",
-    });
-
-    if (bossToken === confirmToken) {
-      break;
-    }
-
+    const confirmToken = await password({ message: "Confirm boss token:" });
+    if (bossToken === confirmToken) break;
     console.error("\n❌ Tokens do not match. Please try again.\n");
   }
 
-  // Execute setup
+  console.log("\n📦 Speaker Information (channel-facing)\n");
+
+  const speakerAgentName = (
+    await input({
+      message: "Speaker agent name (slug):",
+      default: DEFAULT_SETUP_AGENT_NAME,
+      validate: (value) => (isValidAgentName(value.trim()) ? true : AGENT_NAME_ERROR_MESSAGE),
+    })
+  ).trim();
+
+  const speakerWorkspace = await input({
+    message: "Speaker workspace directory:",
+    default: getDefaultSetupWorkspace(),
+    validate: (value) => (path.isAbsolute(value) ? true : "Please provide an absolute path"),
+  });
+
+  const speakerPermissionLevel = await promptAgentPermissionLevel({
+    message: "Speaker permission level:",
+    defaultValue: DEFAULT_SETUP_PERMISSION_LEVEL,
+  });
+
+  const speakerProvider = await promptAgentProvider("Speaker provider:");
+
+  const speakerModel = await promptAgentModel({
+    provider: speakerProvider,
+    message: "Speaker model:",
+  });
+
+  const speakerReasoningEffort = await promptAgentReasoningEffort("Speaker reasoning effort:");
+
+  const speakerAgentDescription = (
+    await input({
+      message: "Speaker description (optional):",
+      default: getDefaultAgentDescription(speakerAgentName),
+    })
+  ).trim();
+
+  const speakerAdvanced = await promptAgentAdvancedOptions({ agentLabel: "Speaker" });
+
+  console.log("\n📱 Telegram Binding\n");
+  console.log("\n📋 To create a Telegram bot:");
+  console.log("   1. Open Telegram and search for @BotFather");
+  console.log("   2. Send /newbot and follow the instructions");
+  console.log("   3. Copy the bot token (looks like: 123456789:ABCdef...)\n");
+
+  const adapterToken = (
+    await input({
+      message: "Enter your Telegram bot token:",
+      validate: (value) =>
+        /^\d+:[A-Za-z0-9_-]+$/.test(value.trim())
+          ? true
+          : "Invalid token format. Should look like: 123456789:ABCdef...",
+    })
+  ).trim();
+
+  console.log("\n🧭 Leader Information (delegation/orchestration)\n");
+
+  const leaderAgentName = (
+    await input({
+      message: "Leader agent name (slug):",
+      default: "leader",
+      validate: (value) => {
+        const name = value.trim();
+        if (!isValidAgentName(name)) return AGENT_NAME_ERROR_MESSAGE;
+        if (name.toLowerCase() === speakerAgentName.toLowerCase()) {
+          return "Leader name must be different from speaker name";
+        }
+        return true;
+      },
+    })
+  ).trim();
+
+  const leaderWorkspace = await input({
+    message: "Leader workspace directory:",
+    default: speakerWorkspace,
+    validate: (value) => (path.isAbsolute(value) ? true : "Please provide an absolute path"),
+  });
+
+  const leaderPermissionLevel = await promptAgentPermissionLevel({
+    message: "Leader permission level:",
+    defaultValue: speakerPermissionLevel,
+  });
+
+  const leaderProvider = await promptAgentProvider("Leader provider:");
+
+  const leaderModel = await promptAgentModel({
+    provider: leaderProvider,
+    message: "Leader model:",
+  });
+
+  const leaderReasoningEffort = await promptAgentReasoningEffort("Leader reasoning effort:");
+
+  const leaderAgentDescription = (
+    await input({
+      message: "Leader description (optional):",
+      default: getDefaultAgentDescription(leaderAgentName),
+    })
+  ).trim();
+
+  const leaderAdvanced = await promptAgentAdvancedOptions({ agentLabel: "Leader" });
+
   console.log("\n⚙️  Applying configuration...\n");
 
   const config: SetupConfig = {
-    provider,
     bossName,
     bossTimezone,
-    agent: {
-      name: agentName,
-      description: agentDescription,
-      workspace,
-      model,
-      reasoningEffort,
-      permissionLevel,
-      sessionPolicy,
-      metadata,
+    speakerAgent: {
+      name: speakerAgentName,
+      provider: speakerProvider,
+      description: speakerAgentDescription,
+      workspace: speakerWorkspace,
+      model: speakerModel,
+      reasoningEffort: speakerReasoningEffort,
+      permissionLevel: speakerPermissionLevel,
+      sessionPolicy: speakerAdvanced.sessionPolicy,
+      metadata: speakerAdvanced.metadata,
     },
-    adapter,
+    leaderAgent: {
+      name: leaderAgentName,
+      provider: leaderProvider,
+      description: leaderAgentDescription,
+      workspace: leaderWorkspace,
+      model: leaderModel,
+      reasoningEffort: leaderReasoningEffort,
+      permissionLevel: leaderPermissionLevel,
+      sessionPolicy: leaderAdvanced.sessionPolicy,
+      metadata: leaderAdvanced.metadata,
+    },
+    adapter: {
+      adapterType: "telegram",
+      adapterToken,
+      adapterBossId,
+    },
     bossToken,
   };
 
   try {
-    const agentToken = await executeSetup(config);
+    const setupResult = await executeSetup(config);
 
     console.log("✅ Setup complete!\n");
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log(`   daemon-timezone: ${daemonTimeZone}`);
     console.log(`   boss-timezone:  ${bossTimezone}`);
-    console.log(`   agent-name:  ${agentName}`);
-    console.log(`   agent-token: ${agentToken}`);
+    console.log(`   speaker-agent-name:  ${speakerAgentName}`);
+    console.log(`   speaker-agent-token: ${setupResult.speakerAgentToken}`);
+    console.log(`   leader-agent-name:   ${leaderAgentName}`);
+    console.log(`   leader-agent-token:  ${setupResult.leaderAgentToken}`);
     console.log(`   boss-token:  ${bossToken}`);
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("\n⚠️  Save these tokens! They won't be shown again.\n");

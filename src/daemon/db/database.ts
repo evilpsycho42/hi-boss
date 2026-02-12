@@ -7,10 +7,17 @@ import type { Envelope, CreateEnvelopeInput, EnvelopeStatus } from "../../envelo
 import type { CronSchedule, CreateCronScheduleInput } from "../../cron/types.js";
 import type { SessionPolicyConfig } from "../../shared/session-policy.js";
 import {
+  BACKGROUND_AGENT_NAME,
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
   getDefaultAgentDescription,
 } from "../../shared/defaults.js";
+import type { AgentRole } from "../../shared/agent-role.js";
+import {
+  inferAgentRoleFromBindingCount,
+  parseAgentRoleFromMetadata,
+  withAgentRoleMetadata,
+} from "../../shared/agent-role.js";
 import { generateToken, hashToken, verifyToken } from "../../agent/auth.js";
 import { generateUUID } from "../../shared/uuid.js";
 import { assertValidAgentName } from "../../shared/validation.js";
@@ -271,6 +278,21 @@ export class HiBossDatabase {
     return this.db.transaction(fn)();
   }
 
+  /**
+   * Clear setup-managed rows so a declarative setup import can recreate them.
+   *
+   * Notes:
+   * - Keeps envelopes (including envelope history) and config keys intact.
+   * - Clears agent run audit in `agent_runs`.
+   * - Clears cron schedules to avoid orphan schedules that reference removed agents.
+   */
+  clearSetupManagedState(): void {
+    this.db.prepare("DELETE FROM cron_schedules").run();
+    this.db.prepare("DELETE FROM agent_bindings").run();
+    this.db.prepare("DELETE FROM agent_runs").run();
+    this.db.prepare("DELETE FROM agents").run();
+  }
+
   // ==================== Agent Operations ====================
 
   /**
@@ -278,6 +300,9 @@ export class HiBossDatabase {
    */
   registerAgent(input: RegisterAgentInput): { agent: Agent; token: string } {
     assertValidAgentName(input.name);
+    if (input.name.trim().toLowerCase() === BACKGROUND_AGENT_NAME) {
+      throw new Error(`Reserved agent name: ${BACKGROUND_AGENT_NAME}`);
+    }
 
     const existing = this.getAgentByNameCaseInsensitive(input.name);
     if (existing) {
@@ -286,6 +311,11 @@ export class HiBossDatabase {
 
     const token = generateToken();
     const createdAt = Date.now();
+    const metadataWithRole = withAgentRoleMetadata({
+      metadata: input.metadata,
+      role: input.role,
+      stripSessionHandle: true,
+    });
 
     const stmt = this.db.prepare(`
       INSERT INTO agents (name, token, description, workspace, provider, model, reasoning_effort, permission_level, session_policy, created_at, metadata)
@@ -303,7 +333,7 @@ export class HiBossDatabase {
       input.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL,
       input.sessionPolicy ? JSON.stringify(input.sessionPolicy) : null,
       createdAt,
-      input.metadata ? JSON.stringify(input.metadata) : null
+      metadataWithRole ? JSON.stringify(metadataWithRole) : null
     );
 
     const agent = this.getAgentByName(input.name)!;
@@ -371,6 +401,7 @@ export class HiBossDatabase {
       provider?: "claude" | "codex" | null;
       model?: string | null;
       reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | null;
+      role?: AgentRole;
     }
   ): Agent {
     const agent = this.getAgentByNameCaseInsensitive(name);
@@ -402,22 +433,26 @@ export class HiBossDatabase {
       params.push(update.reasoningEffort);
     }
 
-    if (updates.length === 0) {
+    if (updates.length === 0 && update.role === undefined) {
       return this.getAgentByName(agent.name)!;
     }
 
-    const stmt = this.db.prepare(`UPDATE agents SET ${updates.join(", ")} WHERE name = ?`);
-    stmt.run(...params, agent.name);
+    if (updates.length > 0) {
+      const stmt = this.db.prepare(`UPDATE agents SET ${updates.join(", ")} WHERE name = ?`);
+      stmt.run(...params, agent.name);
+    }
+
+    if (update.role !== undefined) {
+      const current = this.getAgentByName(agent.name)!;
+      const nextMetadata = withAgentRoleMetadata({
+        metadata: current.metadata,
+        role: update.role,
+      });
+      const mdStmt = this.db.prepare("UPDATE agents SET metadata = ? WHERE name = ?");
+      mdStmt.run(nextMetadata ? JSON.stringify(nextMetadata) : null, agent.name);
+    }
 
     return this.getAgentByName(agent.name)!;
-  }
-
-  /**
-   * Update agent metadata.
-   */
-  updateAgentMetadata(name: string, metadata: Record<string, unknown> | null): void {
-    const stmt = this.db.prepare("UPDATE agents SET metadata = ? WHERE name = ?");
-    stmt.run(metadata ? JSON.stringify(metadata) : null, name);
   }
 
   /**
@@ -456,26 +491,116 @@ export class HiBossDatabase {
    * - When no `sessionHandle` exists and `metadata` is `null`, the stored metadata becomes `NULL`.
    */
   replaceAgentMetadataPreservingSessionHandle(name: string, metadata: Record<string, unknown> | null): void {
-    const clearUserMetadata = metadata === null ? 1 : 0;
-    const userJson = JSON.stringify(metadata ?? {});
+    const agent = this.getAgentByNameCaseInsensitive(name);
+    if (!agent) {
+      throw new Error("Agent not found");
+    }
 
-    const stmt = this.db.prepare(`
-      UPDATE agents
-      SET metadata = CASE
-        WHEN json_type(metadata, '$.sessionHandle') IS NOT NULL THEN
-          CASE
-            WHEN ? = 1 THEN json_set('{}', '$.sessionHandle', json_extract(metadata, '$.sessionHandle'))
-            ELSE json_set(json(?), '$.sessionHandle', json_extract(metadata, '$.sessionHandle'))
-          END
-        ELSE
-          CASE
-            WHEN ? = 1 THEN NULL
-            ELSE json(?)
-          END
-      END
-      WHERE name = ?
-    `);
-    stmt.run(clearUserMetadata, userJson, clearUserMetadata, userJson, name);
+    const role = parseAgentRoleFromMetadata(agent.metadata);
+    const withRole = withAgentRoleMetadata({
+      metadata: metadata ?? undefined,
+      role,
+      stripSessionHandle: true,
+    });
+
+    const existingSessionHandle = (() => {
+      const current = agent.metadata;
+      if (!current || typeof current !== "object" || Array.isArray(current)) return undefined;
+      return (current as Record<string, unknown>).sessionHandle;
+    })();
+
+    if (existingSessionHandle === undefined) {
+      const stmt = this.db.prepare("UPDATE agents SET metadata = ? WHERE name = ?");
+      stmt.run(withRole ? JSON.stringify(withRole) : null, agent.name);
+      return;
+    }
+
+    const nextWithSessionHandle = {
+      ...(withRole ?? {}),
+      sessionHandle: existingSessionHandle,
+    };
+    const stmt = this.db.prepare("UPDATE agents SET metadata = ? WHERE name = ?");
+    stmt.run(JSON.stringify(nextWithSessionHandle), agent.name);
+  }
+
+  setAgentRole(name: string, role: AgentRole): Agent {
+    return this.updateAgentFields(name, { role });
+  }
+
+  backfillLegacyAgentRolesFromBindings(): {
+    updated: number;
+    speaker: number;
+    leader: number;
+  } {
+    const agents = this.listAgents();
+    if (agents.length === 0) {
+      return { updated: 0, speaker: 0, leader: 0 };
+    }
+
+    const bindingCountByAgent = new Map<string, number>();
+    for (const binding of this.listBindings()) {
+      bindingCountByAgent.set(binding.agentName, (bindingCountByAgent.get(binding.agentName) ?? 0) + 1);
+    }
+
+    const patchTargets = agents
+      .filter((agent) => !parseAgentRoleFromMetadata(agent.metadata))
+      .map((agent) => ({
+        name: agent.name,
+        metadata: agent.metadata,
+        role: inferAgentRoleFromBindingCount(bindingCountByAgent.get(agent.name) ?? 0),
+      }));
+
+    if (patchTargets.length === 0) {
+      return { updated: 0, speaker: 0, leader: 0 };
+    }
+
+    const updateStmt = this.db.prepare("UPDATE agents SET metadata = ? WHERE name = ?");
+
+    this.db.transaction(() => {
+      for (const target of patchTargets) {
+        const nextMetadata = withAgentRoleMetadata({
+          metadata: target.metadata,
+          role: target.role,
+        });
+        updateStmt.run(nextMetadata ? JSON.stringify(nextMetadata) : null, target.name);
+      }
+    })();
+
+    let speaker = 0;
+    let leader = 0;
+    for (const target of patchTargets) {
+      if (target.role === "speaker") speaker += 1;
+      if (target.role === "leader") leader += 1;
+    }
+
+    return {
+      updated: patchTargets.length,
+      speaker,
+      leader,
+    };
+  }
+
+  getAgentRoleCounts(): { speaker: number; leader: number } {
+    const counts = { speaker: 0, leader: 0 };
+    const bindingCountByAgent = new Map<string, number>();
+    for (const binding of this.listBindings()) {
+      bindingCountByAgent.set(binding.agentName, (bindingCountByAgent.get(binding.agentName) ?? 0) + 1);
+    }
+
+    for (const agent of this.listAgents()) {
+      const role =
+        parseAgentRoleFromMetadata(agent.metadata) ??
+        inferAgentRoleFromBindingCount(bindingCountByAgent.get(agent.name) ?? 0);
+      if (role === "speaker") counts.speaker += 1;
+      if (role === "leader") counts.leader += 1;
+    }
+
+    return counts;
+  }
+
+  hasRequiredAgentRoles(): boolean {
+    const counts = this.getAgentRoleCounts();
+    return counts.speaker > 0 && counts.leader > 0;
   }
 
   /**
@@ -576,6 +701,20 @@ export class HiBossDatabase {
       }
     }
 
+    let metadata: Record<string, unknown> | undefined;
+    if (row.metadata) {
+      try {
+        const parsed = JSON.parse(row.metadata) as unknown;
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          metadata = parsed as Record<string, unknown>;
+        }
+      } catch {
+        metadata = undefined;
+      }
+    }
+
+    const role = parseAgentRoleFromMetadata(metadata);
+
     return {
       name: row.name,
       token: row.token,
@@ -585,10 +724,11 @@ export class HiBossDatabase {
       model: row.model ?? undefined,
       reasoningEffort: (row.reasoning_effort as 'none' | 'low' | 'medium' | 'high' | 'xhigh') ?? undefined,
       permissionLevel,
+      role,
       sessionPolicy,
       createdAt: row.created_at,
       lastSeenAt: row.last_seen_at ?? undefined,
-      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+      metadata,
     };
   }
 
@@ -629,6 +769,24 @@ export class HiBossDatabase {
     const stmt = this.db.prepare("SELECT * FROM envelopes WHERE id = ?");
     const row = stmt.get(id) as EnvelopeRow | undefined;
     return row ? this.rowToEnvelope(row) : null;
+  }
+
+  /**
+   * Find envelopes by compact UUID prefix (lowercase hex; hyphens ignored).
+   *
+   * Used for user/agent-facing short-id inputs (default 8 chars).
+   */
+  findEnvelopesByIdPrefix(idPrefix: string, limit = 50): Envelope[] {
+    const prefix = idPrefix.trim().toLowerCase();
+    const n = Number.isFinite(limit) ? Math.max(1, Math.min(500, Math.trunc(limit))) : 50;
+    const stmt = this.db.prepare(`
+      SELECT * FROM envelopes
+      WHERE replace(lower(id), '-', '') LIKE ?
+      ORDER BY created_at DESC
+      LIMIT ?
+    `);
+    const rows = stmt.all(`${prefix}%`, n) as EnvelopeRow[];
+    return rows.map((row) => this.rowToEnvelope(row));
   }
 
   /**
@@ -893,6 +1051,9 @@ export class HiBossDatabase {
     }
     if (metadata && typeof metadata.replyToMessageId === "string") {
       delete metadata.replyToMessageId;
+    }
+    if (metadata && typeof metadata.replyToEnvelopeId === "string") {
+      delete metadata.replyToEnvelopeId;
     }
     const attachments = row.content_attachments ? JSON.parse(row.content_attachments) : undefined;
 
@@ -1343,21 +1504,6 @@ export class HiBossDatabase {
     const storedHash = this.getConfig("boss_token_hash");
     if (!storedHash) return false;
     return verifyToken(token, storedHash);
-  }
-
-  /**
-   * Get the default provider.
-   */
-  getDefaultProvider(): 'claude' | 'codex' | null {
-    const provider = this.getConfig("default_provider");
-    return provider as 'claude' | 'codex' | null;
-  }
-
-  /**
-   * Set the default provider.
-   */
-  setDefaultProvider(provider: 'claude' | 'codex'): void {
-    this.setConfig("default_provider", provider);
   }
 
   /**

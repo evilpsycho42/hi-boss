@@ -139,7 +139,6 @@ Suggestion helper:
 - `src/envelope/`, `src/cron/`, `src/shared/` — core models + shared utilities
 - `prompts/` — Nunjucks templates for agent instructions / turns
 - `docs/spec/` — developer-facing specs (canonical)
-- `docs/guide/` — user-facing guides
 
 ## State & debugging
 

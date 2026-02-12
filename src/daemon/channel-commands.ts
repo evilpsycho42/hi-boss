@@ -4,6 +4,7 @@ import type { AgentExecutor } from "../agent/executor.js";
 import {
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
+  getDefaultRuntimeWorkspace,
 } from "../shared/defaults.js";
 import { formatUnixMsAsTimeZoneOffset } from "../shared/time.js";
 import { formatShortId } from "../shared/id-format.js";
@@ -19,7 +20,7 @@ function buildAgentStatusText(params: { db: HiBossDatabase; executor: AgentExecu
   const bossTz = params.db.getBossTimezone();
   const effectiveProvider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
   const effectivePermissionLevel = agent.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL;
-  const effectiveWorkspace = agent.workspace ?? process.cwd();
+  const effectiveWorkspace = agent.workspace ?? getDefaultRuntimeWorkspace();
 
   const isBusy = params.executor.isAgentBusy(agent.name);
   const pendingCount = params.db.countDuePendingEnvelopesForAgent(agent.name);

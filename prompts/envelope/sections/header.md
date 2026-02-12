@@ -1,9 +1,8 @@
+envelope-id: {{ envelope.idShort }}
 from: {{ envelope.from }}
+to: {{ envelope.to }}
 {% if envelope.senderLine %}
 sender: {{ envelope.senderLine }}
-{% endif %}
-{% if envelope.channelMessageId %}
-channel-message-id: {{ envelope.channelMessageId }}
 {% endif %}
 created-at: {{ envelope.createdAt.iso }}
 {% if envelope.deliverAt.present %}

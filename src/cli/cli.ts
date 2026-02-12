@@ -8,6 +8,7 @@ import {
   daemonStatus,
   sendEnvelope,
   listEnvelopes,
+  threadEnvelope,
   createCron,
   listCrons,
   enableCron,
@@ -15,6 +16,7 @@ import {
   deleteCron,
   setReaction,
   runSetup,
+  runSetupConfigExport,
 } from "./commands/index.js";
 import { registerAgentCommands } from "./cli-agent.js";
 
@@ -99,8 +101,8 @@ envelope
   .option("--attachment <path>", "Attachment path (can be used multiple times)", collect, [])
   .option("--parse-mode <mode>", "Parse mode (Telegram): plain (default), html (recommended), markdownv2")
   .option(
-    "--reply-to <channel-message-id>",
-    "Reply/quote a channel message (optional; Telegram: use the base36 id shown as channel-message-id)"
+    "--reply-to <envelope-id>",
+    "Reply to an envelope (optional; provides thread context; may quote for channels when possible)"
   )
   .option(
     "--deliver-at <time>",
@@ -130,6 +132,18 @@ envelope
     });
   });
 
+envelope
+  .command("thread")
+  .description("Show envelope thread (chain to root)")
+  .requiredOption("--envelope-id <id>", "Envelope id (short id, longer prefix, or full UUID)")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    threadEnvelope({
+      token: options.token,
+      envelopeId: options.envelopeId,
+    });
+  });
+
 // Reaction commands
 const reaction = program
   .command("reaction")
@@ -139,11 +153,7 @@ const reaction = program
 reaction
   .command("set")
   .description("Set a reaction on a channel message")
-  .requiredOption("--to <address>", "Target channel address (channel:<adapter>:<chat-id>)")
-  .requiredOption(
-    "--channel-message-id <id>",
-    "Target channel message id on the platform (Telegram: use the base36 id shown as channel-message-id)"
-  )
+  .requiredOption("--envelope-id <id>", "Target channel envelope id (short id, prefix, or full UUID)")
   .requiredOption("--emoji <emoji>", "Reaction emoji (e.g., 👍)")
   .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .addHelpText(
@@ -159,8 +169,7 @@ reaction
   .action((options) => {
     setReaction({
       token: options.token,
-      to: options.to,
-      messageId: options.channelMessageId,
+      envelopeId: options.envelopeId,
       emoji: options.emoji,
     });
   });
@@ -269,13 +278,28 @@ cron
 
 registerAgentCommands(program);
 
-program
+const setup = program
   .command("setup")
   .description("Initial system configuration")
+  .helpCommand(false)
   .allowExcessArguments(false)
-  .option("--config-file <path>", "Run non-interactive setup from a JSON config file")
+  .option("--config-file <path>", "Run non-interactive setup from a JSON config file (version 2)")
+  .option("--token <token>", "Boss token (required with --config-file; default: $HIBOSS_TOKEN)")
+  .option("--dry-run", "Validate and preview --config-file changes without applying")
   .action((options) => {
-    runSetup({ configFile: options.configFile });
+    runSetup({
+      configFile: options.configFile,
+      token: options.token,
+      dryRun: Boolean(options.dryRun),
+    });
+  });
+
+setup
+  .command("export")
+  .description("Export current setup configuration to a JSON file (version 2)")
+  .option("--out <path>", "Output path (default: $HIBOSS_DIR/config.json)")
+  .action((options) => {
+    runSetupConfigExport({ outputPath: options.out });
   });
 
 // Helper to collect multiple values for an option

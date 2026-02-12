@@ -32,10 +32,10 @@ To clear via CLI, use the sentinel value `default`, for example:
 
 ## Provider homes
 
+Provider-home behavior is canonical in `docs/spec/provider-clis.md#provider-homes-shared-forced`.
+
+Operator summary:
 - Provider CLI state is shared across all agents (no per-agent provider homes).
-- Hi-Boss always uses the user’s shared default homes:
+- Shared default homes:
   - Claude: `~/.claude`
   - Codex: `~/.codex`
-- When spawning provider processes, Hi-Boss clears `CLAUDE_CONFIG_DIR` and `CODEX_HOME` so overrides do not change behavior.
-- Hi-Boss does not create per-agent provider homes or copy/import provider config files.
-- `--provider-source-home <path>` is accepted for backwards compatibility but is currently a no-op (validation only).

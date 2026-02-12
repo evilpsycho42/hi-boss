@@ -1,9 +1,7 @@
+envelope-id: {{ envelope.idShort }}
 from: {{ envelope.from }}
 {% if envelope.senderLine %}
 sender: {{ envelope.senderLine }}
-{% endif %}
-{% if envelope.channelMessageId %}
-channel-message-id: {{ envelope.channelMessageId }}
 {% endif %}
 created-at: {{ envelope.createdAt.iso }}
 {% if envelope.deliverAt.present %}
@@ -13,7 +11,6 @@ deliver-at: {{ envelope.deliverAt.iso }}
 cron-id: {{ envelope.cronId }}
 {% endif %}
 {% if envelope.inReplyTo %}
-in-reply-to-channel-message-id: {{ envelope.inReplyTo.channelMessageId }}
 {% if envelope.inReplyTo.fromName %}
 in-reply-to-from-name: {{ envelope.inReplyTo.fromName }}
 {% endif %}

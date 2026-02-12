@@ -1,22 +1,11 @@
 # Hi-Boss Docs
 
-Hi-Boss has two kinds of documentation:
+Hi-Boss documentation is specification-first:
 
-- **Specifications** (`docs/spec/`) — for developers; goals, architecture, and design. Implementations should align with these docs.
-- **User Guides** (`docs/guide/`) — for users; what you can do with Hi-Boss, how to install it, and how to use it. Keep these readable and concise (tables/diagrams preferred, minimal internals).
+- **Specifications** (`docs/spec/`) — goals, architecture, and canonical behavior. Implementations should align with these docs.
 
 Start here:
-- Users: `docs/guide/quickstart.md`
-- Developers/spec readers: `docs/spec/index.md`
-
-## User Guides
-
-- `docs/guide/overview.md` — what Hi-Boss is and what it can do
-- `docs/guide/install.md` — install + first-time setup
-- `docs/guide/quickstart.md` — 10-minute “happy path”
-- `docs/guide/telegram.md` — Telegram usage and binding
-- `docs/guide/recipes.md` — copy/paste examples
-- `docs/guide/troubleshooting.md` — common issues and fixes
+- `docs/spec/index.md`
 
 ## Specifications
 
@@ -26,9 +15,9 @@ Core (top-level):
 - `docs/spec/architecture.md` — system architecture + invariants
 - `docs/spec/envelope.md` — envelope concept, lifecycle, and semantics
 - `docs/spec/conventions.md` — naming, IDs, boss marker
-- `docs/spec/definitions.md` — field mappings (TypeScript ↔ SQLite ↔ CLI output keys)
+- `docs/spec/definitions.md` — field mappings (TypeScript <-> SQLite <-> CLI output keys)
 - `docs/spec/cli.md` — CLI index (command summary + links to topic specs)
-- `docs/spec/ipc.md` — CLI ↔ daemon IPC (JSON-RPC over local socket)
+- `docs/spec/ipc.md` — CLI <-> daemon IPC (JSON-RPC over local socket)
 - `docs/spec/configuration.md` — config sources, persistence, permission policy
 - `docs/spec/compatibility.md` — preserved legacy behavior for safe upgrades
 
@@ -50,8 +39,18 @@ CLI topics (details):
 Adapters:
 - `docs/spec/adapters/telegram.md` — Telegram adapter behavior and message schema
 
-Providers:
-- `docs/spec/provider-clis.md` — provider CLI invocation, token usage, and recorded experiments
+Providers (canonical behavior):
+- `docs/spec/provider-clis.md` — provider CLI invocation and token usage semantics
+
+## Experiments
+
+- `docs/experiments/index.md` — experiment index
+- `docs/experiments/provider-clis/manual-experiments.md` — dated provider CLI experiments and gotchas
+
+## References
+
+- `docs/refs/index.md` — reference index
+- `docs/refs/providers/README.md` — provider CLI third-party references
 
 ## Generated
 

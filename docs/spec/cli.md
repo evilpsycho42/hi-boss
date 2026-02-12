@@ -23,13 +23,15 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 
 | Command | Purpose | Token required? | Default permission |
 |--------|---------|-----------------|--------------------|
-| `hiboss setup` | Initialize Hi-Boss (interactive wizard) | No (bootstrap) | n/a |
-| `hiboss setup --config-file <path>` | Initialize Hi-Boss (non-interactive) | No (bootstrap; requires config file) | n/a |
+| `hiboss setup` | Initialize Hi-Boss (interactive first-time bootstrap) | No (bootstrap) | n/a |
+| `hiboss setup export` | Export current setup config (`version: 2`) | No | n/a |
+| `hiboss setup --config-file <path> --token <boss-token> [--dry-run]` | Validate/apply declarative setup config (`version: 2`) | Yes (`--token` or `HIBOSS_TOKEN`) | n/a |
 | `hiboss daemon start` | Start the daemon | Yes (boss-privileged token) | boss |
 | `hiboss daemon stop` | Stop the daemon | Yes (boss-privileged token) | boss |
 | `hiboss daemon status` | Show daemon status | Yes (boss-privileged token) | boss |
 | `hiboss envelope send` | Send an envelope | Yes (agent token) | restricted |
 | `hiboss envelope list` | List envelopes | Yes (agent token) | restricted |
+| `hiboss envelope thread` | Show envelope thread | Yes (agent token) | restricted |
 | `hiboss cron create` | Create a cron schedule | Yes (agent token) | restricted |
 | `hiboss cron list` | List cron schedules | Yes (agent token) | restricted |
 | `hiboss cron enable` | Enable a cron schedule | Yes (agent token) | restricted |
@@ -42,6 +44,8 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | `hiboss agent status` | Show agent state/health | Yes (agent/boss token) | restricted |
 | `hiboss agent abort` | Cancel current run + clear pending inbox | Yes (boss token) | boss |
 | `hiboss agent delete` | Delete an agent | Yes (boss-privileged token) | boss |
+
+Note: `hiboss daemon start` prints startup failure guidance directly in CLI when available (for example missing-role remediation), and also writes details to `daemon.log`.
 
 ---
 

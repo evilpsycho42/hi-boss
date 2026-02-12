@@ -8,8 +8,7 @@ interface ReactionSetResult {
 
 export interface SetReactionOptions {
   token?: string;
-  to: string;
-  messageId: string;
+  envelopeId: string;
   emoji: string;
 }
 
@@ -18,12 +17,18 @@ export async function setReaction(options: SetReactionOptions): Promise<void> {
   const client = new IpcClient(getSocketPath(config));
 
   try {
+    if (!options.envelopeId || !options.envelopeId.trim()) {
+      throw new Error("Missing --envelope-id");
+    }
+    if (!options.emoji || !options.emoji.trim()) {
+      throw new Error("Missing --emoji");
+    }
+
     const token = resolveToken(options.token);
     const result = await client.call<ReactionSetResult>("reaction.set", {
       token,
-      to: options.to,
-      messageId: options.messageId,
-      emoji: options.emoji,
+      envelopeId: options.envelopeId.trim(),
+      emoji: options.emoji.trim(),
     });
 
     console.log(`success: ${result.success ? "true" : "false"}`);
@@ -32,4 +37,3 @@ export async function setReaction(options: SetReactionOptions): Promise<void> {
     process.exit(1);
   }
 }
-

@@ -56,3 +56,20 @@ Envelopes are **at-most-once**: once acknowledged as read/delivered they are ter
 
 Permission note:
 - Sending to `channel:<adapter>:...` is only allowed if the sending agent is bound to that adapter type (enforced in `envelope.send`).
+
+---
+
+## Reply / Threading (canonical)
+
+Hi-Boss uses a single reply/thread mechanism for both:
+- channel quoting (e.g., Telegram “reply”)
+- agent↔agent context threading (task/subtask trees)
+
+Mechanism:
+- `hiboss envelope send --reply-to <envelope-id>` sets `envelope.metadata.replyToEnvelopeId` on the new envelope.
+- `hiboss envelope thread --envelope-id <id>` follows `metadata.replyToEnvelopeId` pointers from the target envelope up to the root envelope.
+- For channel destinations, adapters may additionally use the referenced envelope’s internal channel message id to set platform-native quoting/reply behavior.
+
+Notes:
+- Platform message ids (e.g., Telegram `message_id`) are stored in `envelope.metadata.channelMessageId` but are intentionally not shown to agents.
+- Legacy direct platform reply-id metadata (for example `metadata.replyToMessageId`) is ignored at runtime.

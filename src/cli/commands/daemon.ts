@@ -88,6 +88,38 @@ function rotateDaemonLogOnStart(dataDir: string): void {
   }
 }
 
+function decodeLogFieldValue(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return trimmed;
+  if (trimmed.startsWith('"')) {
+    try {
+      return JSON.parse(trimmed) as string;
+    } catch {
+      return trimmed;
+    }
+  }
+  return trimmed;
+}
+
+function readDaemonStartFailureMessage(logPath: string): string | null {
+  try {
+    if (!fs.existsSync(logPath)) return null;
+    const text = fs.readFileSync(logPath, 'utf8');
+    const lines = text.trim().split(/\r?\n/);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const line = lines[i]!;
+      if (!line.includes('event=daemon-start-failed')) continue;
+      const match = line.match(/\berror=(.+)$/);
+      if (!match) return null;
+      return decodeLogFieldValue(match[1]!);
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 /**
  * Start the daemon.
  */
@@ -178,6 +210,15 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<voi
     }
 
     attempts++;
+  }
+
+  const startupFailure = readDaemonStartFailureMessage(logPath);
+  if (startupFailure) {
+    console.error("error:", startupFailure);
+    if (!startupFailure.startsWith("Daemon start blocked: setup is incomplete.")) {
+      console.error(`log-file: ${logPath}`);
+    }
+    process.exit(1);
   }
 
   console.error("Failed to start daemon. Check logs at:", logPath);

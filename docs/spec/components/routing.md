@@ -73,7 +73,9 @@ If no binding exists:
 3. `MessageRouter.routeEnvelope()` persists the envelope.
 4. If due now, the router calls `deliverToChannel()`:
    - Looks up the adapter by binding token
-   - Calls `adapter.sendMessage(chatId, { text, attachments })`
+   - Resolves optional reply quoting from `metadata.replyToEnvelopeId` only (same adapter + same chat + referenced `channelMessageId` required)
+   - Ignores legacy direct reply-id metadata (`metadata.replyToMessageId`) when present
+   - Calls `adapter.sendMessage(chatId, { text, attachments }, { replyToMessageId? })`
    - On success, sets `status = done`
 
 ---

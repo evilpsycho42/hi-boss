@@ -31,7 +31,7 @@ function makeMockAgent(workspaceDir: string): Agent {
     model: "gpt-5.2",
     reasoningEffort: "medium",
     createdAt: Date.now(),
-    metadata: { example: true },
+    metadata: { role: "speaker", example: true },
   };
 }
 
@@ -106,6 +106,18 @@ function validateSystemPrompt(): void {
   writeFile(path.join(hibossDir, "BOSS.md"), "# Boss\n\n- Name: Kevin\n");
 
   const agent = makeMockAgent(workspaceDir);
+  const missingRoleAgent: Agent = { ...agent, metadata: { example: true } };
+  assert.throws(
+    () =>
+      buildSystemPromptContext({
+        agent: missingRoleAgent,
+        agentToken: missingRoleAgent.token,
+        bindings: makeMockBindings(),
+        hibossDir,
+      }),
+    /missing required metadata.role/
+  );
+
   const ctx = buildSystemPromptContext({
     agent,
     agentToken: agent.token,
@@ -129,6 +141,8 @@ function validateSystemPrompt(): void {
     assert.ok(out.includes("You are nex."), "system prompt should include a minimal identity line");
     assert.ok(out.includes("## Hi-Boss System"), "system prompt should include hiboss intro section");
     assert.ok(out.includes("## Quick Start"), "system prompt should include quick start section");
+    assert.ok(out.includes("## Agent Role"), "system prompt should include role section");
+    assert.ok(out.includes("role: speaker"), "system prompt should render agent role");
     assert.ok(out.includes("## Tools"), "system prompt should include tools section");
     assert.ok(out.includes("## Memory"), "system prompt should include memory section");
     assert.ok(out.includes("## Environment"), "system prompt should include environment section");
@@ -178,7 +192,7 @@ function validateTurnPrompt(): void {
     assert.ok(out.includes("sender:"), "turn prompt should include sender for channel messages");
     assert.ok(out.includes("in group \"hiboss-test\""), "turn prompt should show group name in sender line");
     assert.ok(out.includes("Alice (@alice)"), "turn prompt should show author for group messages");
-    assert.ok(out.includes("channel-message-id: zik0zj"), "turn prompt should show compact telegram channel-message-id");
+    assert.ok(out.includes("envelope-id: env1"), "turn prompt should include envelope-id");
     assert.ok(out.includes("deliver-at:"), "turn prompt should include deliver-at when present");
   }
 

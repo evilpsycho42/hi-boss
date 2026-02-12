@@ -26,6 +26,7 @@
 
 - Agent execution + bindings + providers: `docs/spec/components/agent.md`
 - Sessions (refresh policy + resume): `docs/spec/components/session.md`
+- Provider CLIs (canonical invocation + token semantics): `docs/spec/provider-clis.md`
 - File-based agent memory (protocol): `docs/spec/components/file-memory.md`
 
 ## Configuration + storage
@@ -34,12 +35,16 @@
 - Upgrade compatibility (preserved legacy behavior): `docs/spec/compatibility.md`
 - Generated inventory (do not edit): `docs/spec/generated/magic-inventory.md`
 
-## Examples + appendix
+## Examples
 
-- Envelope instruction examples: `docs/spec/examples/envelope-instructions.md`
-- Provider CLI experiments: `docs/spec/appendix/provider-clis-experiments.md`
+- Prompt + envelope instruction examples (generated): run `npm run examples:prompts` (outputs under `examples/prompts/` and `prompts/examples/`)
+- CLI output examples (generated): run `npm run examples:cli` (outputs under `examples/cli/`)
 
-## Adapters + providers
+## Experiments + references
+
+- Provider CLI manual experiments: `docs/experiments/provider-clis/manual-experiments.md`
+- Provider CLI third-party references: `docs/refs/providers/README.md`
+
+## Adapters
 
 - Telegram adapter: `docs/spec/adapters/telegram.md`
-- Provider CLIs (how Hi-Boss invokes them): `docs/spec/provider-clis.md`

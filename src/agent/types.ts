@@ -1,5 +1,6 @@
 import type { SessionPolicyConfig } from "../shared/session-policy.js";
 import type { PermissionLevel } from "../shared/permissions.js";
+import type { AgentRole } from "../shared/agent-role.js";
 
 /**
  * Agent permission level.
@@ -21,6 +22,7 @@ export interface Agent {
   model?: string;
   reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh';
   permissionLevel?: AgentPermissionLevel;   // authorization level for CLI/RPC ops
+  role?: AgentRole;        // logical role (speaker|leader)
   sessionPolicy?: SessionPolicyConfig;      // session refresh policy
   createdAt: number;       // unix epoch ms (UTC)
   lastSeenAt?: number;     // unix epoch ms (UTC)
@@ -38,6 +40,7 @@ export interface RegisterAgentInput {
   model?: string | null;
   reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null;
   permissionLevel?: AgentPermissionLevel;
+  role?: AgentRole;
   sessionPolicy?: SessionPolicyConfig;
   metadata?: Record<string, unknown>;
 }

@@ -126,11 +126,6 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
       metadata.parseMode = mode;
     }
 
-    const replyToRaw = (params as Record<string, unknown>).replyToMessageId;
-    if (replyToRaw !== undefined) {
-      rpcError(RPC_ERRORS.INVALID_PARAMS, "reply-to-channel-message-id is no longer supported");
-    }
-
     // Check binding for channel destinations.
     const agent = principal.agent;
     ctx.db.updateAgentLastSeen(agent.name);

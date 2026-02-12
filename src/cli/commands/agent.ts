@@ -43,6 +43,7 @@ interface AgentDeleteResult {
 export interface RegisterAgentOptions {
   token?: string;
   name: string;
+  role: string;
   description?: string;
   workspace?: string;
   provider: string;
@@ -80,6 +81,7 @@ export interface ListAgentsOptions {
 export interface SetAgentOptions {
   token?: string;
   name: string;
+  role?: string;
   description?: string;
   workspace?: string;
   provider?: string;
@@ -116,6 +118,7 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
     const result = await client.call<RegisterAgentResult>("agent.register", {
       token,
       name: options.name,
+      role: options.role,
       description: options.description,
       workspace: options.workspace,
       provider: options.provider,
@@ -131,12 +134,9 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
     });
 
     console.log(`name: ${result.agent.name}`);
-    if (result.agent.description) {
-      console.log(`description: ${result.agent.description}`);
-    }
-    if (result.agent.workspace) {
-      console.log(`workspace: ${result.agent.workspace}`);
-    }
+    console.log(`role: ${result.agent.role ?? "(missing)"}`);
+    console.log(`description: ${result.agent.description ?? "(none)"}`);
+    console.log(`workspace: ${result.agent.workspace ?? "(none)"}`);
     console.log(`token: ${result.token}`);
   } catch (err) {
     console.error("error:", (err as Error).message);
@@ -163,9 +163,6 @@ export async function setAgent(options: SetAgentOptions): Promise<void> {
     ) {
       throw new Error("--bind-adapter-type and --bind-adapter-token must be used together");
     }
-    if (options.unbindAdapterType && options.bindAdapterType) {
-      throw new Error("Use either --bind-adapter-* or --unbind-adapter-type, not both");
-    }
 
     const metadata = options.clearMetadata
       ? null
@@ -191,6 +188,7 @@ export async function setAgent(options: SetAgentOptions): Promise<void> {
     const result = await client.call<AgentSetResult>("agent.set", {
       token,
       agentName: options.name,
+      role: options.role,
       description: options.description,
       workspace: options.workspace,
       provider: options.provider,
@@ -206,24 +204,13 @@ export async function setAgent(options: SetAgentOptions): Promise<void> {
 
     console.log(`success: ${result.success ? "true" : "false"}`);
     console.log(`agent-name: ${result.agent.name}`);
-    if (result.agent.description) {
-      console.log(`description: ${result.agent.description}`);
-    }
-    if (result.agent.workspace) {
-      console.log(`workspace: ${result.agent.workspace}`);
-    }
-    if (result.agent.provider) {
-      console.log(`provider: ${result.agent.provider}`);
-    }
-    if (result.agent.model) {
-      console.log(`model: ${result.agent.model}`);
-    }
-    if (result.agent.reasoningEffort) {
-      console.log(`reasoning-effort: ${result.agent.reasoningEffort}`);
-    }
-    if (result.agent.permissionLevel) {
-      console.log(`permission-level: ${result.agent.permissionLevel}`);
-    }
+    console.log(`role: ${result.agent.role ?? "(missing)"}`);
+    console.log(`description: ${result.agent.description ?? "(none)"}`);
+    console.log(`workspace: ${result.agent.workspace ?? "(none)"}`);
+    console.log(`provider: ${result.agent.provider ?? "(none)"}`);
+    console.log(`model: ${result.agent.model ?? "default"}`);
+    console.log(`reasoning-effort: ${result.agent.reasoningEffort ?? "default"}`);
+    console.log(`permission-level: ${result.agent.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL}`);
     if (result.agent.sessionPolicy && typeof result.agent.sessionPolicy === "object") {
       const sp = result.agent.sessionPolicy as Record<string, unknown>;
       if (typeof sp.dailyResetAt === "string") {
@@ -236,9 +223,7 @@ export async function setAgent(options: SetAgentOptions): Promise<void> {
         console.log(`session-max-context-length: ${sp.maxContextLength}`);
       }
     }
-    if (result.bindings.length > 0) {
-      console.log(`bindings: ${result.bindings.join(", ")}`);
-    }
+    console.log(`bindings: ${result.bindings.length > 0 ? result.bindings.join(", ") : "(none)"}`);
   } catch (err) {
     console.error("error:", (err as Error).message);
     process.exit(1);
@@ -266,9 +251,7 @@ export async function listAgents(options: ListAgentsOptions): Promise<void> {
 
     for (const agent of result.agents) {
       console.log(`name: ${agent.name}`);
-      if (agent.description) {
-        console.log(`description: ${agent.description}`);
-      }
+      console.log(`role: ${agent.role ?? "(missing)"}`);
       if (agent.workspace) {
         console.log(`workspace: ${agent.workspace}`);
       }
@@ -302,14 +285,13 @@ export async function agentStatus(options: AgentStatusOptions): Promise<void> {
     });
 
     console.log(`name: ${result.agent.name}`);
+    console.log(`role: ${result.agent.role ?? "(missing)"}`);
     console.log(`workspace: ${result.effective.workspace}`);
     console.log(`provider: ${result.effective.provider}`);
     console.log(`model: ${result.agent.model ?? "default"}`);
     console.log(`reasoning-effort: ${result.agent.reasoningEffort ?? "default"}`);
     console.log(`permission-level: ${result.effective.permissionLevel}`);
-    if (result.bindings.length > 0) {
-      console.log(`bindings: ${result.bindings.join(", ")}`);
-    }
+    console.log(`bindings: ${result.bindings.length > 0 ? result.bindings.join(", ") : "(none)"}`);
     if (result.agent.sessionPolicy && typeof result.agent.sessionPolicy === "object") {
       const sp = result.agent.sessionPolicy as Record<string, unknown>;
       if (typeof sp.dailyResetAt === "string") {

@@ -123,6 +123,17 @@ async function main(): Promise<void> {
     }
 
     writeDoc({
+      filename: "envelope_thread.DOC.md",
+      title: "hiboss envelope thread",
+      command: "hiboss envelope thread --envelope-id 9d0a61fe",
+      output: await runOrThrow({
+        homeDir: fixture.homeDir,
+        token: fixture.agentToken,
+        args: ["envelope", "thread", "--envelope-id", "9d0a61fe"],
+      }),
+    });
+
+    writeDoc({
       filename: "cron_list.DOC.md",
       title: "hiboss cron list",
       command: "hiboss cron list",
@@ -130,7 +141,7 @@ async function main(): Promise<void> {
     });
 
     console.log("\n---");
-    console.log("Generated 4 CLI output examples");
+    console.log("Generated 5 CLI output examples");
   } finally {
     await handle.stop().catch(() => undefined);
     fixture.cleanup();

@@ -21,7 +21,9 @@ export function authorizeCliOperation(operation: string, token: string): Princip
 
   try {
     if (!db.isSetupComplete()) {
-      throw new Error("Setup not complete. Run: hiboss setup");
+      throw new Error(
+        "Setup not complete. Run `hiboss setup` (first-time) or `hiboss setup --config-file <path> --token <boss-token>`"
+      );
     }
 
     let principal: Principal | null = null;

@@ -41,6 +41,11 @@ Canonical envelope methods:
 
 - `envelope.send`
 - `envelope.list`
+- `envelope.thread`
+
+Reactions:
+
+- `reaction.set`
 
 Cron:
 

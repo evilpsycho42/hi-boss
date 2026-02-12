@@ -24,4 +24,4 @@ Provider CLI homes are not part of the Hi-Boss data directory:
 - Claude: `~/.claude`
 - Codex: `~/.codex`
 
-Note: Hi-Boss clears `CLAUDE_CONFIG_DIR` and `CODEX_HOME` when spawning provider processes so these defaults are always used.
+Provider-home behavior (including cleared override env vars) is canonical in `docs/spec/provider-clis.md#provider-homes-shared-forced`.

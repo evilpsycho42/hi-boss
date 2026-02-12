@@ -13,9 +13,10 @@ import {
   DEFAULT_MEMORY_LONGTERM_MAX_CHARS,
   DEFAULT_MEMORY_SHORTTERM_DAYS,
   DEFAULT_MEMORY_SHORTTERM_PER_DAY_MAX_CHARS,
+  getDefaultRuntimeWorkspace,
 } from "./defaults.js";
-import { formatTelegramMessageIdCompact } from "./telegram-message-id.js";
 import { formatShortId } from "./id-format.js";
+import { parseAgentRoleFromMetadata } from "./agent-role.js";
 
 const MAX_CUSTOM_FILE_CHARS = 10_000;
 
@@ -196,7 +197,6 @@ function buildSemanticFrom(envelope: Envelope): SemanticFromResult | undefined {
 }
 
 interface InReplyToPrompt {
-  channelMessageId: string;
   fromName: string;
   text: string;
 }
@@ -207,15 +207,6 @@ function buildInReplyTo(metadata: unknown): InReplyToPrompt | undefined {
   if (!inReplyTo || typeof inReplyTo !== "object") return undefined;
 
   const rt = inReplyTo as Record<string, unknown>;
-  const rawChannelMessageId =
-    typeof rt.channelMessageId === "string" ? rt.channelMessageId.trim() : "";
-  const rawLegacyMessageId = typeof rt.messageId === "string" ? rt.messageId.trim() : "";
-  const raw = rawChannelMessageId || rawLegacyMessageId;
-
-  const channelMessageId =
-    metadata.platform === "telegram" ? formatTelegramMessageIdCompact(raw) : raw;
-  if (!channelMessageId) return undefined;
-
   const authorRaw = rt.author;
   let fromName = "";
   if (authorRaw && typeof authorRaw === "object") {
@@ -228,15 +219,9 @@ function buildInReplyTo(metadata: unknown): InReplyToPrompt | undefined {
   const text = typeof rt.text === "string" && rt.text.trim() ? rt.text : "(none)";
 
   return {
-    channelMessageId,
     fromName,
     text,
   };
-}
-
-function getChannelMessageId(metadata: unknown): string {
-  if (!isChannelMetadata(metadata)) return "";
-  return metadata.channelMessageId;
 }
 
 export function buildSystemPromptContext(params: {
@@ -259,10 +244,18 @@ export function buildSystemPromptContext(params: {
   const workspaceDir =
     params.agent.workspace && params.agent.workspace.trim()
       ? params.agent.workspace.trim()
-      : process.cwd();
+      : getDefaultRuntimeWorkspace();
 
   const hibossFiles = readHiBossCustomizationFiles(hibossDir);
   const agentFiles = readAgentCustomizationFiles({ hibossDir, agentName: params.agent.name });
+
+  const agentRole = parseAgentRoleFromMetadata(params.agent.metadata);
+  if (!agentRole) {
+    throw new Error(
+      `Agent '${params.agent.name}' is missing required metadata.role (speaker|leader). ` +
+        "Run `hiboss agent set --name <agent> --role <speaker|leader>`."
+    );
+  }
 
   return {
     environment: {
@@ -296,6 +289,7 @@ export function buildSystemPromptContext(params: {
     },
     agent: {
       name: params.agent.name,
+      role: agentRole,
       description: params.agent.description ?? "",
       workspace: workspaceDir,
       provider: params.agent.provider ?? DEFAULT_AGENT_PROVIDER,
@@ -339,11 +333,6 @@ export function buildTurnPromptContext(params: {
   const bossTimeZone = params.bossTimezone.trim() || getDaemonIanaTimeZone();
   const envelopes = (params.envelopes ?? []).map((env, idx) => {
     const semantic = buildSemanticFrom(env);
-    const rawChannelMessageId = getChannelMessageId(env.metadata);
-    const channelMessageId =
-      isChannelMetadata(env.metadata) && env.metadata.platform === "telegram"
-        ? formatTelegramMessageIdCompact(rawChannelMessageId)
-        : rawChannelMessageId;
     const inReplyTo = buildInReplyTo(env.metadata);
     const attachments = (env.content.attachments ?? []).map((att) => {
       const type = detectAttachmentType(att);
@@ -380,6 +369,7 @@ export function buildTurnPromptContext(params: {
     return {
       index: idx + 1,
       id: env.id,
+      idShort: formatShortId(env.id),
       from: env.from,
       fromName: semantic?.fromName ?? "",
       fromBoss: env.fromBoss,
@@ -388,7 +378,6 @@ export function buildTurnPromptContext(params: {
       authorName: semantic?.authorName ?? "",
       authorLine,
       senderLine,
-      channelMessageId,
       inReplyTo,
       createdAt: {
         iso: formatUnixMsAsTimeZoneOffset(env.createdAt, bossTimeZone),
@@ -435,11 +424,6 @@ export function buildCliEnvelopePromptContext(params: {
   const env = params.envelope;
   const bossTimeZone = params.bossTimezone.trim() || getDaemonIanaTimeZone();
   const semantic = buildSemanticFrom(env);
-  const rawChannelMessageId = getChannelMessageId(env.metadata);
-  const channelMessageId =
-    isChannelMetadata(env.metadata) && env.metadata.platform === "telegram"
-      ? formatTelegramMessageIdCompact(rawChannelMessageId)
-      : rawChannelMessageId;
   const inReplyTo = buildInReplyTo(env.metadata);
   const attachments = (env.content.attachments ?? []).map((att) => {
     const type = detectAttachmentType(att);
@@ -491,6 +475,7 @@ export function buildCliEnvelopePromptContext(params: {
   return {
     envelope: {
       id: env.id,
+      idShort: formatShortId(env.id),
       from: env.from,
       to: env.to,
       status: env.status,
@@ -501,7 +486,6 @@ export function buildCliEnvelopePromptContext(params: {
       authorName: semantic?.authorName ?? "",
       authorLine,
       senderLine,
-      channelMessageId,
       inReplyTo,
       createdAt: {
         iso: formatUnixMsAsTimeZoneOffset(env.createdAt, bossTimeZone),

@@ -24,8 +24,25 @@ Debug-only fields:
 - `total-tokens`
 
 Output (human-oriented):
-- `Daemon started successfully`
-- `Log file: <path>`
+- Success:
+  - `Daemon started successfully`
+  - `Log file: <path>`
+- Startup failure (when available):
+  - `error: <startup-failure-details>` (value may be multi-line; incomplete-setup guidance is emitted as a single multi-line `error:` payload)
+  - `log-file: <path>` (shown for general startup failures; omitted for incomplete-setup guidance)
+
+Validation and fail-fast checks:
+- Setup must be complete.
+- Daemon requires role coverage: at least `1 speaker` and `1 leader`.
+- Every `speaker` must have at least one adapter binding.
+- Duplicate speaker adapter-token bindings block startup until repaired.
+- On startup, daemon backfills missing/invalid `metadata.role` for legacy agents using bindings (`>=1` binding => speaker, none => leader), then persists it.
+- If role coverage/integrity is missing, daemon start fails with concise CLI guidance:
+  - `Daemon start blocked: setup is incomplete.`
+  - `1. hiboss setup export`
+  - `2. edit the exported JSON config`
+  - `3. hiboss setup --config-file <path> --token <boss-token> --dry-run`
+  - `4. hiboss setup --config-file <path> --token <boss-token>`
 
 ## `hiboss daemon stop`
 

@@ -2,6 +2,9 @@
  * JSON-RPC 2.0 types for Hi-Boss IPC.
  */
 
+import type { Envelope } from "../../envelope/types.js";
+import type { AgentRole } from "../../shared/agent-role.js";
+
 export interface JsonRpcRequest {
   jsonrpc: "2.0";
   id: string | number;
@@ -60,7 +63,7 @@ export interface EnvelopeSendParams {
   attachments?: Array<{ source: string; filename?: string; telegramFileId?: string }>;
   deliverAt?: string;
   parseMode?: "plain" | "markdownv2" | "html";
-  replyToMessageId?: string;
+  replyToEnvelopeId?: string;
 }
 
 export interface EnvelopeListParams {
@@ -69,6 +72,20 @@ export interface EnvelopeListParams {
   from?: string;
   status: "pending" | "done";
   limit?: number;
+}
+
+export interface EnvelopeThreadParams {
+  token: string;
+  envelopeId: string;
+}
+
+export interface EnvelopeThreadResult {
+  maxDepth: number;
+  totalCount: number;
+  returnedCount: number;
+  truncated: boolean;
+  truncatedIntermediateCount: number;
+  envelopes: Envelope[];
 }
 
 export interface CronCreateParams {
@@ -106,6 +123,7 @@ export interface CronDeleteParams {
 export interface AgentRegisterParams {
   token: string;
   name: string;
+  role: "speaker" | "leader";
   description?: string;
   workspace?: string;
   provider: "claude" | "codex";
@@ -132,8 +150,7 @@ export interface AgentDeleteResult {
 
 export interface ReactionSetParams {
   token: string;
-  to: string;         // channel:<adapter>:<chat-id>
-  messageId: string;  // platform message id
+  envelopeId: string; // short id, prefix, or full UUID (must reference a channel envelope)
   emoji: string;      // unicode emoji
 }
 
@@ -189,6 +206,7 @@ export interface AgentAbortResult {
 export interface AgentStatusResult {
   agent: {
     name: string;
+    role?: "speaker" | "leader";
     description?: string;
     workspace?: string;
     provider?: "claude" | "codex";
@@ -238,6 +256,7 @@ export interface AgentSessionPolicySetParams {
 export interface AgentSetParams {
   token: string;
   agentName: string;
+  role?: "speaker" | "leader";
   description?: string | null;
   workspace?: string | null;
   provider?: "claude" | "codex" | null;
@@ -259,6 +278,7 @@ export interface AgentSetResult {
   success: boolean;
   agent: {
     name: string;
+    role?: "speaker" | "leader";
     description?: string;
     workspace?: string;
     provider: "claude" | "codex";
@@ -296,14 +316,63 @@ export interface SetupCheckParams {
 
 export interface SetupCheckResult {
   completed: boolean;
+  ready: boolean;
+  roleCounts: {
+    speaker: number;
+    leader: number;
+  };
+  missingRoles: AgentRole[];
+  integrity: {
+    speakerWithoutBindings: string[];
+    duplicateSpeakerBindings: Array<{
+      adapterType: string;
+      adapterTokenRedacted: string;
+      speakers: string[];
+    }>;
+  };
+  agents: Array<{
+    name: string;
+    role?: AgentRole;
+    workspace?: string;
+    provider?: "claude" | "codex";
+  }>;
+  userInfo: {
+    bossName?: string;
+    bossTimezone?: string;
+    telegramBossId?: string;
+    hasBossToken: boolean;
+    missing: {
+      bossName: boolean;
+      bossTimezone: boolean;
+      telegramBossId: boolean;
+      bossToken: boolean;
+    };
+  };
 }
 
 export interface SetupExecuteParams {
-  provider: 'claude' | 'codex';
   bossName: string;
   bossTimezone: string;
-  agent: {
+  speakerAgent: {
     name: string;
+    provider: "claude" | "codex";
+    role?: "speaker";
+    description?: string;
+    workspace?: string;
+    model?: string | null;
+    reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null;
+    permissionLevel?: 'restricted' | 'standard' | 'privileged' | 'boss';
+    sessionPolicy?: {
+      dailyResetAt?: string;
+      idleTimeout?: string;
+      maxContextLength?: number;
+    };
+    metadata?: Record<string, unknown>;
+  };
+  leaderAgent: {
+    name: string;
+    provider: "claude" | "codex";
+    role?: "leader";
     description?: string;
     workspace?: string;
     model?: string | null;
@@ -325,7 +394,8 @@ export interface SetupExecuteParams {
 }
 
 export interface SetupExecuteResult {
-  agentToken: string;
+  speakerAgentToken: string;
+  leaderAgentToken: string;
 }
 
 export interface BossVerifyParams {

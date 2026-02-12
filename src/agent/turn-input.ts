@@ -38,18 +38,18 @@ export interface TurnInput {
  *
  * ---
  *
+ * envelope-id: 4b7c2d1a
  * from: channel:telegram:12345
  * sender: Alice (@alice) in group "hiboss-test"
- * channel-message-id: zik0zj
  * created-at: 2026-01-27T20:00:00+08:00
  *
  * Hello!
  *
  * ---
  *
+ * envelope-id: 7aa9f102
  * from: channel:telegram:12345
  * sender: Bob (@bob) in group "hiboss-test"
- * channel-message-id: zik0zk
  * created-at: 2026-01-27T20:01:00+08:00
  *
  * Hi!
