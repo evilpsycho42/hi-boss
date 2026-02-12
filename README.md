@@ -1,33 +1,38 @@
 # Hi-Boss
 
-Orchestrate Codex / Claude Code agents from Telegram — they don’t just work for you; they can collaborate with each other.
+Orchestrate Codex / Claude Code agents from Telegram — with durable communication, editable memory, and non-blocking parallel execution.
 
 Highlights:
-- Run on top of real providers (Codex / Claude Code) for best-in-class execution quality
-- Durable “inbox/outbox” communication: agent↔human and agent↔agent (Telegram adapters ↔ local daemon ↔ agents)
-- Scheduled delivery and cron jobs (durable, auditable)
+- Provider flexibility: supports both official provider workflows and relay fallback paths (官方直连 + 中转站方案).
+- Built-in memory system: human-readable, directly editable Markdown memory for each agent.
+- Envelope system: durable agent↔agent and agent↔user communication with auditable message flow.
+- Non-blocking delegation: background/leader agents handle heavy tasks in parallel, while specialist agents can be registered for focused domains.
 
-## Providers: Claude Code + Codex
+## Sponsor
 
-Hi-Boss runs agent turns by spawning provider CLIs directly:
+<a href="https://co.yes.vg" target="_blank" rel="noopener noreferrer">
+  <img src="docs/assets/sponsors/yescode-logo.png" alt="YesCode logo" width="280" />
+</a>
 
-- **Claude Code CLI**: `claude`
-- **Codex CLI**: `codex exec`
-
-Provider state/config lives in the user's shared homes:
-- Claude: `~/.claude`
-- Codex: `~/.codex`
-
-Hi-Boss does **not** copy provider config files into `~/hiboss`. System instructions are injected inline via CLI flags:
-- Claude: `--append-system-prompt`
-- Codex: `-c developer_instructions=...`
+YesCode is a reliable Claude Code/Codex relay provider with stable service quality and reasonable pricing.
 
 ## Install
+
+Before setup, make sure at least one provider CLI is installed and runnable:
+- **Claude Code** (`claude --version`)
+- **Codex** (`codex exec --help`)
 
 Via npm:
 
 ```bash
 npm i -g hiboss
+```
+
+First run (setup + start daemon):
+
+```bash
+hiboss setup
+hiboss daemon start --token <boss-token>
 ```
 
 Upgrade:
@@ -47,36 +52,46 @@ Dev/from source: see `docs/index.md`.
 
 ## Setup
 
-1) Run the interactive setup wizard:
+`hiboss setup` initializes local state and prints tokens once.
 
-```bash
-hiboss setup
+| Item | Path |
+|---|---|
+| Data root (default) | `~/hiboss/` |
+| Data root (override) | `$HIBOSS_DIR` |
+| Daemon internals (db/socket/log/pid) | `${HIBOSS_DIR:-$HOME/hiboss}/.daemon/` |
+| Agent memory file | `${HIBOSS_DIR:-$HOME/hiboss}/agents/<agent-name>/internal_space/MEMORY.md` |
+| Daily memory files | `${HIBOSS_DIR:-$HOME/hiboss}/agents/<agent-name>/internal_space/memories/` |
+
+Directory sketch:
+
+```text
+${HIBOSS_DIR:-$HOME/hiboss}/
+  .daemon/
+  agents/<agent-name>/internal_space/
+    MEMORY.md
+    memories/
 ```
 
-Setup:
-- initializes local state (SQLite + per-agent homes)
-- prompts for your boss name and timezone
-- creates a `speaker` agent (chat-facing) and a `leader` agent (orchestration)
-- configures a Telegram bot + boss Telegram username for the `speaker`
-- prints `boss-token:`, `speaker-agent-token:`, and `leader-agent-token:` **once** (save them somewhere safe)
-
-State directory:
-- default: `~/hiboss/`
-- internal daemon files: `~/hiboss/.daemon/` (db/socket/log/pid)
-- override the root with `HIBOSS_DIR`
-
-2) Start the daemon:
-
-```bash
-hiboss daemon start --token <boss-token>
-```
-
-Next: open Telegram and talk with your agent by messaging the bot (see the Telegram section below).
-
-To stop the Hi-Boss service:
+Repair / reset:
+- Healthy setup rerun (safe no-op): `hiboss setup`
+- Broken/incomplete setup (non-destructive) via config export/apply:
 
 ```bash
 hiboss daemon stop --token <boss-token>
+hiboss setup export --out ./hiboss.setup.json
+# edit ./hiboss.setup.json
+hiboss setup --config-file ./hiboss.setup.json --token <boss-token> --dry-run
+hiboss setup --config-file ./hiboss.setup.json --token <boss-token>
+hiboss daemon start --token <boss-token>
+```
+
+Full reset (destructive):
+
+```bash
+hiboss daemon stop --token <boss-token>
+rm -rf "${HIBOSS_DIR:-$HOME/hiboss}"
+hiboss setup
+hiboss daemon start --token <boss-token>
 ```
 
 Tip: most commands accept `--token <token>` or read `HIBOSS_TOKEN` when `--token` is omitted.
@@ -157,9 +172,9 @@ This is powerful: a boss-level agent token can perform any boss-privileged CLI o
 
 ## Memory
 
-Each agent has a long-term memory file at:
-
-- `~/hiboss/agents/<agent-name>/internal_space/MEMORY.md` (or `{{HIBOSS_DIR}}/agents/<agent-name>/internal_space/MEMORY.md` when overridden)
+Per-agent memory lives under `${HIBOSS_DIR:-$HOME/hiboss}/agents/<agent-name>/internal_space/`:
+- `MEMORY.md` — long-term memory
+- `memories/YYYY-MM-DD.md` — daily memory files
 
 ## Docs
 
