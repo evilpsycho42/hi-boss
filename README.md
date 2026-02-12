@@ -12,7 +12,7 @@ Highlights:
 
 ## Sponsor
 
-[![YesCode logo](docs/assets/sponsors/yescode-logo.png)](https://co.yes.vg/register?ref=KKYC1Z0)
+[![YesCode logo](docs/assets/sponsors/yescode-logo.png)](https://co.yes.vg)
 
 YesCode is a reliable Claude Code/Codex relay provider with stable service quality and reasonable pricing.
 
