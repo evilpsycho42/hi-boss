@@ -1,53 +1,61 @@
 ## Memory
 
-Hi-Boss provides two persistence mechanisms: **semantic memory** and an **auto-injected memory file**.
+Hi-Boss provides **file-based memory** inside your `internal_space/`.
 
-### Semantic memory (`hiboss memory ...`)
+Injection (session start; best-effort):
+- Long-term memory: `internal_space/MEMORY.md` (truncated to {{ internalSpace.longtermMaxChars }} chars)
+- Daily memory: latest {{ internalSpace.dailyRecentFiles }} daily file(s) from `internal_space/memories/` ({{ internalSpace.dailyPerFileMaxChars }} chars per file; {{ internalSpace.dailyMaxChars }} chars total)
 
-Use semantic memory for **facts**, **project-level**, **task-level**, and **short-term** items you may need later.
+If you see a `<<truncated ...>>` marker, shorten the underlying file(s).
 
-- Search: `hiboss memory search --query "..." -n 5` (optional: `--category <category>`)
-- Add: `hiboss memory add --text "..."` (optional: `--category <category>`; default: `fact`)
-- List: `hiboss memory list -n 50` (optional: `--category <category>`)
-- Delete incorrect/outdated: `hiboss memory delete --id <id>`
-- See more: `hiboss memory --help`
-
-Rules:
-- If a memory is wrong/outdated/duplicated, **delete it** (or replace it with an updated one).
-- Never store secrets (tokens, api keys, passwords).
-
-Recommended categories (kebab-case):
-- `fact` — default
-- `project-<...>` — project context (basename of a folder, github repo name, etc.)
-- `task-<slug>` — task-specific notes (only if helpful)
-- `agent-<...>` - memories of a certain agent
-
-Use it proactively:
-- On new task: search `project-<...>` / `task-<slug>`
-- Before risky/destructive actions: search with action keywords
-
-If memory commands fail with `Memory is disabled`, ask boss to run: `hiboss memory setup --default`.
-
-### Auto-injected memory file (`internal_space/MEMORY.md`)
+### Long-term memory (`internal_space/MEMORY.md`)
 
 This file is automatically loaded into your context (may be truncated). You do **not** need to open it manually.
 
 Location:
 - `{{ hiboss.dir }}/agents/{{ agent.name }}/internal_space/MEMORY.md`
 
-Guidelines:
+Rules:
 - Keep it **high-value** and **high-information-density** (it is always injected).
-- Use it for stable, durable context and recurring workflows; keep the rest in semantic memory.
-- Keep it plain text and compact (avoid Markdown headings like `#`).
-- Focus on: `boss-preference` (how boss likes things done) and `boss-constraint` (hard rules / what NOT to do).
-- This exists to survive session resets (`/new`, session policies, daemon restarts): keep only what must persist.
+- Store stable preferences, constraints, and reusable workflows; avoid transcripts.
+- Keep it compact; if it is truncated, shorten it.
+- Never store secrets (tokens, api keys, passwords).
 {% if internalSpace.error %}
 
 internal-space-memory-unavailable: {{ internalSpace.error }}
-{% elif internalSpace.note %}
+{% else %}
 
 internal-space-memory-snapshot: {{ hiboss.dir }}/agents/{{ agent.name }}/internal_space/MEMORY.md
+{% if internalSpace.note %}
 {{ internalSpace.noteFence }}text
 {{ internalSpace.note }}
 {{ internalSpace.noteFence }}
+{% else %}
+(empty)
+{% endif %}
+{% endif %}
+
+### Daily memory (`internal_space/memories/YYYY-MM-DD.md`)
+
+Write a daily log. Keep it extremely simple:
+- One short memory per line
+- No timestamps
+- No headings/categories
+- No transcripts
+
+Location:
+- `{{ hiboss.dir }}/agents/{{ agent.name }}/internal_space/memories/`
+{% if internalSpace.dailyError %}
+
+internal-space-daily-memory-unavailable: {{ internalSpace.dailyError }}
+{% else %}
+
+internal-space-daily-memory-snapshot: {{ hiboss.dir }}/agents/{{ agent.name }}/internal_space/memories/
+{% if internalSpace.daily %}
+{{ internalSpace.dailyFence }}text
+{{ internalSpace.daily }}
+{{ internalSpace.dailyFence }}
+{% else %}
+(empty; no readable memories found in latest {{ internalSpace.dailyRecentFiles }} daily file(s))
+{% endif %}
 {% endif %}

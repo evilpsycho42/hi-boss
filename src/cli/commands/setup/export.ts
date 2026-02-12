@@ -16,14 +16,6 @@ function toConfigFileV2(config: Awaited<ReturnType<typeof exportSetupConfig>>): 
     telegram: {
       "adapter-boss-id": config.telegramBossId,
     },
-    memory: {
-      enabled: config.memory.enabled,
-      mode: config.memory.mode,
-      "model-path": config.memory.modelPath,
-      "model-uri": config.memory.modelUri,
-      dims: config.memory.dims,
-      "last-error": config.memory.lastError,
-    },
     agents: config.agents.map((agent) => ({
       name: agent.name,
       role: agent.role,

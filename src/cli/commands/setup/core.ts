@@ -6,7 +6,6 @@ import { getSocketPath, getDefaultConfig, isDaemonRunning } from "../../../daemo
 import { HiBossDatabase } from "../../../daemon/db/database.js";
 import { setupAgentHome } from "../../../agent/home-setup.js";
 import type { SetupCheckResult, SetupExecuteResult } from "../../../daemon/ipc/types.js";
-import type { ResolvedMemoryModelConfig } from "../../memory-model.js";
 import type { SetupConfig } from "./types.js";
 import type { AgentRole } from "../../../shared/agent-role.js";
 import {
@@ -50,22 +49,6 @@ export interface SetupStatus {
     }>;
   };
   userInfo: SetupUserInfoStatus;
-  memoryConfigured: boolean;
-}
-
-function defaultMemoryConfig(): ResolvedMemoryModelConfig {
-  return {
-    enabled: false,
-    mode: "default",
-    modelPath: "",
-    modelUri: "",
-    dims: 0,
-    lastError: "Memory model is not configured",
-  };
-}
-
-export function normalizeMemoryConfig(config: Pick<SetupConfig, "memory">): ResolvedMemoryModelConfig {
-  return config.memory ?? defaultMemoryConfig();
 }
 
 function getMissingRoles(roleCounts: { speaker: number; leader: number }): AgentRole[] {
@@ -121,7 +104,6 @@ function buildEmptySetupStatus(): SetupStatus {
         bossToken: true,
       },
     },
-    memoryConfigured: false,
   };
 }
 
@@ -139,12 +121,10 @@ function buildSetupStatusFromDb(db: HiBossDatabase): SetupStatus {
   );
   const userInfo = buildUserInfoStatus(db);
   const hasMissingUserInfo = Object.values(userInfo.missing).some(Boolean);
-  const memoryConfigured = Boolean((db.getConfig("memory_model_source") ?? "").trim());
   const ready =
     completed &&
     missingRoles.length === 0 &&
     !hasMissingUserInfo &&
-    memoryConfigured &&
     !hasIntegrityViolations(integrity);
 
   return {
@@ -160,7 +140,6 @@ function buildSetupStatusFromDb(db: HiBossDatabase): SetupStatus {
     })),
     integrity,
     userInfo,
-    memoryConfigured,
   };
 }
 
@@ -176,7 +155,6 @@ export async function checkSetupStatus(): Promise<SetupStatus> {
     const missingRoles = result.missingRoles ?? getMissingRoles(roleCounts);
     const userInfo = result.userInfo ?? buildEmptySetupStatus().userInfo;
     const hasMissingUserInfo = Object.values(userInfo.missing).some(Boolean);
-    const memoryConfigured = typeof result.memoryConfigured === "boolean" ? result.memoryConfigured : false;
     const integrity = result.integrity ?? {
       speakerWithoutBindings: [],
       duplicateSpeakerBindings: [],
@@ -190,14 +168,12 @@ export async function checkSetupStatus(): Promise<SetupStatus> {
           : result.completed &&
             missingRoles.length === 0 &&
             !hasMissingUserInfo &&
-            memoryConfigured &&
             !hasIntegrityViolations(integrity),
       roleCounts,
       missingRoles,
       agents: result.agents ?? [],
       integrity,
       userInfo,
-      memoryConfigured,
     };
   } catch (err) {
     if (await isDaemonRunning()) {
@@ -223,15 +199,6 @@ export async function checkSetupStatus(): Promise<SetupStatus> {
   }
 }
 
-function writeMemoryConfigToDb(db: HiBossDatabase, memory: ResolvedMemoryModelConfig): void {
-  db.setConfig("memory_enabled", memory.enabled ? "true" : "false");
-  db.setConfig("memory_model_source", memory.mode);
-  db.setConfig("memory_model_uri", memory.modelUri ?? "");
-  db.setConfig("memory_model_path", memory.modelPath ?? "");
-  db.setConfig("memory_model_dims", String(memory.dims ?? 0));
-  db.setConfig("memory_model_last_error", memory.lastError ?? "");
-}
-
 function ensureBossProfileFile(hibossDir: string): void {
   try {
     const bossMdPath = path.join(hibossDir, "BOSS.md");
@@ -252,7 +219,6 @@ function ensureBossProfileFile(hibossDir: string): void {
  * Execute full first-time setup (tries IPC first, falls back to direct DB).
  */
 export async function executeSetup(config: SetupConfig): Promise<{ speakerAgentToken: string; leaderAgentToken: string }> {
-  const memory = normalizeMemoryConfig(config);
   try {
     const client = new IpcClient(getSocketPath());
     const result = await client.call<SetupExecuteResult>("setup.execute", {
@@ -262,7 +228,6 @@ export async function executeSetup(config: SetupConfig): Promise<{ speakerAgentT
       leaderAgent: config.leaderAgent,
       bossToken: config.bossToken,
       adapter: config.adapter,
-      memory,
     });
     return {
       speakerAgentToken: result.speakerAgentToken,
@@ -292,13 +257,10 @@ async function executeSetupDirect(config: SetupConfig): Promise<{ speakerAgentTo
     await setupAgentHome(config.leaderAgent.name, daemonConfig.dataDir);
     ensureBossProfileFile(daemonConfig.dataDir);
 
-    const memory = normalizeMemoryConfig(config);
-
     return db.runInTransaction(() => {
       db.setBossName(config.bossName);
       db.setConfig("boss_timezone", config.bossTimezone);
       db.setAdapterBossId(config.adapter.adapterType, config.adapter.adapterBossId.trim().replace(/^@/, ""));
-      writeMemoryConfigToDb(db, memory);
 
       const speakerAgentResult = db.registerAgent({
         name: config.speakerAgent.name,

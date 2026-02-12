@@ -7,7 +7,6 @@ import {
   DEFAULT_DAEMON_DIRNAME,
   DEFAULT_DB_FILENAME,
   DEFAULT_MEDIA_DIRNAME,
-  DEFAULT_MODELS_DIRNAME,
   DEFAULT_SOCKET_FILENAME,
   DEFAULT_PID_FILENAME,
   getDefaultHiBossDir,
@@ -41,7 +40,6 @@ export interface HiBossPaths {
   dbPath: string;
   socketPath: string;
   pidPath: string;
-  modelsDir: string;
 }
 
 export function getHiBossPaths(): HiBossPaths {
@@ -63,11 +61,9 @@ export function getHiBossPaths(): HiBossPaths {
     dbPath: path.join(daemonDir, DEFAULT_DB_FILENAME),
     socketPath: path.join(daemonDir, DEFAULT_SOCKET_FILENAME),
     pidPath: path.join(daemonDir, DEFAULT_PID_FILENAME),
-    modelsDir: path.join(daemonDir, DEFAULT_MODELS_DIRNAME),
   };
 }
 
 export function getHiBossRootDir(): string {
   return getHiBossPaths().rootDir;
 }
-

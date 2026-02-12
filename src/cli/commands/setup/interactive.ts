@@ -1,6 +1,5 @@
 import * as path from "path";
-import { input, password, select } from "@inquirer/prompts";
-import { getDefaultConfig } from "../../../daemon/daemon.js";
+import { input, password } from "@inquirer/prompts";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "../../../shared/validation.js";
 import {
   DEFAULT_SETUP_AGENT_NAME,
@@ -10,11 +9,6 @@ import {
   getDefaultSetupWorkspace,
 } from "../../../shared/defaults.js";
 import { getDaemonIanaTimeZone, isValidIanaTimeZone } from "../../../shared/timezone.js";
-import {
-  resolveAndValidateMemoryModel,
-  type MemoryModelMode,
-  type ResolvedMemoryModelConfig,
-} from "../../memory-model.js";
 import { checkSetupStatus, executeSetup } from "./core.js";
 import type { SetupConfig } from "./types.js";
 import {
@@ -47,8 +41,7 @@ export async function runInteractiveSetup(): Promise<void> {
   const hasPersistedState =
     setupStatus.completed ||
     setupStatus.agents.length > 0 ||
-    Object.values(setupStatus.userInfo.missing).some((v) => !v) ||
-    setupStatus.memoryConfigured;
+    Object.values(setupStatus.userInfo.missing).some((v) => !v);
 
   if (hasPersistedState) {
     console.error("\n❌ Interactive setup only supports first-time bootstrap on a clean state.\n");
@@ -212,39 +205,6 @@ export async function runInteractiveSetup(): Promise<void> {
 
   const leaderAdvanced = await promptAgentAdvancedOptions({ agentLabel: "Leader" });
 
-  console.log("\n🧠 Semantic Memory\n");
-  console.log("Hi-Boss can store semantic memories locally for agents (vector search).\n");
-
-  const daemonConfig = getDefaultConfig();
-  const memoryMode = await select<MemoryModelMode>({
-    message: "Choose an embedding model source:",
-    choices: [
-      { value: "default", name: "Download default model (Qwen3-Embedding-0.6B GGUF)" },
-      { value: "local", name: "Use a local GGUF file (absolute path)" },
-    ],
-  });
-
-  let memory: ResolvedMemoryModelConfig;
-  if (memoryMode === "default") {
-    console.log("\nDownloading and validating the default embedding model...\n");
-    memory = await resolveAndValidateMemoryModel({ daemonDir: daemonConfig.daemonDir, mode: "default" });
-  } else {
-    const modelPath = (
-      await input({
-        message: "Absolute path to GGUF model file:",
-        validate: (value) => {
-          const trimmed = value.trim();
-          if (!trimmed) return "Model path is required";
-          if (!path.isAbsolute(trimmed)) return "Please provide an absolute path";
-          return true;
-        },
-      })
-    ).trim();
-
-    console.log("\nValidating local embedding model...\n");
-    memory = await resolveAndValidateMemoryModel({ daemonDir: daemonConfig.daemonDir, mode: "local", modelPath });
-  }
-
   console.log("\n⚙️  Applying configuration...\n");
 
   const config: SetupConfig = {
@@ -278,7 +238,6 @@ export async function runInteractiveSetup(): Promise<void> {
       adapterBossId,
     },
     bossToken,
-    memory,
   };
 
   try {
@@ -293,13 +252,6 @@ export async function runInteractiveSetup(): Promise<void> {
     console.log(`   leader-agent-name:   ${leaderAgentName}`);
     console.log(`   leader-agent-token:  ${setupResult.leaderAgentToken}`);
     console.log(`   boss-token:  ${bossToken}`);
-    console.log(`   memory-enabled: ${memory.enabled ? "true" : "false"}`);
-    if (memory.enabled) {
-      console.log(`   memory-model-path: ${memory.modelPath}`);
-      console.log(`   memory-model-dims: ${memory.dims}`);
-    } else if (memory.lastError) {
-      console.log(`   memory-last-error: ${memory.lastError}`);
-    }
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("\n⚠️  Save these tokens! They won't be shown again.\n");
     console.log("📱 Telegram bot is configured. Start the daemon with:");

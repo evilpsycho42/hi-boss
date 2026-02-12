@@ -10,7 +10,11 @@ import type { Agent } from "./types.js";
 import type { AgentBinding } from "../daemon/db/database.js";
 import { renderPrompt } from "../shared/prompt-renderer.js";
 import { buildSystemPromptContext } from "../shared/prompt-context.js";
-import { ensureAgentInternalSpaceLayout, readAgentInternalMemorySnapshot } from "../shared/internal-space.js";
+import {
+  ensureAgentInternalSpaceLayout,
+  readAgentInternalDailyMemorySnapshot,
+  readAgentInternalMemorySnapshot,
+} from "../shared/internal-space.js";
 
 /**
  * Context for generating system instructions.
@@ -66,6 +70,9 @@ export function generateSystemInstructions(ctx: InstructionContext): string {
     spaceContext.note = "";
     spaceContext.noteFence = "```";
     spaceContext.error = ensured.error;
+    spaceContext.daily = "";
+    spaceContext.dailyFence = "```";
+    spaceContext.dailyError = ensured.error;
   } else {
     const snapshot = readAgentInternalMemorySnapshot({ hibossDir, agentName: agent.name });
     if (snapshot.ok) {
@@ -76,6 +83,17 @@ export function generateSystemInstructions(ctx: InstructionContext): string {
       spaceContext.note = "";
       spaceContext.noteFence = "```";
       spaceContext.error = snapshot.error;
+    }
+
+    const dailySnapshot = readAgentInternalDailyMemorySnapshot({ hibossDir, agentName: agent.name });
+    if (dailySnapshot.ok) {
+      spaceContext.daily = dailySnapshot.note;
+      spaceContext.dailyFence = chooseFence(dailySnapshot.note);
+      spaceContext.dailyError = "";
+    } else {
+      spaceContext.daily = "";
+      spaceContext.dailyFence = "```";
+      spaceContext.dailyError = dailySnapshot.error;
     }
   }
 

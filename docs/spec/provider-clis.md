@@ -47,12 +47,11 @@ Claude (per turn):
 - `claude -p --append-system-prompt ... --output-format stream-json --verbose --permission-mode bypassPermissions`
 - Adds `--add-dir` for:
   - `{{HIBOSS_DIR}}/agents/<agent>/internal_space`
-  - `{{HIBOSS_DIR}}/.daemon`
 - Adds `--model <model>` when configured.
 - Adds `-r <session-id>` when resuming.
 
 Codex (per turn):
-- Fresh: `codex exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox --add-dir ... --add-dir ... -c developer_instructions=... [-c model_reasoning_effort="..."] [-m <model>] <prompt>`
+- Fresh: `codex exec --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox --add-dir ... -c developer_instructions=... [-c model_reasoning_effort="..."] [-m <model>] <prompt>`
 - Resume: `codex exec resume --json --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox [-c ...] [-m <model>] <thread-id> <prompt>`
   - Note: `codex exec resume` does not support `--add-dir`.
 

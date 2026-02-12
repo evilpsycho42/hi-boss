@@ -1,4 +1,3 @@
-import type { MemoryModelMode, ResolvedMemoryModelConfig } from "../../memory-model.js";
 import type { AgentRole } from "../../../shared/agent-role.js";
 
 export type SetupProvider = "claude" | "codex";
@@ -43,8 +42,6 @@ export interface SetupConfig {
     adapterBossId: string;
   };
   bossToken: string;
-  memory?: ResolvedMemoryModelConfig;
-  memorySelection?: { mode: MemoryModelMode; modelPath?: string };
 }
 
 export interface SetupDeclarativeAgentConfig extends SetupAgentConfig {
@@ -56,7 +53,6 @@ export interface SetupDeclarativeConfig {
   bossName: string;
   bossTimezone: string;
   telegramBossId: string;
-  memory: ResolvedMemoryModelConfig;
   agents: SetupDeclarativeAgentConfig[];
 }
 

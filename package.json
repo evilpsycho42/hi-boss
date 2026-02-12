@@ -1,6 +1,6 @@
 {
   "name": "hiboss",
-  "version": "2026.2.10",
+  "version": "2026.2.11",
   "type": "module",
   "description": "Local-first daemon + CLI for routing durable envelopes between agents and chat channels (e.g., Telegram).",
   "license": "MIT",
@@ -34,14 +34,11 @@
   },
   "dependencies": {
     "@inquirer/prompts": "^7.0.0",
-    "@lancedb/lancedb": "^0.23.0",
     "@types/proper-lockfile": "^4.1.4",
-    "apache-arrow": "^18.1.0",
     "better-sqlite3": "^11.7.0",
     "commander": "^13.0.0",
     "cron-parser": "^5.5.0",
     "dotenv": "^16.4.5",
-    "node-llama-cpp": "^3.15.1",
     "nunjucks": "^3.2.4",
     "proper-lockfile": "^4.1.2",
     "telegraf": "^4.16.3"

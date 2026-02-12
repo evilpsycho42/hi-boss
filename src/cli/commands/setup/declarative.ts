@@ -4,7 +4,6 @@ import * as path from "node:path";
 import { getDefaultConfig, isDaemonRunning } from "../../../daemon/daemon.js";
 import { HiBossDatabase } from "../../../daemon/db/database.js";
 import { setupAgentHome } from "../../../agent/home-setup.js";
-import type { ResolvedMemoryModelConfig } from "../../memory-model.js";
 import type {
   SetupDeclarativeConfig,
   SetupDeclarativeAgentConfig,
@@ -25,26 +24,6 @@ import { getDaemonIanaTimeZone, isValidIanaTimeZone } from "../../../shared/time
 import { getSpeakerBindingIntegrity } from "../../../shared/speaker-binding-invariant.js";
 import { isPermissionLevel } from "../../../shared/permissions.js";
 
-function defaultMemoryConfig(): ResolvedMemoryModelConfig {
-  return {
-    enabled: false,
-    mode: "default",
-    modelPath: "",
-    modelUri: "",
-    dims: 0,
-    lastError: "Memory model is not configured",
-  };
-}
-
-function writeMemoryConfigToDb(db: HiBossDatabase, memory: ResolvedMemoryModelConfig): void {
-  db.setConfig("memory_enabled", memory.enabled ? "true" : "false");
-  db.setConfig("memory_model_source", memory.mode);
-  db.setConfig("memory_model_uri", memory.modelUri ?? "");
-  db.setConfig("memory_model_path", memory.modelPath ?? "");
-  db.setConfig("memory_model_dims", String(memory.dims ?? 0));
-  db.setConfig("memory_model_last_error", memory.lastError ?? "");
-}
-
 function ensureBossProfileFile(hibossDir: string): void {
   try {
     const bossMdPath = path.join(hibossDir, "BOSS.md");
@@ -59,24 +38,6 @@ function ensureBossProfileFile(hibossDir: string): void {
   } catch {
     // Best-effort; don't fail setup on customization file issues.
   }
-}
-
-function readMemoryConfigFromDb(db: HiBossDatabase): ResolvedMemoryModelConfig {
-  const sourceRaw = (db.getConfig("memory_model_source") ?? "").trim();
-  const mode: "default" | "local" = sourceRaw === "local" ? "local" : "default";
-
-  const dimsRaw = (db.getConfig("memory_model_dims") ?? "").trim();
-  const dimsParsed = Number.parseInt(dimsRaw, 10);
-  const dims = Number.isFinite(dimsParsed) && dimsParsed > 0 ? Math.trunc(dimsParsed) : 0;
-
-  return {
-    enabled: (db.getConfig("memory_enabled") ?? "").trim() === "true",
-    mode,
-    modelPath: (db.getConfig("memory_model_path") ?? "").trim(),
-    modelUri: (db.getConfig("memory_model_uri") ?? "").trim(),
-    dims,
-    lastError: (db.getConfig("memory_model_last_error") ?? "").trim(),
-  };
 }
 
 function sanitizeMetadataForSetupConfig(metadata: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
@@ -94,7 +55,6 @@ function buildDefaultDeclarativeConfig(): SetupDeclarativeConfig {
     bossName: getDefaultSetupBossName(),
     bossTimezone: getDaemonIanaTimeZone(),
     telegramBossId: "",
-    memory: defaultMemoryConfig(),
     agents: [
       {
         name: DEFAULT_SETUP_AGENT_NAME,
@@ -184,7 +144,6 @@ export async function exportSetupConfig(): Promise<SetupDeclarativeConfig> {
         bossName: (db.getBossName() ?? "").trim() || getDefaultSetupBossName(),
         bossTimezone: (db.getConfig("boss_timezone") ?? "").trim() || getDaemonIanaTimeZone(),
         telegramBossId: (db.getAdapterBossId("telegram") ?? "").trim(),
-        memory: readMemoryConfigFromDb(db),
       };
     }
 
@@ -193,7 +152,6 @@ export async function exportSetupConfig(): Promise<SetupDeclarativeConfig> {
       bossName: (db.getBossName() ?? "").trim() || getDefaultSetupBossName(),
       bossTimezone: (db.getConfig("boss_timezone") ?? "").trim() || getDaemonIanaTimeZone(),
       telegramBossId: (db.getAdapterBossId("telegram") ?? "").trim(),
-      memory: readMemoryConfigFromDb(db),
       agents,
     };
   } finally {
@@ -216,11 +174,6 @@ function assertDeclarativeConfig(config: SetupDeclarativeConfig): void {
 
   if (!config.telegramBossId.trim()) {
     throw new Error("Invalid setup config (telegram.adapter-boss-id is required)");
-  }
-
-  const memory = config.memory;
-  if (memory.mode !== "default" && memory.mode !== "local") {
-    throw new Error("Invalid setup config (memory.mode must be default or local)");
   }
 
   if (!Array.isArray(config.agents) || config.agents.length === 0) {
@@ -398,7 +351,6 @@ export async function reconcileSetupConfig(params: {
       db.setBossName(params.config.bossName.trim());
       db.setConfig("boss_timezone", params.config.bossTimezone.trim());
       db.setAdapterBossId("telegram", params.config.telegramBossId.trim().replace(/^@/, ""));
-      writeMemoryConfigToDb(db, params.config.memory);
       db.setBossToken(token);
 
       const tokens: Array<{ name: string; role: AgentRole; token: string }> = [];

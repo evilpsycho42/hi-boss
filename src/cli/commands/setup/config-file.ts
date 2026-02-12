@@ -27,14 +27,6 @@ interface SetupConfigFileV2 {
   telegram: {
     "adapter-boss-id": string;
   };
-  memory: {
-    enabled: boolean;
-    mode: "default" | "local";
-    "model-path": string;
-    "model-uri": string;
-    dims: number;
-    "last-error": string;
-  };
   agents: Array<{
     name: string;
     role: "speaker" | "leader";
@@ -182,6 +174,9 @@ function parseSetupConfigFileV2(json: string): SetupDeclarativeConfig {
   if (Object.prototype.hasOwnProperty.call(parsed, "boss-token")) {
     throw new Error("Invalid setup config (boss-token must not be present in v2 config file)");
   }
+  if (Object.prototype.hasOwnProperty.call(parsed, "memory")) {
+    throw new Error("Invalid setup config (memory is no longer supported)");
+  }
 
   const daemonTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
@@ -211,36 +206,6 @@ function parseSetupConfigFileV2(json: string): SetupDeclarativeConfig {
     throw new Error("Invalid setup config (telegram.adapter-boss-id is required)");
   }
   const telegramBossId = adapterBossIdRaw.replace(/^@/, "");
-
-  const memoryRaw = parsed.memory;
-  if (!isPlainObject(memoryRaw)) {
-    throw new Error("Invalid setup config (memory is required)");
-  }
-
-  const memoryEnabled = memoryRaw.enabled;
-  if (typeof memoryEnabled !== "boolean") {
-    throw new Error("Invalid setup config (memory.enabled must be boolean)");
-  }
-
-  const memoryMode = memoryRaw.mode;
-  if (memoryMode !== "default" && memoryMode !== "local") {
-    throw new Error("Invalid setup config (memory.mode must be default or local)");
-  }
-
-  const memoryModelPath = typeof memoryRaw["model-path"] === "string" ? memoryRaw["model-path"].trim() : "";
-  const memoryModelUri = typeof memoryRaw["model-uri"] === "string" ? memoryRaw["model-uri"].trim() : "";
-
-  if (typeof memoryRaw.dims !== "number" || !Number.isFinite(memoryRaw.dims) || memoryRaw.dims < 0) {
-    throw new Error("Invalid setup config (memory.dims must be >= 0)");
-  }
-  const memoryDims = Math.trunc(memoryRaw.dims);
-
-  const memoryLastError =
-    typeof memoryRaw["last-error"] === "string" ? memoryRaw["last-error"].trim() : "";
-
-  if (memoryEnabled && (!memoryModelPath || memoryDims <= 0)) {
-    throw new Error("Invalid setup config (enabled memory requires model-path and dims > 0)");
-  }
 
   const agentsRaw = parsed.agents;
   if (!Array.isArray(agentsRaw) || agentsRaw.length === 0) {
@@ -305,14 +270,6 @@ function parseSetupConfigFileV2(json: string): SetupDeclarativeConfig {
     bossName,
     bossTimezone,
     telegramBossId,
-    memory: {
-      enabled: memoryEnabled,
-      mode: memoryMode,
-      modelPath: memoryModelPath,
-      modelUri: memoryModelUri,
-      dims: memoryDims,
-      lastError: memoryLastError,
-    },
     agents,
   };
 }

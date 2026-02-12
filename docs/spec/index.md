@@ -27,6 +27,7 @@
 - Agent execution + bindings + providers: `docs/spec/components/agent.md`
 - Sessions (refresh policy + resume): `docs/spec/components/session.md`
 - Provider CLIs (canonical invocation + token semantics): `docs/spec/provider-clis.md`
+- File-based agent memory (protocol): `docs/spec/components/file-memory.md`
 
 ## Configuration + storage
 

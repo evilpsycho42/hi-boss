@@ -22,8 +22,6 @@ Tables (high level):
 - `boss_token_hash`: hashed boss token (printed once by setup)
 - `permission_policy`: JSON mapping operations → required permission level
 - `adapter_boss_id_<adapter-type>`: boss identity on an adapter (e.g., `adapter_boss_id_telegram`)
-- Semantic memory:
-  - `memory_enabled`, `memory_model_source`, `memory_model_uri`, `memory_model_path`, `memory_model_dims`, `memory_model_last_error`
 
 ## Key invariants
 

@@ -14,8 +14,8 @@ Runs the interactive first-time setup wizard.
 
 Behavior:
 - If setup is already healthy (`setup_completed=true`, at least one `speaker`, at least one `leader`, and valid speaker bindings), prints "Setup is already complete" and exits.
-- Interactive setup is **bootstrap-only**. If persisted state already exists but is invalid/incomplete, interactive repair is not used.
-- For invalid/incomplete persisted state, users must use config export/apply flow:
+- Interactive setup is bootstrap-only. If persisted state already exists but is invalid/incomplete, interactive repair is not used.
+- For invalid/incomplete persisted state, use config export/apply flow:
   1. `hiboss setup export`
   2. edit JSON
   3. `hiboss setup --config-file <path> --token <boss-token> --dry-run`
@@ -29,12 +29,16 @@ Behavior:
 Interactive defaults:
 - `boss-name`: OS username
 - `boss-timezone`: daemon host timezone (IANA)
-- `agent.name` (speaker): `nex`
-- `agent.workspace`: user home directory
-- `agent.permission-level`: `standard`
+- `speaker.name`: `nex`
+- `speaker.workspace`: user home directory
+- `speaker.permission-level`: `standard`
+- `speaker.model`: `null` (provider default)
+- `speaker.reasoning-effort`: `null` (provider default)
 - `leader.name`: `leader`
 - `leader.workspace`: speaker workspace
-- `memory.mode`: `default`
+- `leader.permission-level`: speaker value
+- `leader.model`: `null` (provider default)
+- `leader.reasoning-effort`: `null` (provider default)
 
 ## `hiboss setup export`
 
@@ -63,10 +67,11 @@ Flags:
 - `--dry-run`: optional (validate + diff only, no mutation)
 
 Behavior:
-- **v2-only**: `version: 1` is rejected; no backward compatibility path.
+- v2-only: `version: 1` is rejected.
+- `boss-token` and `memory` fields in config are rejected.
 - Full reconcile apply (not missing-only patch): config file is treated as desired state.
 - Apply is transactional.
-- Setup-managed rows are reset and recreated from file (agents/bindings/cron schedules under setup-managed flow).
+- Setup-managed rows are reset and recreated from file.
 - Agent tokens are regenerated on apply and printed once.
 - Existing agent directories are not removed automatically.
 - Daemon must be stopped before apply.
@@ -82,7 +87,6 @@ Top-level fields:
 Required:
 - `version: 2`
 - `telegram.adapter-boss-id`
-- `memory`
 - `agents[]`
 
 Optional (defaults applied if omitted):
@@ -90,19 +94,8 @@ Optional (defaults applied if omitted):
 - `boss-timezone` (default: daemon host timezone; IANA)
 
 Forbidden:
-- `boss-token` (must not be present in v2 config files)
-
-`memory` fields:
-
-Required:
-- `enabled: boolean`
-- `mode: "default" | "local"`
-- `dims: number` (must be `>= 0`; must be `> 0` when `enabled=true`)
-
-Optional (defaults applied if omitted):
-- `model-path: string` (default: `""`; required when `enabled=true`)
-- `model-uri: string` (default: `""`)
-- `last-error: string` (default: `""`)
+- `boss-token`
+- `memory`
 
 `agents[]` fields:
 
@@ -125,18 +118,14 @@ Optional (defaults applied if omitted):
 - `metadata` (object)
 
 `bindings[]` fields (required per binding):
-  - `adapter-type`
-  - `adapter-token`
+- `adapter-type`
+- `adapter-token`
 
 Invariants:
 - At least one `speaker` and one `leader`.
 - Every `speaker` has at least one binding.
 - Adapter token identity (`adapter-type` + `adapter-token`) must be unique across agents.
 - For current adapter support, telegram token format must be valid when `adapter-type=telegram`.
-
-Note:
-- Config apply is full reconcile. Missing optional fields are defaulted before apply (so defaults become desired state).
-- For re-setup, start from `hiboss setup export` to preserve existing values.
 
 ### Example (Version 2)
 
@@ -147,14 +136,6 @@ Note:
   "boss-timezone": "Asia/Shanghai",
   "telegram": {
     "adapter-boss-id": "your_telegram_username"
-  },
-  "memory": {
-    "enabled": false,
-    "mode": "default",
-    "model-path": "",
-    "model-uri": "",
-    "dims": 0,
-    "last-error": "Memory model is not configured"
   },
   "agents": [
     {
@@ -197,7 +178,7 @@ Note:
 ```
 
 Output keys:
-- Dry-run prints parseable summary keys like:
+- Dry-run prints parseable summary keys:
   - `dry-run: true`
   - `first-apply:`
   - `current-agent-count:`
@@ -207,7 +188,8 @@ Output keys:
   - `new-agents:`
   - `current-binding-count:`
   - `desired-binding-count:`
-- Apply prints the same summary keys with `dry-run: false`, plus per-agent token lines:
+- Apply prints the same summary keys with `dry-run: false`, plus:
+  - `generated-agent-token-count:`
   - `agent-name:`
   - `agent-role:`
   - `agent-token:` (printed once)
@@ -222,8 +204,7 @@ Core mappings:
 - `boss-name` → `config.boss_name`
 - `boss-timezone` → `config.boss_timezone`
 - `telegram.adapter-boss-id` → `config.adapter_boss_id_telegram` (stored without `@`)
-- `memory.*` → `config.memory_*`
-- `agents[]` → `agents` table rows
+- `agents[]` → `agents` rows
 - `agents[].bindings[]` → `agent_bindings` rows
 
 Additional effects:

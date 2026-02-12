@@ -68,6 +68,13 @@ async function main(): Promise<void> {
 
   try {
     writeDoc({
+      filename: "daemon_status.DOC.md",
+      title: "hiboss daemon status",
+      command: "hiboss daemon status",
+      output: await runOrThrow({ homeDir: fixture.homeDir, token: fixture.bossToken, args: ["daemon", "status"] }),
+    });
+
+    writeDoc({
       filename: "agent_list.DOC.md",
       title: "hiboss agent list",
       command: "hiboss agent list",
@@ -133,41 +140,8 @@ async function main(): Promise<void> {
       output: await runOrThrow({ homeDir: fixture.homeDir, token: fixture.agentToken, args: ["cron", "list"] }),
     });
 
-    writeDoc({
-      filename: "memory_categories.DOC.md",
-      title: "hiboss memory categories",
-      command: "hiboss memory categories",
-      output: await runOrThrow({
-        homeDir: fixture.homeDir,
-        token: fixture.agentToken,
-        args: ["memory", "categories"],
-      }),
-    });
-
-    writeDoc({
-      filename: "memory_list.DOC.md",
-      title: "hiboss memory list",
-      command: "hiboss memory list",
-      output: await runOrThrow({
-        homeDir: fixture.homeDir,
-        token: fixture.agentToken,
-        args: ["memory", "list"],
-      }),
-    });
-
-    writeDoc({
-      filename: "memory_search.DOC.md",
-      title: "hiboss memory search",
-      command: 'hiboss memory search --query "Project X weekly update due Friday 5pm" --limit 2',
-      output: await runOrThrow({
-        homeDir: fixture.homeDir,
-        token: fixture.agentToken,
-        args: ["memory", "search", "--query", "Project X weekly update due Friday 5pm", "--limit", "2"],
-      }),
-    });
-
     console.log("\n---");
-    console.log("Generated 7 CLI output examples");
+    console.log("Generated 5 CLI output examples");
   } finally {
     await handle.stop().catch(() => undefined);
     fixture.cleanup();

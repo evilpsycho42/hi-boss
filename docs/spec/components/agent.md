@@ -94,8 +94,9 @@ Each agent has a home directory for persona and memory files.
 ```
 ~/hiboss/agents/<agent-name>/
 ├── SOUL.md              # Persona placeholder (created empty; not rendered in minimal system prompt)
-└── internal_space/      # Agent's private space, automatically added into additional directories
-    └── MEMORY.md        # Agent long-term memory (auto-injected into system prompt; truncated; default max 36,000 chars)
+└── internal_space/      # Agent's private space
+    └── MEMORY.md        # Agent long-term memory (auto-injected into system prompt; truncated)
+    └── memories/        # Per-agent daily memory files (YYYY-MM-DD.md; not always injected)
 ```
 
 ### Setup Functions
@@ -117,7 +118,8 @@ System instructions define the agent's behavior and context. Instructions are re
 - Codex: via `-c developer_instructions=...`
 
 On each new session, Hi-Boss injects:
-- a truncated snapshot of the agent long-term memory file (`internal_space/MEMORY.md`; default max 36,000 chars)
+- a truncated snapshot of the agent long-term memory file (`internal_space/MEMORY.md`)
+- optionally, a truncated snapshot of recent daily memory files (`internal_space/memories/`; see `docs/spec/components/file-memory.md`)
 It intentionally does not inject additional persona/profile files (the system prompt is designed to be minimal).
 
 ### Template System

@@ -5,14 +5,6 @@
   "telegram": {
     "adapter-boss-id": "kky1024"
   },
-  "memory": {
-    "enabled": false,
-    "mode": "local",
-    "model-path": "/Users/kky/Qwen3-Embedding-0.6B-Q8_0.gguf",
-    "model-uri": "",
-    "dims": 0,
-    "last-error": "Memory model is not configured"
-  },
   "agents": [
     {
       "name": "test-claude",

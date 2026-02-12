@@ -68,4 +68,3 @@ For details/examples, use:
 - `hiboss envelope send --help`
 - `hiboss envelope list --help`
 - `hiboss cron --help`
-- `hiboss memory --help`
