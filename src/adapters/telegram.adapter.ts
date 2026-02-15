@@ -14,6 +14,7 @@ import { sendTelegramMessage } from "./telegram/outgoing.js";
 import {
   computeBackoff,
   isGetUpdatesConflict,
+  isTransientNetworkError,
   sleep,
   splitTextForTelegram,
   TELEGRAM_MAX_TEXT_CHARS,
@@ -171,9 +172,10 @@ export class TelegramAdapter implements ChatAdapter {
       } catch (err) {
         if (this.stopped) return;
 
-        if (isGetUpdatesConflict(err)) {
+        if (isGetUpdatesConflict(err) || isTransientNetworkError(err)) {
           const delayMs = computeBackoff(attempt);
-          console.log(`[${this.platform}] 409 conflict, retrying in ${delayMs}ms (attempt ${attempt + 1})`);
+          const reason = isGetUpdatesConflict(err) ? "409 conflict" : "network error";
+          console.log(`[${this.platform}] ${reason}, retrying in ${delayMs}ms (attempt ${attempt + 1})`);
           await sleep(delayMs);
           attempt++;
           continue;

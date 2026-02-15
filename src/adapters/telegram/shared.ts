@@ -18,6 +18,30 @@ export function isReplyToMessageNotFound(err: unknown): boolean {
   return typed.response?.description?.toLowerCase().includes("message to be replied") ?? false;
 }
 
+const TRANSIENT_ERROR_CODES = new Set([
+  "ETIMEDOUT",
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "EPIPE",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_SOCKET",
+]);
+
+export function isTransientNetworkError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const code = (err as { code?: string }).code;
+  if (code && TRANSIENT_ERROR_CODES.has(code)) return true;
+  // fetch failures (Node undici) wrap the real error in .cause
+  const cause = (err as { cause?: { code?: string } }).cause;
+  if (cause?.code && TRANSIENT_ERROR_CODES.has(cause.code)) return true;
+  // Catch generic "fetch failed" from undici
+  const msg = (err as { message?: string }).message;
+  if (msg && /\bfetch failed\b/i.test(msg)) return true;
+  return false;
+}
+
 export function computeBackoff(attempt: number): number {
   const initialMs = 2000;
   const maxMs = 30000;
