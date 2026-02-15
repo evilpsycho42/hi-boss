@@ -27,6 +27,10 @@ Notes:
 | `internalSpace.dailyRecentFiles` | number | How many recent daily memory files are injected (newest-first by filename) |
 | `internalSpace.dailyPerFileMaxChars` | number | Truncation limit (chars) per injected daily file |
 | `internalSpace.dailyMaxChars` | number | Truncation limit (chars) for the combined injected daily snapshot |
+| `internalSpace.sessionSummaries` | string | Pre-rendered XML-tagged session summaries from recent days (or empty) |
+| `internalSpace.sessionSummariesError` | string | Session summary read error message (or empty) |
+| `internalSpace.sessionSummariesMaxChars` | number | Truncation limit (chars) for the combined session summaries |
+| `internalSpace.sessionSummariesRecentDays` | number | How many recent days of session summaries are injected |
 | `environment.time` | string | Current time formatted in boss timezone offset (ISO 8601) |
 | `environment.bossTimezone` | string | Boss timezone (IANA) used for displayed timestamps |
 | `environment.daemonTimezone` | string | Daemon host timezone (IANA) used by shell commands |

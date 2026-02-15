@@ -12,6 +12,7 @@ import { formatTelegramMessageIdCompact } from "../../shared/telegram-message-id
 export type EnvelopeHandler = (envelope: Envelope) => void | Promise<void>;
 
 export interface MessageRouterOptions {
+  onEnvelopeCreated?: EnvelopeHandler;
   onEnvelopeDone?: EnvelopeHandler;
 }
 
@@ -21,9 +22,11 @@ export interface MessageRouterOptions {
 export class MessageRouter {
   private adaptersByToken: Map<string, ChatAdapter> = new Map();
   private agentHandlers: Map<string, EnvelopeHandler> = new Map();
+  private onEnvelopeCreated?: EnvelopeHandler;
   private onEnvelopeDone?: EnvelopeHandler;
 
   constructor(private db: HiBossDatabase, options: MessageRouterOptions = {}) {
+    this.onEnvelopeCreated = options.onEnvelopeCreated;
     this.onEnvelopeDone = options.onEnvelopeDone;
   }
 
@@ -76,6 +79,17 @@ export class MessageRouter {
     }
 
     logEvent("info", "envelope-created", fields);
+
+    if (this.onEnvelopeCreated) {
+      try {
+        await this.onEnvelopeCreated(envelope);
+      } catch (err) {
+        logEvent("error", "router-on-envelope-created-failed", {
+          "envelope-id": envelope.id,
+          error: errorMessage(err),
+        });
+      }
+    }
 
     if (isDueUnixMs(envelope.deliverAt)) {
       await this.deliverEnvelope(envelope);

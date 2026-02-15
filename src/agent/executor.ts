@@ -21,6 +21,12 @@ import { getTriggerFields } from "./executor-triggers.js";
 import { countDuePendingEnvelopesForAgent } from "./executor-db.js";
 import { executeCliTurn } from "./executor-turn.js";
 import { getOrCreateAgentSession } from "./executor-session.js";
+import type { ConversationHistory } from "../daemon/history/conversation-history.js";
+import {
+  summarizeAndCloseSession,
+  summarizeAndCloseSessionByPath,
+  summarizeAllActiveSessions,
+} from "../daemon/history/session-summary.js";
 
 /**
  * Maximum number of pending envelopes to process in a single turn.
@@ -44,17 +50,20 @@ export class AgentExecutor {
   private pendingSessionRefresh: Map<string, SessionRefreshRequest> = new Map();
   private db: HiBossDatabase | null;
   private hibossDir: string;
+  private conversationHistory: ConversationHistory | null;
   private onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
 
   constructor(
     options: {
       db?: HiBossDatabase;
       hibossDir?: string;
+      conversationHistory?: ConversationHistory;
       onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
     } = {}
   ) {
     this.db = options.db ?? null;
     this.hibossDir = options.hibossDir ?? getHiBossDir();
+    this.conversationHistory = options.conversationHistory ?? null;
     this.onEnvelopesDone = options.onEnvelopesDone;
   }
 
@@ -366,7 +375,7 @@ export class AgentExecutor {
     db: HiBossDatabase,
     trigger?: AgentRunTrigger
   ): Promise<AgentSession> {
-    return await getOrCreateAgentSession({
+    const session = await getOrCreateAgentSession({
       agent,
       db,
       hibossDir: this.hibossDir,
@@ -376,6 +385,11 @@ export class AgentExecutor {
       getSessionPolicy: (a) => this.getSessionPolicy(a),
       trigger,
     });
+
+    // Ensure ConversationHistory tracks a session (recover from disk or create new).
+    this.conversationHistory?.ensureActiveSession(agent.name);
+
+    return session;
   }
 
   /**
@@ -385,6 +399,32 @@ export class AgentExecutor {
    */
   async refreshSession(agentName: string, reason?: string): Promise<void> {
     this.pendingSessionRefresh.delete(agentName);
+
+    if (this.conversationHistory) {
+      // Recover old session so we can capture its file path.
+      this.conversationHistory.recoverSession(agentName);
+      const oldSessionFilePath = this.conversationHistory.getCurrentSessionFilePath(agentName);
+
+      // Create new history session FIRST so incoming envelopes land in the new session
+      // (avoids race where messages arriving during async summary go to the old session).
+      this.conversationHistory.startSession(agentName);
+
+      // Best-effort: summarize and close the old session file.
+      if (oldSessionFilePath) {
+        try {
+          await summarizeAndCloseSessionByPath({
+            filePath: oldSessionFilePath,
+            agentName,
+          });
+        } catch (err) {
+          logEvent("warn", "session-summary-on-refresh-failed", {
+            "agent-name": agentName,
+            reason,
+            error: errorMessage(err),
+          });
+        }
+      }
+    }
 
     if (this.db) {
       try {
@@ -398,7 +438,6 @@ export class AgentExecutor {
       }
     }
 
-    // For CLI-based sessions, there's no runtime/session to dispose — just clear the in-memory cache.
     this.sessions.delete(agentName);
 
     logEvent("info", "agent-session-remove", {
@@ -412,6 +451,23 @@ export class AgentExecutor {
    * Close all sessions on shutdown.
    */
   async closeAll(): Promise<void> {
+    // Best-effort: summarize all active sessions before shutdown.
+    if (this.conversationHistory) {
+      try {
+        const sessionAgents = [...this.sessions.keys()];
+        const historyAgents = this.conversationHistory.getActiveAgentNames();
+        const agentNames = [...new Set([...sessionAgents, ...historyAgents])];
+        await summarizeAllActiveSessions({
+          history: this.conversationHistory,
+          agentNames,
+        });
+      } catch (err) {
+        logEvent("warn", "session-summary-on-close-all-failed", {
+          error: errorMessage(err),
+        });
+      }
+    }
+
     // Kill any in-flight CLI processes
     for (const [agentName, inFlight] of this.inFlightRuns) {
       if (inFlight.childProcess) {
@@ -431,6 +487,7 @@ export class AgentExecutor {
 export function createAgentExecutor(options?: {
   db?: HiBossDatabase;
   hibossDir?: string;
+  conversationHistory?: ConversationHistory;
   onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
 }): AgentExecutor {
   return new AgentExecutor(options);

@@ -17,6 +17,8 @@ You are helpful and pragmatic, and you are accountable to the boss{% if boss.nam
 
 {% include "system/sections/hiboss/memory.md" %}
 
+{% include "system/sections/hiboss/session-history.md" %}
+
 {% include "system/sections/environment.md" %}
 
 {% include "system/sections/rules.md" %}

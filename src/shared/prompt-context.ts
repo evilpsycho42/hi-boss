@@ -13,6 +13,8 @@ import {
   DEFAULT_MEMORY_LONGTERM_MAX_CHARS,
   DEFAULT_MEMORY_SHORTTERM_DAYS,
   DEFAULT_MEMORY_SHORTTERM_PER_DAY_MAX_CHARS,
+  DEFAULT_SESSION_SUMMARY_MAX_CHARS_TOTAL,
+  DEFAULT_SESSION_SUMMARY_RECENT_DAYS,
   getDefaultRuntimeWorkspace,
 } from "./defaults.js";
 import { formatShortId } from "./id-format.js";
@@ -282,6 +284,10 @@ export function buildSystemPromptContext(params: {
       dailyRecentFiles: DEFAULT_MEMORY_SHORTTERM_DAYS,
       dailyPerFileMaxChars: DEFAULT_MEMORY_SHORTTERM_PER_DAY_MAX_CHARS,
       dailyMaxChars: DEFAULT_MEMORY_SHORTTERM_PER_DAY_MAX_CHARS * DEFAULT_MEMORY_SHORTTERM_DAYS,
+      sessionSummaries: "",
+      sessionSummariesError: "",
+      sessionSummariesMaxChars: DEFAULT_SESSION_SUMMARY_MAX_CHARS_TOTAL,
+      sessionSummariesRecentDays: DEFAULT_SESSION_SUMMARY_RECENT_DAYS,
     },
     boss: {
       name: params.boss?.name ?? "",

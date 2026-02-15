@@ -12,6 +12,7 @@ import { type BackgroundExecutor, createBackgroundExecutor } from "../agent/back
 import type { Agent } from "../agent/types.js";
 import { EnvelopeScheduler } from "./scheduler/envelope-scheduler.js";
 import { CronScheduler } from "./scheduler/cron-scheduler.js";
+import { ConversationHistory } from "./history/conversation-history.js";
 import type { RpcMethodRegistry } from "./ipc/types.js";
 import { RPC_ERRORS } from "./ipc/types.js";
 import type { ChatAdapter } from "../adapters/types.js";
@@ -28,6 +29,7 @@ import {
 } from "../shared/permissions.js";
 import { errorMessage, logEvent, setDaemonLogTimeZone } from "../shared/daemon-log.js";
 import { getEnvelopeSourceFromEnvelope } from "../envelope/source.js";
+import type { Envelope } from "../envelope/types.js";
 import { PidLock, isDaemonRunning, isSocketAcceptingConnections } from "./pid-lock.js";
 import type { DaemonContext, Principal } from "./rpc/context.js";
 import { rpcError } from "./rpc/context.js";
@@ -103,6 +105,7 @@ export class Daemon {
   private backgroundExecutor: BackgroundExecutor;
   private scheduler: EnvelopeScheduler;
   private cronScheduler: CronScheduler | null = null;
+  private conversationHistory: ConversationHistory;
   private adapters: Map<string, ChatAdapter> = new Map(); // token -> adapter
   private running = false;
   private startTimeMs: number | null = null;
@@ -117,18 +120,29 @@ export class Daemon {
 
     this.db = new HiBossDatabase(dbPath);
     this.ipc = new IpcServer(socketPath);
+    this.conversationHistory = new ConversationHistory({
+      agentsDir: path.join(config.dataDir, "agents"),
+      timezone: this.db.getBossTimezone() ?? undefined,
+    });
+    const historyAppend = (envelope: Envelope) => this.conversationHistory.append(envelope);
     this.router = new MessageRouter(this.db, {
+      onEnvelopeCreated: historyAppend,
       onEnvelopeDone: (envelope) => this.cronScheduler?.onEnvelopeDone(envelope),
     });
     this.bridge = new ChannelBridge(this.router, this.db, config);
     this.executor = createAgentExecutor({
       db: this.db,
       hibossDir: config.dataDir,
-      onEnvelopesDone: (envelopeIds) => this.cronScheduler?.onEnvelopesDone(envelopeIds),
+      conversationHistory: this.conversationHistory,
+      onEnvelopesDone: (envelopeIds) => {
+        this.cronScheduler?.onEnvelopesDone(envelopeIds);
+      },
     });
     this.backgroundExecutor = createBackgroundExecutor({ db: this.db, router: this.router });
     this.scheduler = new EnvelopeScheduler(this.db, this.router, this.executor);
-    this.cronScheduler = new CronScheduler(this.db, this.scheduler);
+    this.cronScheduler = new CronScheduler(this.db, this.scheduler, {
+      onEnvelopeCreated: historyAppend,
+    });
 
     this.registerRpcMethods();
   }
@@ -423,6 +437,7 @@ export class Daemon {
       this.adapters.delete(adapterToken);
     }
   }
+
 
   /**
    * Stop the daemon.

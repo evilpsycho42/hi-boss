@@ -2,12 +2,13 @@ import { spawn } from "child_process";
 import * as path from "path";
 import * as fs from "fs";
 import { fileURLToPath } from "url";
-import { getDefaultConfig, isDaemonRunning, getSocketPath } from "../../daemon/daemon.js";
+import { Daemon, getDefaultConfig, isDaemonRunning, getSocketPath } from "../../daemon/daemon.js";
 import { IpcClient } from "../ipc-client.js";
 import { authorizeCliOperation } from "../authz.js";
 import { resolveToken } from "../token.js";
 import { formatUnixMsAsTimeZoneOffset } from "../../shared/time.js";
 import { getDaemonTimeContext } from "../time-context.js";
+import { logEvent, errorMessage, setDaemonDebugEnabled } from "../../shared/daemon-log.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -21,6 +22,7 @@ interface DaemonStatusResult {
 export interface StartDaemonOptions {
   token?: string;
   debug?: boolean;
+  foreground?: boolean;
 }
 
 export interface StopDaemonOptions {
@@ -223,6 +225,61 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<voi
 
   console.error("Failed to start daemon. Check logs at:", logPath);
   process.exit(1);
+}
+
+/**
+ * Start the daemon in the foreground (no fork/detach).
+ * Designed for process managers like pm2 that handle daemonization themselves.
+ */
+export async function startDaemonForeground(options: StartDaemonOptions = {}): Promise<void> {
+  setDaemonDebugEnabled(Boolean(options.debug));
+  const config = getDefaultConfig();
+
+  try {
+    const token = resolveToken(options.token);
+    authorizeCliOperation("daemon.start", token);
+  } catch (err) {
+    console.error("error:", (err as Error).message);
+    process.exit(1);
+  }
+
+  if (!fs.existsSync(config.dataDir)) {
+    fs.mkdirSync(config.dataDir, { recursive: true });
+  }
+  if (!fs.existsSync(config.daemonDir)) {
+    fs.mkdirSync(config.daemonDir, { recursive: true });
+  }
+
+  if (await isDaemonRunning(config)) {
+    console.error("Daemon is already running");
+    process.exit(1);
+  }
+
+  rotateDaemonLogOnStart(config.daemonDir);
+
+  const daemon = new Daemon(config);
+
+  const shutdown = async () => {
+    logEvent("info", "daemon-shutdown-requested");
+    try {
+      await daemon.stop();
+      process.exit(0);
+    } catch (err) {
+      logEvent("error", "daemon-shutdown-failed", { error: errorMessage(err) });
+      process.exit(1);
+    }
+  };
+
+  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", shutdown);
+
+  try {
+    await daemon.start();
+    console.log("Daemon started (foreground mode)");
+  } catch (err) {
+    logEvent("error", "daemon-start-failed", { error: errorMessage(err) });
+    process.exit(1);
+  }
 }
 
 /**

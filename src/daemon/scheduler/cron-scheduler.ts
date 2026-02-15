@@ -13,11 +13,20 @@ function getCronScheduleIdFromEnvelopeMetadata(metadata: unknown): string | null
   return typeof v === "string" && v.trim() ? v.trim() : null;
 }
 
+export interface CronSchedulerOptions {
+  onEnvelopeCreated?: (envelope: Envelope) => void;
+}
+
 export class CronScheduler {
+  private onEnvelopeCreated?: (envelope: Envelope) => void;
+
   constructor(
     private readonly db: HiBossDatabase,
-    private readonly envelopeScheduler: EnvelopeScheduler
-  ) {}
+    private readonly envelopeScheduler: EnvelopeScheduler,
+    options?: CronSchedulerOptions
+  ) {
+    this.onEnvelopeCreated = options?.onEnvelopeCreated;
+  }
 
   private buildCronEnvelopeMetadata(schedule: CronSchedule): Record<string, unknown> {
     const template =
@@ -76,6 +85,19 @@ export class CronScheduler {
       to: envelope.to,
       "deliver-at": envelope.deliverAt ? formatUnixMsAsTimeZoneOffset(envelope.deliverAt, bossTz) : "none",
     });
+
+    if (this.onEnvelopeCreated) {
+      try {
+        this.onEnvelopeCreated(envelope);
+      } catch (err) {
+        logEvent("error", "cron-on-envelope-created-failed", {
+          "envelope-id": envelope.id,
+          "cron-id": schedule.id,
+          error: errorMessage(err),
+        });
+      }
+    }
+
     return envelope;
   }
 

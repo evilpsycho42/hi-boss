@@ -6,6 +6,8 @@
  * -c developer_instructions=... (Codex).
  */
 
+import * as path from "node:path";
+
 import type { Agent } from "./types.js";
 import type { AgentBinding } from "../daemon/db/database.js";
 import { renderPrompt } from "../shared/prompt-renderer.js";
@@ -15,6 +17,10 @@ import {
   readAgentInternalDailyMemorySnapshot,
   readAgentInternalMemorySnapshot,
 } from "../shared/internal-space.js";
+import {
+  readRecentSessionSummaries,
+  formatSummariesForPrompt,
+} from "../daemon/history/summary-reader.js";
 
 /**
  * Context for generating system instructions.
@@ -95,6 +101,24 @@ export function generateSystemInstructions(ctx: InstructionContext): string {
       spaceContext.dailyFence = "```";
       spaceContext.dailyError = dailySnapshot.error;
     }
+  }
+
+  // Inject recent session summaries (best-effort).
+  const agentsDir = path.join(hibossDir, "agents");
+  const bossTimezone = (ctx.bossTimezone ?? "").trim() || "UTC";
+  try {
+    const summaries = readRecentSessionSummaries({
+      agentsDir,
+      agentName: agent.name,
+      timezone: bossTimezone,
+    });
+    const formatted = formatSummariesForPrompt(summaries);
+    spaceContext.sessionSummaries = formatted;
+    spaceContext.sessionSummariesError = "";
+  } catch (err) {
+    spaceContext.sessionSummaries = "";
+    spaceContext.sessionSummariesError =
+      err instanceof Error ? err.message : String(err);
   }
 
   (promptContext.hiboss as Record<string, unknown>).additionalContext =
