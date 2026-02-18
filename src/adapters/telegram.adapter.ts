@@ -1,6 +1,7 @@
 import { Telegraf } from "telegraf";
 import type {
   ChatAdapter,
+  ChannelMessage,
   ChannelMessageHandler,
   MessageContent,
   ChannelCommandHandler,
@@ -20,14 +21,16 @@ import {
   TELEGRAM_MAX_TEXT_CHARS,
 } from "./telegram/shared.js";
 
+/** Milliseconds to wait for additional album parts before flushing. */
+const MEDIA_GROUP_DEBOUNCE_MS = 500;
+
 /**
  * Telegram adapter for the chat bot.
  *
- * Limitations:
- * - Media groups (albums): When users send multiple images/videos together,
- *   Telegram delivers each as a separate message. Only the first message
- *   contains the caption. These messages share a `media_group_id` in the raw
- *   payload but are currently emitted as independent messages.
+ * Media groups (albums): When users send multiple images/videos together,
+ * Telegram delivers each as a separate message sharing a `media_group_id`.
+ * We buffer these for a short debounce window and emit a single combined
+ * ChannelMessage with all attachments and the caption (if any).
  */
 export class TelegramAdapter implements ChatAdapter {
   readonly platform = "telegram";
@@ -38,8 +41,14 @@ export class TelegramAdapter implements ChatAdapter {
   private stopped = false;
   private started = false;
 
+  /** Buffered ChannelMessages keyed by media_group_id, waiting to be merged. */
+  private mediaGroupBuffer = new Map<string, ChannelMessage[]>();
+  /** Debounce timers keyed by media_group_id. */
+  private mediaGroupTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
   constructor(token: string) {
-    this.bot = new Telegraf(token);
+    const apiRoot = process.env.TELEGRAM_API_ROOT;
+    this.bot = new Telegraf(token, apiRoot ? { telegram: { apiRoot } } : {});
     this.mediaDir = getHiBossPaths().mediaDir;
     this.setupListeners();
   }
@@ -117,8 +126,60 @@ export class TelegramAdapter implements ChatAdapter {
       mediaDir: this.mediaDir,
     });
 
+    // Check for media_group_id (albums)
+    const raw = ctx.message as unknown as { media_group_id?: string };
+    const groupId = raw.media_group_id;
+
+    if (groupId) {
+      // Buffer this message; debounce before flushing
+      let buffer = this.mediaGroupBuffer.get(groupId);
+      if (!buffer) {
+        buffer = [];
+        this.mediaGroupBuffer.set(groupId, buffer);
+      }
+      buffer.push(message);
+
+      // Reset the debounce timer for this group
+      const existing = this.mediaGroupTimers.get(groupId);
+      if (existing) clearTimeout(existing);
+
+      this.mediaGroupTimers.set(
+        groupId,
+        setTimeout(() => this.flushMediaGroup(groupId), MEDIA_GROUP_DEBOUNCE_MS),
+      );
+      return;
+    }
+
+    // Non-album message: dispatch immediately
     for (const handler of this.handlers) {
       await handler(message);
+    }
+  }
+
+  /**
+   * Merge buffered album messages into a single ChannelMessage and dispatch.
+   */
+  private async flushMediaGroup(groupId: string): Promise<void> {
+    this.mediaGroupTimers.delete(groupId);
+    const messages = this.mediaGroupBuffer.get(groupId);
+    this.mediaGroupBuffer.delete(groupId);
+    if (!messages || messages.length === 0) return;
+
+    // Use the first message as the base (lowest message_id = earliest)
+    messages.sort((a, b) => Number(a.id) - Number(b.id));
+    const merged = { ...messages[0] };
+
+    // Combine text: use the caption from whichever message has it
+    const textSource = messages.find((m) => m.content.text);
+    const allAttachments = messages.flatMap((m) => m.content.attachments ?? []);
+
+    merged.content = {
+      text: textSource?.content.text,
+      attachments: allAttachments.length > 0 ? allAttachments : undefined,
+    };
+
+    for (const handler of this.handlers) {
+      await handler(merged);
     }
   }
 
@@ -172,9 +233,10 @@ export class TelegramAdapter implements ChatAdapter {
       } catch (err) {
         if (this.stopped) return;
 
-        if (isGetUpdatesConflict(err) || isTransientNetworkError(err)) {
+        const isTimeout = err instanceof Error && err.name === "TimeoutError";
+        if (isGetUpdatesConflict(err) || isTransientNetworkError(err) || isTimeout) {
           const delayMs = computeBackoff(attempt);
-          const reason = isGetUpdatesConflict(err) ? "409 conflict" : "network error";
+          const reason = isGetUpdatesConflict(err) ? "409 conflict" : isTimeout ? "handler timeout" : "network error";
           console.log(`[${this.platform}] ${reason}, retrying in ${delayMs}ms (attempt ${attempt + 1})`);
           await sleep(delayMs);
           attempt++;
@@ -191,6 +253,9 @@ export class TelegramAdapter implements ChatAdapter {
   async stop(): Promise<void> {
     this.stopped = true;
     this.started = false;
+    for (const timer of this.mediaGroupTimers.values()) clearTimeout(timer);
+    this.mediaGroupTimers.clear();
+    this.mediaGroupBuffer.clear();
     this.bot.stop();
     console.log(`[${this.platform}] Bot stopped`);
   }

@@ -160,10 +160,11 @@ export class ChannelBridge {
     const adapterBossId = this.db.getAdapterBossId(platform);
     if (!adapterBossId) return false;
 
-    // Normalize comparison (handle @username vs username)
-    const normalizedBoss = adapterBossId.replace(/^@/, '').toLowerCase();
     const normalizedUser = username.replace(/^@/, '').toLowerCase();
 
-    return normalizedBoss === normalizedUser;
+    // Support comma-separated list of boss usernames
+    return adapterBossId
+      .split(',')
+      .some((id) => id.trim().replace(/^@/, '').toLowerCase() === normalizedUser);
   }
 }
