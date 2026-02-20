@@ -52,6 +52,7 @@ import {
   toSpeakerBindingIntegrityView,
 } from "../shared/speaker-binding-invariant.js";
 import { TelegramTypingManager } from "./telegram-typing.js";
+import { resolveUiLocale } from "../shared/ui-locale.js";
 
 // Re-export for CLI and external use
 export { isDaemonRunning, isSocketAcceptingConnections };
@@ -441,7 +442,7 @@ export class Daemon {
 
     switch (adapterType) {
       case "telegram":
-        adapter = new TelegramAdapter(adapterToken);
+        adapter = new TelegramAdapter(adapterToken, resolveUiLocale(this.db.getConfig("ui_locale")));
         break;
       default:
         logEvent("error", "adapter-unknown-type", { "adapter-type": adapterType });

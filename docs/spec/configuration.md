@@ -38,6 +38,7 @@ Some settings exist in the database/schema but do not yet have dedicated CLI set
 
 - Updating `boss_name`, `adapter_boss_id_<type>` after setup
 - Editing `config.permission_policy`
+- Editing `config.ui_locale` (fixed system-message locale; env override: `HIBOSS_UI_LOCALE`)
 - Changing the default data directory from `~/hiboss/` (override via `HIBOSS_DIR`)
 
 Today, changing those requires a reset + re-setup, or direct DB edits.

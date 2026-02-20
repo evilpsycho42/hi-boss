@@ -38,6 +38,10 @@ Telegram chat commands are boss-only (non-boss users get no reply):
 - `/status` — show `hiboss agent status` for the bound agent
 - `/abort` — cancel current run + clear **due** pending inbox for the bound agent
 
+Locale:
+- Command descriptions and fixed command responses use `HIBOSS_UI_LOCALE` (`en` default; supports `zh-CN`).
+- This affects fixed system text only (not model-generated replies).
+
 ## Limits and behavior (canonical)
 
 Incoming:

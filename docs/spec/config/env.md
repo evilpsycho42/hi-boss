@@ -20,6 +20,24 @@ Notes:
 
 ---
 
+## `HIBOSS_UI_LOCALE`
+
+UI/system-message locale for fixed non-AI text.
+
+Supported values:
+- `en` (default)
+- `zh-CN` (also accepts `zh` / `zh_cn`)
+
+Current scope:
+- Telegram slash-command descriptions (`/new`, `/status`, `/abort`, `/isolated`, `/clone`)
+- Telegram fixed system messages (for example unbound-adapter guidance, `/new` ack, oneshot usage/errors)
+
+Notes:
+- If set, this environment variable overrides `config.ui_locale` when present.
+- Parseable CLI output keys remain stable English `kebab-case` (see `docs/spec/cli/conventions.md`).
+
+---
+
 ## Provider CLI homes
 
 Provider-home behavior is canonical in `docs/spec/provider-clis.md#provider-homes-shared-forced`.
