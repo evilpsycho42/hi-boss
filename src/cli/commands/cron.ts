@@ -2,6 +2,7 @@ import { getDefaultConfig, getSocketPath } from "../../daemon/daemon.js";
 import { IpcClient } from "../ipc-client.js";
 import { resolveToken } from "../token.js";
 import type { CronSchedule } from "../../cron/types.js";
+import { getCronExecutionMode } from "../../cron/types.js";
 import { formatUnixMsAsTimeZoneOffset } from "../../shared/time.js";
 import { computeNextCronUnixMsSeries } from "../../shared/cron.js";
 import { isValidIanaTimeZone } from "../../shared/timezone.js";
@@ -32,6 +33,10 @@ export interface CronCreateOptions {
   textFile?: string;
   attachment?: string[];
   parseMode?: string;
+  executionMode?: string;
+  isolated?: boolean;
+  clone?: boolean;
+  inline?: boolean;
 }
 
 export interface CronListOptions {
@@ -68,6 +73,7 @@ function formatCronScheduleSummary(schedule: CronSchedule, bossTimezone: string)
   lines.push(`cron: ${schedule.cron}`);
   lines.push(`timezone: ${schedule.timezone ?? "boss"}`);
   lines.push(`enabled: ${schedule.enabled ? "true" : "false"}`);
+  lines.push(`execution-mode: ${getCronExecutionMode(schedule.metadata)}`);
   lines.push(`to: ${schedule.to}`);
   lines.push(`next-deliver-at: ${formatMaybeOffset(schedule.nextDeliverAt, bossTimezone)}`);
   lines.push(`pending-envelope-id: ${formatMaybeShortId(schedule.pendingEnvelopeId)}`);
@@ -116,6 +122,9 @@ export async function createCron(options: CronCreateOptions): Promise<void> {
       throw new Error("Invalid --parse-mode (expected plain, markdownv2, or html)");
     }
 
+    // Resolve execution mode from flags (--isolated, --clone, --inline) or --execution-mode.
+    const executionMode = resolveExecutionMode(options);
+
     const result = await client.call<CronCreateResult>("cron.create", {
       token,
       cron: options.cron,
@@ -130,6 +139,7 @@ export async function createCron(options: CronCreateOptions): Promise<void> {
         };
       }),
       parseMode,
+      executionMode,
     });
 
     console.log(`cron-id: ${formatShortId(result.id)}`);
@@ -137,6 +147,27 @@ export async function createCron(options: CronCreateOptions): Promise<void> {
     console.error("error:", (err as Error).message);
     process.exit(1);
   }
+}
+
+function resolveExecutionMode(options: CronCreateOptions): string {
+  const flags = [options.isolated, options.clone, options.inline].filter(Boolean);
+  if (flags.length > 1) {
+    throw new Error("Only one of --isolated, --clone, or --inline may be specified");
+  }
+
+  if (options.isolated) return "isolated";
+  if (options.clone) return "clone";
+  if (options.inline) return "inline";
+
+  if (options.executionMode) {
+    const mode = options.executionMode.trim();
+    if (mode !== "isolated" && mode !== "clone" && mode !== "inline") {
+      throw new Error("Invalid --execution-mode (expected isolated, clone, or inline)");
+    }
+    return mode;
+  }
+
+  return "isolated"; // default
 }
 
 export async function listCrons(options: CronListOptions): Promise<void> {

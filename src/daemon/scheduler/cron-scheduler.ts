@@ -1,5 +1,6 @@
 import type { HiBossDatabase } from "../db/database.js";
 import type { CronSchedule, CreateCronScheduleInput } from "../../cron/types.js";
+import { getCronExecutionMode } from "../../cron/types.js";
 import type { Envelope } from "../../envelope/types.js";
 import { computeNextCronUnixMs, normalizeTimeZoneInput } from "../../shared/cron.js";
 import { formatAgentAddress, parseAddress } from "../../adapters/types.js";
@@ -37,9 +38,17 @@ export class CronScheduler {
     if (typeof (template as Record<string, unknown>).replyToEnvelopeId === "string") {
       delete (template as Record<string, unknown>).replyToEnvelopeId;
     }
+
+    // Propagate one-shot execution mode to the envelope.
+    // "inline" envelopes enter the normal agent queue (no oneshotType).
+    // "isolated"/"clone" get oneshotType so the daemon routes them to OneShotExecutor.
+    const execMode = getCronExecutionMode(schedule.metadata);
+    const oneshotType = execMode === "inline" ? undefined : execMode;
+
     return {
       ...template,
       cronScheduleId: schedule.id,
+      ...(oneshotType ? { oneshotType } : {}),
     };
   }
 
@@ -65,13 +74,26 @@ export class CronScheduler {
       afterDate,
     });
 
+    const metadata = this.buildCronEnvelopeMetadata(schedule);
+    const execMode = getCronExecutionMode(schedule.metadata);
+    const isOneshot = execMode !== "inline";
+
+    // For one-shot cron: route to the agent handler so OneShotExecutor picks it up.
+    // Store the original destination in metadata for response routing.
+    const from = formatAgentAddress(schedule.agentName);
+    const to = isOneshot ? formatAgentAddress(schedule.agentName) : schedule.to;
+
+    if (isOneshot && schedule.to !== to) {
+      metadata.cronResponseTo = schedule.to;
+    }
+
     const envelope = this.db.createEnvelope({
-      from: formatAgentAddress(schedule.agentName),
-      to: schedule.to,
+      from,
+      to,
       fromBoss: false,
       content: schedule.content,
       deliverAt,
-      metadata: this.buildCronEnvelopeMetadata(schedule),
+      metadata,
     });
 
     this.db.updateCronSchedulePendingEnvelopeId(schedule.id, envelope.id);

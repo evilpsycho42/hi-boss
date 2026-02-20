@@ -243,6 +243,10 @@ cron
   .option("--text-file <path>", "Read envelope text from file")
   .option("--attachment <path>", "Attachment path (can be used multiple times)", collect, [])
   .option("--parse-mode <mode>", "Parse mode (Telegram): plain (default), html (recommended), markdownv2")
+  .option("--execution-mode <mode>", "Execution mode: isolated (default), clone, or inline")
+  .option("--isolated", "Shorthand for --execution-mode isolated (one-shot, clean context)")
+  .option("--clone", "Shorthand for --execution-mode clone (one-shot, cloned session context)")
+  .option("--inline", "Shorthand for --execution-mode inline (enter main session queue, not one-shot)")
   .addHelpText(
     "after",
     ["", "Notes:", "  - For formatting guidance, see: hiboss envelope send --help", ""].join("\n")
@@ -257,6 +261,10 @@ cron
       textFile: options.textFile,
       attachment: options.attachment,
       parseMode: options.parseMode,
+      executionMode: options.executionMode,
+      isolated: options.isolated,
+      clone: options.clone,
+      inline: options.inline,
     });
   });
 

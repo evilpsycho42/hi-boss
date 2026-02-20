@@ -9,6 +9,7 @@ import { MessageRouter } from "./router/message-router.js";
 import { ChannelBridge } from "./bridges/channel-bridge.js";
 import { AgentExecutor, createAgentExecutor } from "../agent/executor.js";
 import { type BackgroundExecutor, createBackgroundExecutor } from "../agent/background-executor.js";
+import { type OneShotExecutor, createOneShotExecutor } from "../agent/oneshot-executor.js";
 import type { Agent } from "../agent/types.js";
 import { EnvelopeScheduler } from "./scheduler/envelope-scheduler.js";
 import { CronScheduler } from "./scheduler/cron-scheduler.js";
@@ -103,6 +104,7 @@ export class Daemon {
   private bridge: ChannelBridge;
   private executor: AgentExecutor;
   private backgroundExecutor: BackgroundExecutor;
+  private oneshotExecutor: OneShotExecutor;
   private scheduler: EnvelopeScheduler;
   private cronScheduler: CronScheduler | null = null;
   private conversationHistory: ConversationHistory;
@@ -139,6 +141,12 @@ export class Daemon {
       },
     });
     this.backgroundExecutor = createBackgroundExecutor({ db: this.db, router: this.router });
+    this.oneshotExecutor = createOneShotExecutor({
+      db: this.db,
+      router: this.router,
+      hibossDir: config.dataDir,
+      onEnvelopeDone: (envelope) => this.cronScheduler?.onEnvelopeDone(envelope),
+    });
     this.scheduler = new EnvelopeScheduler(this.db, this.router, this.executor);
     this.cronScheduler = new CronScheduler(this.db, this.scheduler, {
       onEnvelopeCreated: historyAppend,
@@ -319,7 +327,11 @@ export class Daemon {
    * Set up command handler for adapter commands.
    */
   private setupCommandHandler(): void {
-    this.bridge.setCommandHandler(createChannelCommandHandler({ db: this.db, executor: this.executor }));
+    this.bridge.setCommandHandler(createChannelCommandHandler({
+      db: this.db,
+      executor: this.executor,
+      router: this.router,
+    }));
   }
 
   /**
@@ -342,6 +354,16 @@ export class Daemon {
       if (!currentAgent) {
         logEvent("error", "agent-not-found", { "agent-name": agentName });
         return;
+      }
+
+      // One-shot routing: envelopes with oneshotType bypass the main queue.
+      const md = envelope.metadata;
+      if (md && typeof md === "object") {
+        const oneshotType = (md as Record<string, unknown>).oneshotType;
+        if (oneshotType === "clone" || oneshotType === "isolated") {
+          this.oneshotExecutor.enqueue(envelope, currentAgent, oneshotType);
+          return;
+        }
       }
 
       // Non-blocking: trigger agent run

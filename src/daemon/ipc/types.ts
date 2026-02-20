@@ -98,6 +98,7 @@ export interface CronCreateParams {
   text?: string;
   attachments?: Array<{ source: string; filename?: string; telegramFileId?: string }>;
   parseMode?: "plain" | "markdownv2" | "html";
+  executionMode?: "isolated" | "clone" | "inline";
 }
 
 export interface CronListParams {

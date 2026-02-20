@@ -126,6 +126,23 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
       metadata.parseMode = mode;
     }
 
+    // Execution mode: isolated (default), clone, or inline.
+    const executionMode = (() => {
+      if (p.executionMode === undefined) return "isolated";
+      if (typeof p.executionMode !== "string") {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid execution-mode");
+      }
+      const m = p.executionMode.trim();
+      if (m !== "isolated" && m !== "clone" && m !== "inline") {
+        rpcError(
+          RPC_ERRORS.INVALID_PARAMS,
+          "Invalid execution-mode (expected isolated, clone, or inline)"
+        );
+      }
+      return m;
+    })();
+    metadata.executionMode = executionMode;
+
     // Check binding for channel destinations.
     const agent = principal.agent;
     ctx.db.updateAgentLastSeen(agent.name);

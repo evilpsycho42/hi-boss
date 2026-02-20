@@ -1,6 +1,9 @@
 import type { ChannelCommand, ChannelCommandHandler, MessageContent } from "../adapters/types.js";
+import { formatChannelAddress, formatAgentAddress } from "../adapters/types.js";
 import type { HiBossDatabase } from "./db/database.js";
+import type { MessageRouter } from "./router/message-router.js";
 import type { AgentExecutor } from "../agent/executor.js";
+import type { OneshotType } from "../envelope/types.js";
 import {
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
@@ -8,6 +11,7 @@ import {
 } from "../shared/defaults.js";
 import { formatUnixMsAsTimeZoneOffset } from "../shared/time.js";
 import { formatShortId } from "../shared/id-format.js";
+import { logEvent, errorMessage } from "../shared/daemon-log.js";
 
 type EnrichedChannelCommand = ChannelCommand & { agentName?: string };
 
@@ -97,8 +101,9 @@ function buildAgentStatusText(params: { db: HiBossDatabase; executor: AgentExecu
 export function createChannelCommandHandler(params: {
   db: HiBossDatabase;
   executor: AgentExecutor;
+  router: MessageRouter;
 }): ChannelCommandHandler {
-  return (command): MessageContent | void => {
+  return (command): MessageContent | void | Promise<MessageContent | void> => {
     const c = command as EnrichedChannelCommand;
     if (typeof c.command !== "string") return;
 
@@ -122,5 +127,57 @@ export function createChannelCommandHandler(params: {
       ];
       return { text: lines.join("\n") };
     }
+
+    // One-shot commands: /isolated and /clone
+    if (
+      (c.command === "isolated" || c.command === "clone") &&
+      typeof c.agentName === "string" && c.agentName
+    ) {
+      return handleOneshotCommand(params, c, c.command as OneshotType);
+    }
   };
+}
+
+async function handleOneshotCommand(
+  params: { db: HiBossDatabase; router: MessageRouter },
+  command: EnrichedChannelCommand,
+  mode: OneshotType,
+): Promise<MessageContent | void> {
+  const agentName = command.agentName!;
+  const text = command.args?.trim();
+
+  if (!text) {
+    return { text: `Usage: /${mode} <message>` };
+  }
+
+  const fromAddress = formatChannelAddress("telegram", command.chatId);
+  const toAddress = formatAgentAddress(agentName);
+
+  try {
+    await params.router.routeEnvelope({
+      from: fromAddress,
+      to: toAddress,
+      fromBoss: true,
+      content: { text },
+      metadata: {
+        oneshotType: mode,
+        platform: "telegram",
+        channelMessageId: command.messageId,
+        author: command.authorUsername
+          ? { username: command.authorUsername }
+          : undefined,
+        chat: { id: command.chatId },
+      },
+    });
+  } catch (err) {
+    logEvent("error", "oneshot-envelope-create-failed", {
+      "agent-name": agentName,
+      mode,
+      error: errorMessage(err),
+    });
+    return { text: `Failed to create ${mode} envelope.` };
+  }
+
+  const label = mode === "clone" ? "Clone" : "Isolated";
+  return { text: `${label} turn initiated.` };
 }
