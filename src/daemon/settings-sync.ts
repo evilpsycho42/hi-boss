@@ -2,11 +2,11 @@ import type { HiBossDatabase } from "./db/database.js";
 import { logEvent } from "../shared/daemon-log.js";
 import { readSettingsFile, withSettingsLock, writeSettingsFileAtomic } from "../shared/settings-io.js";
 import {
-  assertValidSettingsV3,
-  type SettingsV3,
+  assertValidSettingsV4,
+  type SettingsV4,
 } from "../shared/settings.js";
 
-export function loadSettingsOrThrow(hibossDir: string): SettingsV3 {
+export function loadSettingsOrThrow(hibossDir: string): SettingsV4 {
   try {
     return readSettingsFile(hibossDir);
   } catch (err) {
@@ -20,22 +20,22 @@ export function loadSettingsOrThrow(hibossDir: string): SettingsV3 {
   }
 }
 
-export function syncSettingsToDb(db: HiBossDatabase, settings: SettingsV3): void {
-  assertValidSettingsV3(settings);
+export function syncSettingsToDb(db: HiBossDatabase, settings: SettingsV4): void {
+  assertValidSettingsV4(settings);
   db.applySettingsSnapshot(settings);
 }
 
 export async function mutateSettingsAndSync(params: {
   hibossDir: string;
   db: HiBossDatabase;
-  mutate: (settings: SettingsV3) => void;
-}): Promise<SettingsV3> {
+  mutate: (settings: SettingsV4) => void;
+}): Promise<SettingsV4> {
   return withSettingsLock(params.hibossDir, async () => {
     const current = loadSettingsOrThrow(params.hibossDir);
     const next = structuredClone(current);
 
     params.mutate(next);
-    assertValidSettingsV3(next);
+    assertValidSettingsV4(next);
 
     await writeSettingsFileAtomic(params.hibossDir, next);
 

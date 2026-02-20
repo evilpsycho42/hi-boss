@@ -14,18 +14,18 @@ export const SETTINGS_FILE_MODE = 0o600 as const;
 export type SettingsProvider = "claude" | "codex";
 export type SettingsReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
 
-export interface SettingsBindingV3 {
+export interface SettingsBindingV4 {
   adapterType: string;
   adapterToken: string;
 }
 
-export interface SettingsSessionPolicyV3 {
+export interface SettingsSessionPolicyV4 {
   dailyResetAt?: string;
   idleTimeout?: string;
   maxContextLength?: number;
 }
 
-export interface SettingsAgentV3 {
+export interface SettingsAgentV4 {
   name: string;
   token: string;
   role: "speaker" | "leader";
@@ -35,12 +35,12 @@ export interface SettingsAgentV3 {
   model: string | null;
   reasoningEffort: SettingsReasoningEffort | null;
   permissionLevel: "restricted" | "standard" | "privileged" | "admin";
-  sessionPolicy?: SettingsSessionPolicyV3;
+  sessionPolicy?: SettingsSessionPolicyV4;
   metadata?: Record<string, unknown>;
-  bindings: SettingsBindingV3[];
+  bindings: SettingsBindingV4[];
 }
 
-export interface SettingsV3 {
+export interface SettingsV4 {
   version: 4;
   boss: {
     name: string;
@@ -56,7 +56,7 @@ export interface SettingsV3 {
     version: 1;
     operations: Record<string, "restricted" | "standard" | "privileged" | "admin">;
   };
-  agents: SettingsAgentV3[];
+  agents: SettingsAgentV4[];
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -103,7 +103,7 @@ function parseBossIds(raw: unknown): string[] {
   return validateBossIds(raw);
 }
 
-function parsePermissionPolicy(raw: unknown): SettingsV3["permissionPolicy"] {
+function parsePermissionPolicy(raw: unknown): SettingsV4["permissionPolicy"] {
   if (!isObject(raw)) {
     fail("permission-policy", "must be an object");
   }
@@ -115,13 +115,13 @@ function parsePermissionPolicy(raw: unknown): SettingsV3["permissionPolicy"] {
   }
 }
 
-function parseSessionPolicy(raw: unknown, agentName: string): SettingsSessionPolicyV3 | undefined {
+function parseSessionPolicy(raw: unknown, agentName: string): SettingsSessionPolicyV4 | undefined {
   if (raw === undefined) return undefined;
   if (!isObject(raw)) {
     fail(`agents[${agentName}].session-policy`, "must be an object");
   }
 
-  const next: SettingsSessionPolicyV3 = {};
+  const next: SettingsSessionPolicyV4 = {};
 
   if (raw["daily-reset-at"] !== undefined) {
     if (typeof raw["daily-reset-at"] !== "string") {
@@ -151,7 +151,7 @@ function parseSessionPolicy(raw: unknown, agentName: string): SettingsSessionPol
   return Object.keys(next).length > 0 ? next : undefined;
 }
 
-function parseBindings(raw: unknown, agentName: string): SettingsBindingV3[] {
+function parseBindings(raw: unknown, agentName: string): SettingsBindingV4[] {
   if (raw === undefined) {
     return [];
   }
@@ -185,7 +185,7 @@ function parseBindings(raw: unknown, agentName: string): SettingsBindingV3[] {
   return bindings;
 }
 
-function parseAgent(raw: unknown, index: number): SettingsAgentV3 {
+function parseAgent(raw: unknown, index: number): SettingsAgentV4 {
   if (!isObject(raw)) {
     fail(`agents[${index}]`, "must be an object");
   }
@@ -287,7 +287,7 @@ function parseAgent(raw: unknown, index: number): SettingsAgentV3 {
   };
 }
 
-export function assertValidSettingsV3(settings: SettingsV3): void {
+export function assertValidSettingsV4(settings: SettingsV4): void {
   validateBossIds(settings.telegram.bossIds);
 
   const byName = new Set<string>();
@@ -330,7 +330,7 @@ export function assertValidSettingsV3(settings: SettingsV3): void {
   }
 }
 
-export function parseSettingsV3Json(json: string): SettingsV3 {
+export function parseSettingsV4Json(json: string): SettingsV4 {
   let raw: unknown;
   try {
     raw = JSON.parse(json);
@@ -377,7 +377,7 @@ export function parseSettingsV3Json(json: string): SettingsV3 {
     fail("agents", "must be a non-empty array");
   }
 
-  const settings: SettingsV3 = {
+  const settings: SettingsV4 = {
     version: SETTINGS_VERSION,
     boss: {
       name: bossName,
@@ -393,12 +393,12 @@ export function parseSettingsV3Json(json: string): SettingsV3 {
     agents: agentsRaw.map((agent, index) => parseAgent(agent, index)),
   };
 
-  assertValidSettingsV3(settings);
+  assertValidSettingsV4(settings);
   return settings;
 }
 
-export function stringifySettingsV3(settings: SettingsV3): string {
-  assertValidSettingsV3(settings);
+export function stringifySettingsV4(settings: SettingsV4): string {
+  assertValidSettingsV4(settings);
   return `${JSON.stringify({
     version: SETTINGS_VERSION,
     boss: {
@@ -450,6 +450,6 @@ export function normalizeBossIds(ids: string[]): string[] {
   return ids.map(normalizeBossId).filter((value) => value.length > 0);
 }
 
-export function toAdminTokenHash(settings: SettingsV3): string {
+export function toAdminTokenHash(settings: SettingsV4): string {
   return hashToken(settings.admin.token);
 }

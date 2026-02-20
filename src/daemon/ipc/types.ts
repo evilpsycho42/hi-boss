@@ -393,7 +393,7 @@ export interface SetupExecuteParams {
   adapter: {
     adapterType: string;
     adapterToken: string;
-    adapterBossId: string;
+    adapterBossIds: string[];
   };
 }
 

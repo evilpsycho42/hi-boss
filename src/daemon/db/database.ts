@@ -22,7 +22,7 @@ import { generateToken, hashToken, verifyToken } from "../../agent/auth.js";
 import { generateUUID } from "../../shared/uuid.js";
 import { assertValidAgentName } from "../../shared/validation.js";
 import { getDaemonIanaTimeZone } from "../../shared/timezone.js";
-import type { SettingsV3 } from "../../shared/settings.js";
+import type { SettingsV4 } from "../../shared/settings.js";
 
 /**
  * Database row types for SQLite mapping.
@@ -298,11 +298,13 @@ export class HiBossDatabase {
    * Apply settings snapshot into runtime cache tables.
    * Keeps envelopes and agent run history intact.
    */
-  applySettingsSnapshot(settings: SettingsV3): void {
+  applySettingsSnapshot(settings: SettingsV4): void {
     this.runInTransaction(() => {
       this.setBossName(settings.boss.name);
       this.setConfig("boss_timezone", settings.boss.timezone);
-      this.setAdminToken(settings.admin.token);
+      if (!this.verifyAdminToken(settings.admin.token)) {
+        this.setAdminToken(settings.admin.token);
+      }
       this.setConfig("permission_policy", JSON.stringify(settings.permissionPolicy));
       this.setAdapterBossIds("telegram", settings.telegram.bossIds);
 

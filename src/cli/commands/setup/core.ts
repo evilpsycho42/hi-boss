@@ -14,7 +14,7 @@ import {
 } from "../../../shared/speaker-binding-invariant.js";
 import { generateToken } from "../../../agent/auth.js";
 import { DEFAULT_PERMISSION_POLICY } from "../../../shared/defaults.js";
-import type { SettingsV3 } from "../../../shared/settings.js";
+import type { SettingsV4 } from "../../../shared/settings.js";
 import { getSettingsPath, writeSettingsFileAtomic } from "../../../shared/settings-io.js";
 import { syncSettingsToDb } from "../../../daemon/settings-sync.js";
 
@@ -251,8 +251,15 @@ async function executeSetupDirect(config: SetupConfig): Promise<{ speakerAgentTo
   try {
     // Recovery/migration: allow setup to rewrite settings+DB when either side is missing.
     // Block only when both DB completion marker and settings file are already present.
+    // NOTE: if DB is complete but settings.json is missing, new agent tokens are generated
+    // and previous tokens are invalidated (plaintext tokens are not recoverable from DB hashes).
     if (db.isSetupComplete() && hasSettingsFile) {
       throw new Error("Setup already completed");
+    }
+    if (db.isSetupComplete() && !hasSettingsFile) {
+      console.warn(
+        "Warning: settings.json is missing while DB is marked complete. New tokens will be generated; previously issued agent tokens will stop working."
+      );
     }
 
     await setupAgentHome(config.speakerAgent.name, daemonConfig.dataDir);
@@ -262,7 +269,7 @@ async function executeSetupDirect(config: SetupConfig): Promise<{ speakerAgentTo
     const speakerAgentToken = generateToken();
     const leaderAgentToken = generateToken();
 
-    const settings: SettingsV3 = {
+    const settings: SettingsV4 = {
       version: 4,
       boss: {
         name: config.bossName,
