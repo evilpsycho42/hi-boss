@@ -145,6 +145,7 @@ export class Daemon {
       db: this.db,
       router: this.router,
       hibossDir: config.dataDir,
+      onEnvelopeDone: (envelope) => this.cronScheduler?.onEnvelopeDone(envelope),
     });
     this.scheduler = new EnvelopeScheduler(this.db, this.router, this.executor);
     this.cronScheduler = new CronScheduler(this.db, this.scheduler, {

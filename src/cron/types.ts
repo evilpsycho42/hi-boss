@@ -13,15 +13,16 @@ export type CronExecutionMode = "isolated" | "clone" | "inline";
 const VALID_EXECUTION_MODES: ReadonlySet<string> = new Set(["isolated", "clone", "inline"]);
 
 /**
- * Extract execution mode from schedule metadata, defaulting to "isolated".
+ * Extract execution mode from schedule metadata, defaulting to "inline"
+ * for backward compatibility with schedules created before execution modes existed.
  */
 export function getCronExecutionMode(metadata?: Record<string, unknown>): CronExecutionMode {
-  if (!metadata) return "isolated";
+  if (!metadata) return "inline";
   const raw = metadata.executionMode;
   if (typeof raw === "string" && VALID_EXECUTION_MODES.has(raw)) {
     return raw as CronExecutionMode;
   }
-  return "isolated";
+  return "inline";
 }
 
 export interface CronSchedule {

@@ -44,6 +44,7 @@ export class OneShotExecutor {
       db: HiBossDatabase;
       router: MessageRouter;
       hibossDir: string;
+      onEnvelopeDone?: (envelope: Envelope) => void;
     },
     options: { maxConcurrent?: number } = {},
   ) {
@@ -66,6 +67,18 @@ export class OneShotExecutor {
         "envelope-id": envelope.id,
         error: errorMessage(err),
       });
+    }
+
+    // Notify cron scheduler so it can advance to the next occurrence.
+    if (this.deps.onEnvelopeDone) {
+      try {
+        this.deps.onEnvelopeDone(envelope);
+      } catch (err) {
+        logEvent("error", "oneshot-on-envelope-done-failed", {
+          "envelope-id": envelope.id,
+          error: errorMessage(err),
+        });
+      }
     }
 
     this.queue.push({ envelope, agent, mode });
@@ -155,7 +168,7 @@ export class OneShotExecutor {
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        finalText = `One-shot (${effectiveMode}) failed: ${msg}`;
+        finalText = `One-shot (${effectiveMode}) execution failed. Check daemon logs for details.`;
 
         logEvent("info", "oneshot-job-complete", {
           "envelope-id": envelope.id,
@@ -266,12 +279,14 @@ export function createOneShotExecutor(params: {
   router: MessageRouter;
   hibossDir?: string;
   maxConcurrent?: number;
+  onEnvelopeDone?: (envelope: Envelope) => void;
 }): OneShotExecutor {
   return new OneShotExecutor(
     {
       db: params.db,
       router: params.router,
       hibossDir: params.hibossDir ?? getHiBossDir(),
+      onEnvelopeDone: params.onEnvelopeDone,
     },
     { maxConcurrent: params.maxConcurrent },
   );
