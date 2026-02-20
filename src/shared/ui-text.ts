@@ -28,7 +28,7 @@ const EN_TEXT: UiTextBundle = {
     unboundAdapter: (platform) =>
       [
         `not-configured: no agent is bound to this ${platform} bot`,
-        `fix: hiboss agent set --token <boss-token> --name <agent-name> --bind-adapter-type ${platform} --bind-adapter-token <adapter-token>`,
+        `fix: hiboss agent set --token <admin-token> --name <agent-name> --bind-adapter-type ${platform} --bind-adapter-token <adapter-token>`,
       ].join("\n"),
   },
   channel: {
@@ -58,7 +58,7 @@ const ZH_CN_TEXT: UiTextBundle = {
     unboundAdapter: (platform) =>
       [
         `not-configured: 当前 ${platform} bot 未绑定任何 agent`,
-        `fix: hiboss agent set --token <boss-token> --name <agent-name> --bind-adapter-type ${platform} --bind-adapter-token <adapter-token>`,
+        `fix: hiboss agent set --token <admin-token> --name <agent-name> --bind-adapter-type ${platform} --bind-adapter-token <adapter-token>`,
       ].join("\n"),
   },
   channel: {

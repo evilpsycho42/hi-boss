@@ -11,7 +11,7 @@ import {
 import { DEFAULT_AGENT_PERMISSION_LEVEL } from "../shared/defaults.js";
 
 export type Principal =
-  | { kind: "boss"; level: "boss" }
+  | { kind: "admin"; level: "admin" }
   | { kind: "agent"; level: PermissionLevel; agentName: string };
 
 export function authorizeCliOperation(operation: string, token: string): Principal {
@@ -27,8 +27,8 @@ export function authorizeCliOperation(operation: string, token: string): Princip
     }
 
     let principal: Principal | null = null;
-    if (db.verifyBossToken(token)) {
-      principal = { kind: "boss", level: "boss" };
+    if (db.verifyAdminToken(token)) {
+      principal = { kind: "admin", level: "admin" };
     } else {
       const agent = db.findAgentByToken(token);
       if (!agent) {

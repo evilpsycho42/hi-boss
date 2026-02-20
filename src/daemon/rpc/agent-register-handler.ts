@@ -122,10 +122,10 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
         if (!isPermissionLevel(p.permissionLevel)) {
           rpcError(
             RPC_ERRORS.INVALID_PARAMS,
-            "Invalid permission-level (expected restricted, standard, privileged, boss)"
+            "Invalid permission-level (expected restricted, standard, privileged, admin)"
           );
         }
-        if (p.permissionLevel === "boss" && principal.level !== "boss") {
+        if (p.permissionLevel === "admin" && principal.level !== "admin") {
           rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
         }
         permissionLevel = p.permissionLevel;

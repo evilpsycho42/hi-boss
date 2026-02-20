@@ -11,7 +11,7 @@ See also:
 
 Runs the interactive bootstrap wizard and writes canonical config to:
 
-- `{{HIBOSS_DIR}}/settings.json` (`version: 3`)
+- `{{HIBOSS_DIR}}/settings.json` (`version: 4`)
 
 Behavior:
 - If setup is already healthy, prints "Setup is already complete" and exits.
@@ -20,7 +20,7 @@ Behavior:
 - Creates agent home directories under `{{HIBOSS_DIR}}/agents/<agent-name>/`.
 - Creates empty `{{HIBOSS_DIR}}/BOSS.md` (best effort).
 - Creates one speaker and one leader.
-- Prints speaker/leader/boss tokens once.
+- Prints speaker/leader/admin tokens once.
 - Writes `settings.json` with owner-only permissions (`0600`, best effort across platforms).
 
 Interactive defaults:
@@ -37,11 +37,12 @@ Interactive defaults:
 - `leader.model`: `null` (provider default)
 - `leader.reasoning-effort`: `null` (provider default)
 
-## `settings.json` Schema (Version 3)
+## `settings.json` Schema (Version 4)
 
 Top-level required fields:
-- `version: 3`
+- `version: 4`
 - `boss`
+- `admin`
 - `telegram`
 - `permission-policy`
 - `agents[]`
@@ -49,7 +50,7 @@ Top-level required fields:
 Key fields:
 - `boss.name`
 - `boss.timezone`
-- `boss.token` (plaintext)
+- `admin.token` (plaintext)
 - `telegram.boss-ids[]` (supports multiple boss usernames)
 - `permission-policy` (`version: 1`)
 - `agents[].token` (plaintext)
@@ -74,7 +75,7 @@ On daemon startup:
 Core mappings:
 - `boss.name` → `config.boss_name`
 - `boss.timezone` → `config.boss_timezone`
-- `boss.token` → `config.boss_token_hash`
+- `admin.token` → `config.admin_token_hash`
 - `telegram.boss-ids` → `config.adapter_boss_ids_telegram` (first value also mirrored to `config.adapter_boss_id_telegram` for compatibility)
 - `permission-policy` → `config.permission_policy`
 - `agents[]` → `agents`

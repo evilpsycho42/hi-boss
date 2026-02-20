@@ -1,9 +1,11 @@
 {
-  "version": 3,
+  "version": 4,
   "boss": {
     "name": "Kevin",
-    "timezone": "Asia/Shanghai",
-    "token": "REPLACE_ME_BOSS_TOKEN"
+    "timezone": "Asia/Shanghai"
+  },
+  "admin": {
+    "token": "REPLACE_ME_ADMIN_TOKEN"
   },
   "telegram": {
     "boss-ids": ["kky1024"]
@@ -13,7 +15,7 @@
     "operations": {
       "envelope.send": "restricted",
       "envelope.list": "restricted",
-      "agent.register": "boss"
+      "agent.register": "admin"
     }
   },
   "agents": [

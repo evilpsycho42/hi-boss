@@ -1,15 +1,13 @@
-import * as fs from "node:fs";
 import * as path from "node:path";
-import * as lockfile from "proper-lockfile";
 
 import { hashToken } from "../agent/auth.js";
 import { BACKGROUND_AGENT_NAME, DEFAULT_PERMISSION_POLICY, DEFAULT_SETUP_PERMISSION_LEVEL } from "./defaults.js";
-import { isPermissionLevel, parsePermissionPolicyV1 } from "./permissions.js";
+import { isPermissionLevel, parsePermissionPolicyV1FromObject } from "./permissions.js";
 import { parseDailyResetAt, parseDurationToMs } from "./session-policy.js";
 import { isValidIanaTimeZone } from "./timezone.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "./validation.js";
 
-export const SETTINGS_VERSION = 3 as const;
+export const SETTINGS_VERSION = 4 as const;
 export const SETTINGS_FILENAME = "settings.json" as const;
 export const SETTINGS_FILE_MODE = 0o600 as const;
 
@@ -36,17 +34,19 @@ export interface SettingsAgentV3 {
   workspace: string | null;
   model: string | null;
   reasoningEffort: SettingsReasoningEffort | null;
-  permissionLevel: "restricted" | "standard" | "privileged" | "boss";
+  permissionLevel: "restricted" | "standard" | "privileged" | "admin";
   sessionPolicy?: SettingsSessionPolicyV3;
   metadata?: Record<string, unknown>;
   bindings: SettingsBindingV3[];
 }
 
 export interface SettingsV3 {
-  version: 3;
+  version: 4;
   boss: {
     name: string;
     timezone: string;
+  };
+  admin: {
     token: string;
   };
   telegram: {
@@ -54,7 +54,7 @@ export interface SettingsV3 {
   };
   permissionPolicy: {
     version: 1;
-    operations: Record<string, "restricted" | "standard" | "privileged" | "boss">;
+    operations: Record<string, "restricted" | "standard" | "privileged" | "admin">;
   };
   agents: SettingsAgentV3[];
 }
@@ -71,7 +71,7 @@ function normalizeBossId(raw: string): string {
   return raw.trim().replace(/^@/, "");
 }
 
-function parseBossIds(raw: unknown): string[] {
+function validateBossIds(raw: unknown): string[] {
   if (!Array.isArray(raw)) {
     fail("telegram.boss-ids", "must be an array of strings");
   }
@@ -99,12 +99,16 @@ function parseBossIds(raw: unknown): string[] {
   return ids;
 }
 
+function parseBossIds(raw: unknown): string[] {
+  return validateBossIds(raw);
+}
+
 function parsePermissionPolicy(raw: unknown): SettingsV3["permissionPolicy"] {
   if (!isObject(raw)) {
     fail("permission-policy", "must be an object");
   }
   try {
-    const parsed = parsePermissionPolicyV1(JSON.stringify(raw));
+    const parsed = parsePermissionPolicyV1FromObject(raw);
     return parsed;
   } catch (err) {
     fail("permission-policy", (err as Error).message);
@@ -148,6 +152,9 @@ function parseSessionPolicy(raw: unknown, agentName: string): SettingsSessionPol
 }
 
 function parseBindings(raw: unknown, agentName: string): SettingsBindingV3[] {
+  if (raw === undefined) {
+    return [];
+  }
   if (!Array.isArray(raw)) {
     fail(`agents[${agentName}].bindings`, "must be an array");
   }
@@ -253,7 +260,7 @@ function parseAgent(raw: unknown, index: number): SettingsAgentV3 {
   const permissionRaw = raw["permission-level"];
   const permissionLevel = permissionRaw === undefined ? DEFAULT_SETUP_PERMISSION_LEVEL : permissionRaw;
   if (!isPermissionLevel(permissionLevel)) {
-    fail(`agents[${index}].permission-level`, "must be restricted|standard|privileged|boss");
+    fail(`agents[${index}].permission-level`, "must be restricted|standard|privileged|admin");
   }
 
   const metadataRaw = raw.metadata;
@@ -281,27 +288,7 @@ function parseAgent(raw: unknown, index: number): SettingsAgentV3 {
 }
 
 export function assertValidSettingsV3(settings: SettingsV3): void {
-  if (!Array.isArray(settings.telegram.bossIds) || settings.telegram.bossIds.length < 1) {
-    fail("telegram.boss-ids", "must contain at least one boss id");
-  }
-  const bossIds = settings.telegram.bossIds.map((value, index) => {
-    if (typeof value !== "string") {
-      fail(`telegram.boss-ids[${index}]`, "must be a string");
-    }
-    const normalized = normalizeBossId(value);
-    if (!normalized) {
-      fail(`telegram.boss-ids[${index}]`, "must not be empty");
-    }
-    return normalized;
-  });
-  const bossIdSet = new Set<string>();
-  for (const bossId of bossIds) {
-    const lowered = bossId.toLowerCase();
-    if (bossIdSet.has(lowered)) {
-      fail("telegram.boss-ids", `duplicate boss id '${bossId}'`);
-    }
-    bossIdSet.add(lowered);
-  }
+  validateBossIds(settings.telegram.bossIds);
 
   const byName = new Set<string>();
   const byToken = new Set<string>();
@@ -371,9 +358,13 @@ export function parseSettingsV3Json(json: string): SettingsV3 {
     fail("boss.timezone", "must be a valid IANA timezone");
   }
 
-  const bossToken = typeof bossRaw.token === "string" ? bossRaw.token.trim() : "";
-  if (bossToken.length < 4) {
-    fail("boss.token", "must be at least 4 characters");
+  const adminRaw = raw.admin;
+  if (!isObject(adminRaw)) {
+    fail("admin", "must be an object");
+  }
+  const adminToken = typeof adminRaw.token === "string" ? adminRaw.token.trim() : "";
+  if (adminToken.length < 4) {
+    fail("admin.token", "must be at least 4 characters");
   }
 
   const telegramRaw = raw.telegram;
@@ -391,7 +382,9 @@ export function parseSettingsV3Json(json: string): SettingsV3 {
     boss: {
       name: bossName,
       timezone: bossTimezone,
-      token: bossToken,
+    },
+    admin: {
+      token: adminToken,
     },
     telegram: {
       bossIds: parseBossIds(telegramRaw["boss-ids"]),
@@ -411,7 +404,9 @@ export function stringifySettingsV3(settings: SettingsV3): string {
     boss: {
       name: settings.boss.name,
       timezone: settings.boss.timezone,
-      token: settings.boss.token,
+    },
+    admin: {
+      token: settings.admin.token,
     },
     telegram: {
       "boss-ids": settings.telegram.bossIds,
@@ -451,71 +446,10 @@ export function stringifySettingsV3(settings: SettingsV3): string {
   }, null, 2)}\n`;
 }
 
-export function getSettingsPath(hibossDir: string): string {
-  return path.join(hibossDir, SETTINGS_FILENAME);
-}
-
-export function ensureSettingsFileMode(filePath: string): void {
-  try {
-    fs.chmodSync(filePath, SETTINGS_FILE_MODE);
-  } catch {
-    // Best-effort across platforms.
-  }
-}
-
-export function readSettingsFile(hibossDir: string): SettingsV3 {
-  const settingsPath = getSettingsPath(hibossDir);
-  if (!fs.existsSync(settingsPath)) {
-    throw new Error(`Settings file not found: ${settingsPath}`);
-  }
-  const json = fs.readFileSync(settingsPath, "utf8");
-  const settings = parseSettingsV3Json(json);
-  ensureSettingsFileMode(settingsPath);
-  return settings;
-}
-
-export async function writeSettingsFileAtomic(hibossDir: string, settings: SettingsV3): Promise<void> {
-  const settingsPath = getSettingsPath(hibossDir);
-  const tmpPath = `${settingsPath}.tmp-${process.pid}-${Date.now()}`;
-  const json = stringifySettingsV3(settings);
-
-  await fs.promises.mkdir(path.dirname(settingsPath), { recursive: true });
-  await fs.promises.writeFile(tmpPath, json, {
-    encoding: "utf8",
-    mode: SETTINGS_FILE_MODE,
-  });
-  await fs.promises.rename(tmpPath, settingsPath);
-  ensureSettingsFileMode(settingsPath);
-}
-
-export async function withSettingsLock<T>(hibossDir: string, fn: () => Promise<T>): Promise<T> {
-  const lockPath = `${getSettingsPath(hibossDir)}.lock`;
-  await fs.promises.mkdir(path.dirname(lockPath), { recursive: true });
-  if (!fs.existsSync(lockPath)) {
-    fs.writeFileSync(lockPath, "", { encoding: "utf8", mode: SETTINGS_FILE_MODE });
-  }
-
-  const release = await lockfile.lock(lockPath, {
-    stale: 10000,
-    update: 5000,
-    retries: {
-      retries: 10,
-      minTimeout: 50,
-      maxTimeout: 300,
-    },
-  });
-
-  try {
-    return await fn();
-  } finally {
-    await release().catch(() => undefined);
-  }
-}
-
 export function normalizeBossIds(ids: string[]): string[] {
   return ids.map(normalizeBossId).filter((value) => value.length > 0);
 }
 
-export function toBossTokenHash(settings: SettingsV3): string {
-  return hashToken(settings.boss.token);
+export function toAdminTokenHash(settings: SettingsV3): string {
+  return hashToken(settings.admin.token);
 }

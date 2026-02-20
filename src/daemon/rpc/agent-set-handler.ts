@@ -243,13 +243,13 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
 
       let permissionLevel: Agent["permissionLevel"] | undefined;
       if (p.permissionLevel !== undefined) {
-        if (principal.level !== "boss") {
+        if (principal.level !== "admin") {
           rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
         }
         if (!isPermissionLevel(p.permissionLevel)) {
           rpcError(
             RPC_ERRORS.INVALID_PARAMS,
-            "Invalid permission-level (expected restricted, standard, privileged, boss)"
+            "Invalid permission-level (expected restricted, standard, privileged, admin)"
           );
         }
         permissionLevel = p.permissionLevel;

@@ -2,7 +2,7 @@
 
 ## `HIBOSS_TOKEN`
 
-Default token for CLI commands when `--token` is omitted (agent or boss token).
+Default token for CLI commands when `--token` is omitted (agent or admin token).
 
 Used by most commands that talk to the daemon, including:
 - `hiboss envelope send`

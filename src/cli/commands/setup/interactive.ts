@@ -107,19 +107,19 @@ export async function runInteractiveSetup(): Promise<void> {
     uniqueBossIds.add(key);
   }
 
-  console.log("\n🔐 Boss Token\n");
-  console.log("The boss token identifies you as the boss for administrative tasks.");
+  console.log("\n🔐 Admin Token\n");
+  console.log("The admin token identifies you for administrative tasks.");
   console.log("Choose something short you'll remember.\n");
 
-  let bossToken: string;
+  let adminToken: string;
   while (true) {
-    bossToken = await password({
-      message: "Enter your boss token:",
-      validate: (value) => (value.length < 4 ? "Boss token must be at least 4 characters" : true),
+    adminToken = await password({
+      message: "Enter your admin token:",
+      validate: (value) => (value.length < 4 ? "Admin token must be at least 4 characters" : true),
     });
 
-    const confirmToken = await password({ message: "Confirm boss token:" });
-    if (bossToken === confirmToken) break;
+    const confirmToken = await password({ message: "Confirm admin token:" });
+    if (adminToken === confirmToken) break;
     console.error("\n❌ Tokens do not match. Please try again.\n");
   }
 
@@ -256,7 +256,7 @@ export async function runInteractiveSetup(): Promise<void> {
       adapterToken,
       adapterBossIds,
     },
-    bossToken,
+    adminToken,
   };
 
   try {
@@ -270,7 +270,7 @@ export async function runInteractiveSetup(): Promise<void> {
     console.log(`   speaker-agent-token: ${setupResult.speakerAgentToken}`);
     console.log(`   leader-agent-name:   ${leaderAgentName}`);
     console.log(`   leader-agent-token:  ${setupResult.leaderAgentToken}`);
-    console.log(`   boss-token:  ${bossToken}`);
+    console.log(`   admin-token: ${adminToken}`);
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("\n⚠️  Save these tokens! They won't be shown again.\n");
     console.log("📱 Telegram bot is configured. Start the daemon with:");

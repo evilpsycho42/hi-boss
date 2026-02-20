@@ -156,7 +156,7 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 | `agent.provider` | `provider` | `claude` or `codex` |
 | `agent.model` | `model` | Nullable; `NULL` means “use provider default model” |
 | `agent.reasoningEffort` | `reasoning_effort` | See `src/agent/types.ts` for allowed values; `NULL` means “use provider default reasoning effort” |
-| `agent.permissionLevel` | `permission_level` | `restricted`, `standard`, `privileged`, `boss` |
+| `agent.permissionLevel` | `permission_level` | `restricted`, `standard`, `privileged`, `admin` |
 | `agent.sessionPolicy` | `session_policy` | JSON (nullable) |
 | `agent.role` | `metadata.role` | `speaker` or `leader` (stored in metadata JSON) |
 | `agent.createdAt` | `created_at` | Unix epoch ms (UTC) |
@@ -213,8 +213,8 @@ Clearing nullable overrides:
   - `boss-timezone: <iana>`
   - `speaker-agent-token:`
   - `leader-agent-token:`
-  - `boss-token:`
-- Setup writes canonical config to `{{HIBOSS_DIR}}/settings.json` (`version: 3`) and mirrors to SQLite runtime cache.
+  - `admin-token:`
+- Setup writes canonical config to `{{HIBOSS_DIR}}/settings.json` (`version: 4`) and mirrors to SQLite runtime cache.
 - `hiboss agent delete` prints:
   - `success: true|false`
   - `agent-name:`

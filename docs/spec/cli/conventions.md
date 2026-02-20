@@ -6,7 +6,7 @@ This document is shared by all `docs/spec/cli/*.md` topic specs.
 
 - Most commands accept `--token`.
 - If omitted, the CLI uses `HIBOSS_TOKEN`.
-- Boss tokens cannot perform agent-token operations like `hiboss envelope send` / `hiboss envelope list`.
+- Admin tokens cannot perform agent-token operations like `hiboss envelope send` / `hiboss envelope list`.
 
 ## Clearing nullable overrides
 

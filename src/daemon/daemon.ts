@@ -54,7 +54,7 @@ import {
 } from "../shared/speaker-binding-invariant.js";
 import { TelegramTypingManager } from "./telegram-typing.js";
 import { resolveUiLocale } from "../shared/ui-locale.js";
-import { getSettingsPath } from "../shared/settings.js";
+import { getSettingsPath } from "../shared/settings-io.js";
 import { loadSettingsOrThrow, syncSettingsToDb } from "./settings-sync.js";
 
 // Re-export for CLI and external use
@@ -178,8 +178,8 @@ export class Daemon {
   }
 
   private resolvePrincipal(token: string): Principal {
-    if (this.db.verifyBossToken(token)) {
-      return { kind: "boss", level: "boss" };
+    if (this.db.verifyAdminToken(token)) {
+      return { kind: "admin", level: "admin" };
     }
 
     const agent = this.db.findAgentByToken(token);

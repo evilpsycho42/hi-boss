@@ -20,16 +20,16 @@ Key files:
 
 ## Authentication model
 
-Most RPC methods require a **token** (agent or boss):
+Most RPC methods require a **token** (agent or admin):
 
 - the CLI passes `token` in params (or uses `HIBOSS_TOKEN` when `--token` is omitted)
-- the daemon treats it as a **boss token** if it matches `config.boss_token_hash`, otherwise as an **agent token** (`agents.token`)
+- the daemon treats it as an **admin token** if it matches `config.admin_token_hash`, otherwise as an **agent token** (`agents.token`)
 
 Bootstrap methods do not require a token:
 
 - `setup.check`
 - `setup.execute`
-- `boss.verify`
+- `admin.verify`
 
 All other methods require a token and are authorized by the permission policy (see `docs/spec/configuration.md`).
 
@@ -83,6 +83,6 @@ Setup:
 - `setup.check`
 - `setup.execute`
 
-Boss:
+Admin:
 
-- `boss.verify`
+- `admin.verify`

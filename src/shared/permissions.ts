@@ -1,6 +1,6 @@
 import { DEFAULT_PERMISSION_POLICY } from "./defaults.js";
 
-export type PermissionLevel = "restricted" | "standard" | "privileged" | "boss";
+export type PermissionLevel = "restricted" | "standard" | "privileged" | "admin";
 
 export interface PermissionPolicyV1 {
   version: 1;
@@ -14,7 +14,7 @@ export function isPermissionLevel(value: unknown): value is PermissionLevel {
     value === "restricted" ||
     value === "standard" ||
     value === "privileged" ||
-    value === "boss"
+    value === "admin"
   );
 }
 
@@ -26,9 +26,11 @@ export function permissionLevelRank(level: PermissionLevel): number {
       return 1;
     case "privileged":
       return 2;
-    case "boss":
+    case "admin":
       return 3;
   }
+
+  throw new Error(`Unknown permission level: ${String(level)}`);
 }
 
 export function isAtLeastPermissionLevel(
@@ -43,7 +45,7 @@ export function getRequiredPermissionLevel(
   operation: string
 ): PermissionLevel {
   const value = policy.operations[operation];
-  return value ?? "boss";
+  return value ?? "admin";
 }
 
 export function parsePermissionPolicyV1(json: string): PermissionPolicyV1 {
@@ -54,6 +56,10 @@ export function parsePermissionPolicyV1(json: string): PermissionPolicyV1 {
     throw new Error("Invalid permission policy JSON");
   }
 
+  return parsePermissionPolicyV1FromObject(parsed);
+}
+
+export function parsePermissionPolicyV1FromObject(parsed: unknown): PermissionPolicyV1 {
   if (typeof parsed !== "object" || parsed === null) {
     throw new Error("Invalid permission policy (expected object)");
   }

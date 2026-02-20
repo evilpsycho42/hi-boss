@@ -50,9 +50,9 @@ Hi-Boss authorizes operations via a configurable policy stored at:
 
 The policy maps an operation name to a minimum permission level:
 
-- `restricted < standard < privileged < boss`
+- `restricted < standard < privileged < admin`
 
-If an operation is missing from the policy, it defaults to `boss` (safe-by-default).
+If an operation is missing from the policy, it defaults to `admin` (safe-by-default).
 
 ### Default Policy
 
@@ -60,16 +60,16 @@ If an operation is missing from the policy, it defaults to `boss` (safe-by-defau
 |-----------|---------------|
 | `envelope.send` | `restricted` |
 | `envelope.list` | `restricted` |
-| `daemon.status` | `boss` |
+| `daemon.status` | `admin` |
 | `daemon.ping` | `standard` |
-| `daemon.start` | `boss` |
-| `daemon.stop` | `boss` |
-| `agent.register` | `boss` |
+| `daemon.start` | `admin` |
+| `daemon.stop` | `admin` |
+| `agent.register` | `admin` |
 | `agent.list` | `restricted` |
 | `agent.bind` | `privileged` |
 | `agent.unbind` | `privileged` |
 | `agent.status` | `restricted` |
-| `agent.refresh` | `boss` |
-| `agent.abort` | `boss` |
+| `agent.refresh` | `admin` |
+| `agent.abort` | `admin` |
 | `agent.set` | `privileged` |
 | `agent.session-policy.set` | `privileged` |

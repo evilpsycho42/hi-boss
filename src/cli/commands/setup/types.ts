@@ -2,7 +2,7 @@ import type { AgentRole } from "../../../shared/agent-role.js";
 
 export type SetupProvider = "claude" | "codex";
 export type SetupReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
-export type SetupPermissionLevel = "restricted" | "standard" | "privileged" | "boss";
+export type SetupPermissionLevel = "restricted" | "standard" | "privileged" | "admin";
 
 export interface SetupSessionPolicy {
   dailyResetAt?: string;
@@ -41,5 +41,5 @@ export interface SetupConfig {
     adapterToken: string;
     adapterBossIds: string[];
   };
-  bossToken: string;
+  adminToken: string;
 }

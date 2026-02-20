@@ -302,7 +302,7 @@ export class HiBossDatabase {
     this.runInTransaction(() => {
       this.setBossName(settings.boss.name);
       this.setConfig("boss_timezone", settings.boss.timezone);
-      this.setBossToken(settings.boss.token);
+      this.setAdminToken(settings.admin.token);
       this.setConfig("permission_policy", JSON.stringify(settings.permissionPolicy));
       this.setAdapterBossIds("telegram", settings.telegram.bossIds);
 
@@ -775,7 +775,7 @@ export class HiBossDatabase {
       row.permission_level === "restricted" ||
       row.permission_level === "standard" ||
       row.permission_level === "privileged" ||
-      row.permission_level === "boss"
+      row.permission_level === "admin"
     ) {
       permissionLevel = row.permission_level;
     }
@@ -1594,18 +1594,18 @@ export class HiBossDatabase {
   }
 
   /**
-   * Set the boss token.
+   * Set the admin token.
    */
-  setBossToken(token: string): void {
+  setAdminToken(token: string): void {
     const tokenHash = hashToken(token);
-    this.setConfig("boss_token_hash", tokenHash);
+    this.setConfig("admin_token_hash", tokenHash);
   }
 
   /**
-   * Verify a boss token.
+   * Verify an admin token.
    */
-  verifyBossToken(token: string): boolean {
-    const storedHash = this.getConfig("boss_token_hash");
+  verifyAdminToken(token: string): boolean {
+    const storedHash = this.getConfig("admin_token_hash");
     if (!storedHash) return false;
     return verifyToken(token, storedHash);
   }

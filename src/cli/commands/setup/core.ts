@@ -15,19 +15,19 @@ import {
 import { generateToken } from "../../../agent/auth.js";
 import { DEFAULT_PERMISSION_POLICY } from "../../../shared/defaults.js";
 import type { SettingsV3 } from "../../../shared/settings.js";
-import { getSettingsPath, writeSettingsFileAtomic } from "../../../shared/settings.js";
+import { getSettingsPath, writeSettingsFileAtomic } from "../../../shared/settings-io.js";
 import { syncSettingsToDb } from "../../../daemon/settings-sync.js";
 
 export interface SetupUserInfoStatus {
   bossName?: string;
   bossTimezone?: string;
   telegramBossId?: string;
-  hasBossToken: boolean;
+  hasAdminToken: boolean;
   missing: {
     bossName: boolean;
     bossTimezone: boolean;
     telegramBossId: boolean;
-    bossToken: boolean;
+    adminToken: boolean;
   };
 }
 
@@ -75,17 +75,17 @@ function buildUserInfoStatus(db: HiBossDatabase): SetupUserInfoStatus {
   const bossName = (db.getBossName() ?? "").trim();
   const bossTimezone = (db.getConfig("boss_timezone") ?? "").trim();
   const telegramBossId = (db.getAdapterBossIds("telegram")[0] ?? "").trim();
-  const hasBossToken = Boolean((db.getConfig("boss_token_hash") ?? "").trim());
+  const hasAdminToken = Boolean((db.getConfig("admin_token_hash") ?? "").trim());
   return {
     bossName: bossName || undefined,
     bossTimezone: bossTimezone || undefined,
     telegramBossId: telegramBossId || undefined,
-    hasBossToken,
+    hasAdminToken,
     missing: {
       bossName: bossName.length === 0,
       bossTimezone: bossTimezone.length === 0,
       telegramBossId: telegramBossId.length === 0,
-      bossToken: !hasBossToken,
+      adminToken: !hasAdminToken,
     },
   };
 }
@@ -103,12 +103,12 @@ function buildEmptySetupStatus(): SetupStatus {
       duplicateSpeakerBindings: [],
     },
     userInfo: {
-      hasBossToken: false,
+      hasAdminToken: false,
       missing: {
         bossName: true,
         bossTimezone: true,
         telegramBossId: true,
-        bossToken: true,
+        adminToken: true,
       },
     },
   };
@@ -172,17 +172,17 @@ export async function checkSetupStatus(): Promise<SetupStatus> {
       speakerWithoutBindings: [],
       duplicateSpeakerBindings: [],
     };
+    const remoteReady =
+      typeof result.ready === "boolean"
+        ? result.ready
+        : result.completed &&
+          missingRoles.length === 0 &&
+          !hasMissingUserInfo &&
+          !hasIntegrityViolations(integrity);
 
     return {
       completed: result.completed,
-      ready:
-        hasSettingsFile &&
-        (typeof result.ready === "boolean"
-          ? result.ready
-          : result.completed &&
-            missingRoles.length === 0 &&
-            !hasMissingUserInfo &&
-            !hasIntegrityViolations(integrity)),
+      ready: hasSettingsFile && remoteReady,
       hasSettingsFile,
       roleCounts,
       missingRoles,
@@ -234,7 +234,7 @@ function ensureBossProfileFile(hibossDir: string): void {
  */
 export async function executeSetup(config: SetupConfig): Promise<{ speakerAgentToken: string; leaderAgentToken: string }> {
   if (await isDaemonRunning()) {
-    throw new Error("Daemon is running. Stop it first: hiboss daemon stop --token <boss-token>");
+    throw new Error("Daemon is running. Stop it first: hiboss daemon stop --token <admin-token>");
   }
   return executeSetupDirect(config);
 }
@@ -249,6 +249,8 @@ async function executeSetupDirect(config: SetupConfig): Promise<{ speakerAgentTo
   const dbPath = path.join(daemonConfig.daemonDir, "hiboss.db");
   const db = new HiBossDatabase(dbPath);
   try {
+    // Recovery/migration: allow setup to rewrite settings+DB when either side is missing.
+    // Block only when both DB completion marker and settings file are already present.
     if (db.isSetupComplete() && hasSettingsFile) {
       throw new Error("Setup already completed");
     }
@@ -261,11 +263,13 @@ async function executeSetupDirect(config: SetupConfig): Promise<{ speakerAgentTo
     const leaderAgentToken = generateToken();
 
     const settings: SettingsV3 = {
-      version: 3,
+      version: 4,
       boss: {
         name: config.bossName,
         timezone: config.bossTimezone,
-        token: config.bossToken,
+      },
+      admin: {
+        token: config.adminToken,
       },
       telegram: {
         bossIds: config.adapter.adapterBossIds,

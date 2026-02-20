@@ -71,7 +71,7 @@ async function main(): Promise<void> {
       filename: "daemon_status.DOC.md",
       title: "hiboss daemon status",
       command: "hiboss daemon status",
-      output: await runOrThrow({ homeDir: fixture.homeDir, token: fixture.bossToken, args: ["daemon", "status"] }),
+      output: await runOrThrow({ homeDir: fixture.homeDir, token: fixture.adminToken, args: ["daemon", "status"] }),
     });
 
     writeDoc({

@@ -1,11 +1,11 @@
 /**
- * Setup and boss verification RPC handlers.
+ * Setup and admin verification RPC handlers.
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import type { RpcMethodRegistry, SetupExecuteParams, BossVerifyParams } from "../ipc/types.js";
+import type { RpcMethodRegistry, SetupExecuteParams, AdminVerifyParams } from "../ipc/types.js";
 import { RPC_ERRORS } from "../ipc/types.js";
 import type { DaemonContext } from "./context.js";
 import { rpcError } from "./context.js";
@@ -55,11 +55,11 @@ function validateSetupAgentConfig(
       agent.permissionLevel !== "restricted" &&
       agent.permissionLevel !== "standard" &&
       agent.permissionLevel !== "privileged" &&
-      agent.permissionLevel !== "boss"
+      agent.permissionLevel !== "admin"
     ) {
       rpcError(
         RPC_ERRORS.INVALID_PARAMS,
-        `Invalid ${label}.permission-level (expected restricted, standard, privileged, boss)`
+        `Invalid ${label}.permission-level (expected restricted, standard, privileged, admin)`
       );
     }
   }
@@ -150,12 +150,12 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const bossName = (ctx.db.getBossName() ?? "").trim();
       const bossTimezone = (ctx.db.getConfig("boss_timezone") ?? "").trim();
       const telegramBossId = (ctx.db.getAdapterBossIds("telegram")[0] ?? "").trim();
-      const hasBossToken = Boolean((ctx.db.getConfig("boss_token_hash") ?? "").trim());
+      const hasAdminToken = Boolean((ctx.db.getConfig("admin_token_hash") ?? "").trim());
       const missingUserInfo = {
         bossName: bossName.length === 0,
         bossTimezone: bossTimezone.length === 0,
         telegramBossId: telegramBossId.length === 0,
-        bossToken: !hasBossToken,
+        adminToken: !hasAdminToken,
       };
       const hasMissingUserInfo = Object.values(missingUserInfo).some(Boolean);
       const hasIntegrityViolations =
@@ -182,7 +182,7 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
           bossName: bossName || undefined,
           bossTimezone: bossTimezone || undefined,
           telegramBossId: telegramBossId || undefined,
-          hasBossToken,
+          hasAdminToken,
           missing: missingUserInfo,
         },
       };
@@ -238,8 +238,8 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid adapter-boss-id");
       }
 
-      if (typeof p.bossToken !== "string" || p.bossToken.trim().length < 4) {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid boss-token (must be at least 4 characters)");
+      if (typeof p.adminToken !== "string" || p.adminToken.trim().length < 4) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid admin-token (must be at least 4 characters)");
       }
 
       if ((p as any).memory !== undefined) {
@@ -341,8 +341,8 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
           // Store boss ID for this adapter
           ctx.db.setAdapterBossIds(p.adapter.adapterType, [p.adapter.adapterBossId.trim().replace(/^@/, "")]);
 
-          // Set boss token
-          ctx.db.setBossToken(p.bossToken.trim());
+          // Set admin token
+          ctx.db.setAdminToken(p.adminToken.trim());
 
           // Mark setup as complete
           ctx.db.markSetupComplete();
@@ -373,9 +373,9 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
     },
 
     // Boss methods
-    "boss.verify": async (params) => {
-      const p = params as unknown as BossVerifyParams;
-      return { valid: ctx.db.verifyBossToken(p.token) };
+    "admin.verify": async (params) => {
+      const p = params as unknown as AdminVerifyParams;
+      return { valid: ctx.db.verifyAdminToken(p.token) };
     },
   };
 }

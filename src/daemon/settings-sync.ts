@@ -1,10 +1,9 @@
 import type { HiBossDatabase } from "./db/database.js";
+import { logEvent } from "../shared/daemon-log.js";
+import { readSettingsFile, withSettingsLock, writeSettingsFileAtomic } from "../shared/settings-io.js";
 import {
   assertValidSettingsV3,
-  readSettingsFile,
   type SettingsV3,
-  withSettingsLock,
-  writeSettingsFileAtomic,
 } from "../shared/settings.js";
 
 export function loadSettingsOrThrow(hibossDir: string): SettingsV3 {
@@ -44,9 +43,30 @@ export async function mutateSettingsAndSync(params: {
       syncSettingsToDb(params.db, next);
       return next;
     } catch (err) {
-      await writeSettingsFileAtomic(params.hibossDir, current);
-      syncSettingsToDb(params.db, current);
-      throw err;
+      const originalError = err as Error;
+
+      try {
+        await writeSettingsFileAtomic(params.hibossDir, current);
+      } catch (rollbackFileError) {
+        logEvent("error", "settings-sync-rollback-file-failed", {
+          "hiboss-dir": params.hibossDir,
+          "original-error": originalError.message,
+          "rollback-error": (rollbackFileError as Error).message,
+        });
+      }
+
+      try {
+        syncSettingsToDb(params.db, current);
+      } catch (rollbackDbError) {
+        logEvent("error", "settings-sync-rollback-db-failed", {
+          "hiboss-dir": params.hibossDir,
+          "original-error": originalError.message,
+          "rollback-error": (rollbackDbError as Error).message,
+          "state-note": "settings-file-and-db-cache-may-be-inconsistent",
+        });
+      }
+
+      throw originalError;
     }
   });
 }
