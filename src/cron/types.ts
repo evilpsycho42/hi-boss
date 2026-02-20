@@ -4,9 +4,9 @@ import type { EnvelopeAttachment, EnvelopeStatus } from "../envelope/types.js";
 /**
  * Cron execution mode.
  *
- * - `"isolated"`: One-shot with fresh session context (default).
+ * - `"isolated"`: One-shot with fresh session context (default for new schedules via CLI).
  * - `"clone"`:    One-shot with cloned current session context.
- * - `"inline"`:   Enter the main session queue (legacy behavior, NOT one-shot).
+ * - `"inline"`:   Enter the main session queue (fallback for legacy schedules without executionMode metadata).
  */
 export type CronExecutionMode = "isolated" | "clone" | "inline";
 

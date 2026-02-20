@@ -67,6 +67,9 @@ export class OneShotExecutor {
         "envelope-id": envelope.id,
         error: errorMessage(err),
       });
+      // If ACK fails the envelope stays "pending" — don't enqueue the job
+      // to avoid double execution on daemon restart.
+      return;
     }
 
     // Notify cron scheduler so it can advance to the next occurrence.
