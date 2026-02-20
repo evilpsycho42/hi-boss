@@ -5,13 +5,18 @@ import { IpcClient } from "../../ipc-client.js";
 import { getSocketPath, getDefaultConfig, isDaemonRunning } from "../../../daemon/daemon.js";
 import { HiBossDatabase } from "../../../daemon/db/database.js";
 import { setupAgentHome } from "../../../agent/home-setup.js";
-import type { SetupCheckResult, SetupExecuteResult } from "../../../daemon/ipc/types.js";
+import type { SetupCheckResult } from "../../../daemon/ipc/types.js";
 import type { SetupConfig } from "./types.js";
 import type { AgentRole } from "../../../shared/agent-role.js";
 import {
   getSpeakerBindingIntegrity,
   toSpeakerBindingIntegrityView,
 } from "../../../shared/speaker-binding-invariant.js";
+import { generateToken } from "../../../agent/auth.js";
+import { DEFAULT_PERMISSION_POLICY } from "../../../shared/defaults.js";
+import type { SettingsV3 } from "../../../shared/settings.js";
+import { writeSettingsFileAtomic } from "../../../shared/settings.js";
+import { syncSettingsToDb } from "../../../daemon/settings-sync.js";
 
 export interface SetupUserInfoStatus {
   bossName?: string;
@@ -68,7 +73,7 @@ function hasIntegrityViolations(integrity: SetupStatus["integrity"]): boolean {
 function buildUserInfoStatus(db: HiBossDatabase): SetupUserInfoStatus {
   const bossName = (db.getBossName() ?? "").trim();
   const bossTimezone = (db.getConfig("boss_timezone") ?? "").trim();
-  const telegramBossId = (db.getAdapterBossId("telegram") ?? "").trim();
+  const telegramBossId = (db.getAdapterBossIds("telegram")[0] ?? "").trim();
   const hasBossToken = Boolean((db.getConfig("boss_token_hash") ?? "").trim());
   return {
     bossName: bossName || undefined,
@@ -216,29 +221,13 @@ function ensureBossProfileFile(hibossDir: string): void {
 }
 
 /**
- * Execute full first-time setup (tries IPC first, falls back to direct DB).
+ * Execute full first-time setup.
  */
 export async function executeSetup(config: SetupConfig): Promise<{ speakerAgentToken: string; leaderAgentToken: string }> {
-  try {
-    const client = new IpcClient(getSocketPath());
-    const result = await client.call<SetupExecuteResult>("setup.execute", {
-      bossName: config.bossName,
-      bossTimezone: config.bossTimezone,
-      speakerAgent: config.speakerAgent,
-      leaderAgent: config.leaderAgent,
-      bossToken: config.bossToken,
-      adapter: config.adapter,
-    });
-    return {
-      speakerAgentToken: result.speakerAgentToken,
-      leaderAgentToken: result.leaderAgentToken,
-    };
-  } catch (err) {
-    if (await isDaemonRunning()) {
-      throw new Error(`Failed to run setup via daemon: ${(err as Error).message}`);
-    }
-    return executeSetupDirect(config);
+  if (await isDaemonRunning()) {
+    throw new Error("Daemon is running. Stop it first: hiboss daemon stop --token <boss-token>");
   }
+  return executeSetupDirect(config);
 }
 
 async function executeSetupDirect(config: SetupConfig): Promise<{ speakerAgentToken: string; leaderAgentToken: string }> {
@@ -257,46 +246,64 @@ async function executeSetupDirect(config: SetupConfig): Promise<{ speakerAgentTo
     await setupAgentHome(config.leaderAgent.name, daemonConfig.dataDir);
     ensureBossProfileFile(daemonConfig.dataDir);
 
-    return db.runInTransaction(() => {
-      db.setBossName(config.bossName);
-      db.setConfig("boss_timezone", config.bossTimezone);
-      db.setAdapterBossId(config.adapter.adapterType, config.adapter.adapterBossId.trim().replace(/^@/, ""));
+    const speakerAgentToken = generateToken();
+    const leaderAgentToken = generateToken();
 
-      const speakerAgentResult = db.registerAgent({
-        name: config.speakerAgent.name,
-        role: "speaker",
-        description: config.speakerAgent.description,
-        workspace: config.speakerAgent.workspace,
-        provider: config.speakerAgent.provider,
-        model: config.speakerAgent.model,
-        reasoningEffort: config.speakerAgent.reasoningEffort,
-        permissionLevel: config.speakerAgent.permissionLevel,
-        sessionPolicy: config.speakerAgent.sessionPolicy,
-        metadata: config.speakerAgent.metadata,
-      });
+    const settings: SettingsV3 = {
+      version: 3,
+      boss: {
+        name: config.bossName,
+        timezone: config.bossTimezone,
+        token: config.bossToken,
+      },
+      telegram: {
+        bossIds: config.adapter.adapterBossIds,
+      },
+      permissionPolicy: DEFAULT_PERMISSION_POLICY,
+      agents: [
+        {
+          name: config.speakerAgent.name,
+          token: speakerAgentToken,
+          role: "speaker",
+          provider: config.speakerAgent.provider,
+          description: config.speakerAgent.description ?? "",
+          workspace: config.speakerAgent.workspace,
+          model: config.speakerAgent.model ?? null,
+          reasoningEffort: config.speakerAgent.reasoningEffort ?? null,
+          permissionLevel: config.speakerAgent.permissionLevel ?? "standard",
+          sessionPolicy: config.speakerAgent.sessionPolicy,
+          metadata: config.speakerAgent.metadata,
+          bindings: [
+            {
+              adapterType: config.adapter.adapterType,
+              adapterToken: config.adapter.adapterToken,
+            },
+          ],
+        },
+        {
+          name: config.leaderAgent.name,
+          token: leaderAgentToken,
+          role: "leader",
+          provider: config.leaderAgent.provider,
+          description: config.leaderAgent.description ?? "",
+          workspace: config.leaderAgent.workspace,
+          model: config.leaderAgent.model ?? null,
+          reasoningEffort: config.leaderAgent.reasoningEffort ?? null,
+          permissionLevel: config.leaderAgent.permissionLevel ?? "standard",
+          sessionPolicy: config.leaderAgent.sessionPolicy,
+          metadata: config.leaderAgent.metadata,
+          bindings: [],
+        },
+      ],
+    };
 
-      const leaderAgentResult = db.registerAgent({
-        name: config.leaderAgent.name,
-        role: "leader",
-        description: config.leaderAgent.description,
-        workspace: config.leaderAgent.workspace,
-        provider: config.leaderAgent.provider,
-        model: config.leaderAgent.model,
-        reasoningEffort: config.leaderAgent.reasoningEffort,
-        permissionLevel: config.leaderAgent.permissionLevel,
-        sessionPolicy: config.leaderAgent.sessionPolicy,
-        metadata: config.leaderAgent.metadata,
-      });
+    await writeSettingsFileAtomic(daemonConfig.dataDir, settings);
+    syncSettingsToDb(db, settings);
 
-      db.createBinding(config.speakerAgent.name, config.adapter.adapterType, config.adapter.adapterToken);
-      db.setBossToken(config.bossToken);
-      db.markSetupComplete();
-
-      return {
-        speakerAgentToken: speakerAgentResult.token,
-        leaderAgentToken: leaderAgentResult.token,
-      };
-    });
+    return {
+      speakerAgentToken,
+      leaderAgentToken,
+    };
   } finally {
     db.close();
   }

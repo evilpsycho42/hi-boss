@@ -18,7 +18,6 @@ import {
   deleteCron,
   setReaction,
   runSetup,
-  runSetupConfigExport,
 } from "./commands/index.js";
 import { registerAgentCommands } from "./cli-agent.js";
 
@@ -331,23 +330,8 @@ const setup = program
   .description("Initial system configuration")
   .helpCommand(false)
   .allowExcessArguments(false)
-  .option("--config-file <path>", "Run non-interactive setup from a JSON config file (version 2)")
-  .option("--token <token>", "Boss token (required with --config-file; default: $HIBOSS_TOKEN)")
-  .option("--dry-run", "Validate and preview --config-file changes without applying")
-  .action((options) => {
-    runSetup({
-      configFile: options.configFile,
-      token: options.token,
-      dryRun: Boolean(options.dryRun),
-    });
-  });
-
-setup
-  .command("export")
-  .description("Export current setup configuration to a JSON file (version 2)")
-  .option("--out <path>", "Output path (default: $HIBOSS_DIR/config.json)")
-  .action((options) => {
-    runSetupConfigExport({ outputPath: options.out });
+  .action(() => {
+    runSetup();
   });
 
 // Helper to collect multiple values for an option

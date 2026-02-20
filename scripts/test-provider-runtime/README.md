@@ -1,6 +1,6 @@
 # Provider runtime envelope send test kit
 
-This folder contains stable `hiboss setup --config-file ...` templates + a repeatable manual test flow for verifying that agents can run `hiboss envelope send` under real provider calls.
+This folder contains stable `settings.json` templates + a repeatable manual test flow for verifying that agents can run `hiboss envelope send` under real provider calls.
 
 Notes:
 - This test makes **real** provider calls (costs money). Ensure your local Codex/Claude credentials are configured.
@@ -26,12 +26,12 @@ hiboss daemon stop --token "<boss-token>" || true
 rm -rf ~/hiboss
 ```
 
-3) Run setup using one of the templates (pass the desired boss token via `--token`):
+3) Copy one template to your Hi-Boss settings file and fill placeholders:
 
 ```bash
-hiboss setup --config-file scripts/test-provider-runtime/setup-default.codex.gpt-5.2.json --token "<boss-token>"
+cp scripts/test-provider-runtime/setup-default.codex.gpt-5.2.json ~/hiboss/settings.json
 # or:
-hiboss setup --config-file scripts/test-provider-runtime/setup-default.claude.sonnet.json --token "<boss-token>"
+cp scripts/test-provider-runtime/setup-default.claude.sonnet.json ~/hiboss/settings.json
 ```
 
 4) Start the daemon:
@@ -42,7 +42,7 @@ hiboss daemon start --token "<boss-token>"
 
 Notes:
 - The setup templates include a placeholder Telegram bot token. For envelope-only tests it’s OK to leave it as-is (Telegram will fail to launch but the daemon keeps running). If you want Telegram I/O, replace it with a real bot token.
-- The setup templates are config schema `version: 2` and intentionally do not include boss/agent tokens.
+- The setup templates are `settings.json` schema `version: 3` and include placeholder boss/agent tokens that must be replaced.
 
 ## Optional: test both providers in one run
 

@@ -149,7 +149,7 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
 
       const bossName = (ctx.db.getBossName() ?? "").trim();
       const bossTimezone = (ctx.db.getConfig("boss_timezone") ?? "").trim();
-      const telegramBossId = (ctx.db.getAdapterBossId("telegram") ?? "").trim();
+      const telegramBossId = (ctx.db.getAdapterBossIds("telegram")[0] ?? "").trim();
       const hasBossToken = Boolean((ctx.db.getConfig("boss_token_hash") ?? "").trim());
       const missingUserInfo = {
         bossName: bossName.length === 0,
@@ -190,6 +190,11 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
 
     "setup.execute": async (params) => {
       const p = params as unknown as SetupExecuteParams;
+      void p;
+      rpcError(
+        RPC_ERRORS.INVALID_PARAMS,
+        "setup.execute is deprecated. Run `hiboss setup` to generate settings.json."
+      );
 
       // Check if setup is already complete
       if (ctx.db.isSetupComplete()) {
@@ -334,7 +339,7 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
           ctx.db.createBinding(speakerAgentName, p.adapter.adapterType, p.adapter.adapterToken);
 
           // Store boss ID for this adapter
-          ctx.db.setAdapterBossId(p.adapter.adapterType, p.adapter.adapterBossId.trim().replace(/^@/, ""));
+          ctx.db.setAdapterBossIds(p.adapter.adapterType, [p.adapter.adapterBossId.trim().replace(/^@/, "")]);
 
           // Set boss token
           ctx.db.setBossToken(p.bossToken.trim());

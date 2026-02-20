@@ -154,7 +154,7 @@ Located in `src/agent/executor.ts`:
 7. **Audit**: Record run in `agent_runs` table
 8. **Reschedule**: If more pending envelopes exist, schedule another turn via `setImmediate`
 
-Note: Applying a declarative setup config (`hiboss setup --config-file ...`) clears `agent_runs` as part of rebuilding setup-managed state.
+Note: Runtime configuration is sourced from `settings.json` and mirrored into SQLite cache on daemon start.
 
 ### Constants
 
@@ -262,7 +262,7 @@ For evaluation details, see [Session Management](session.md#session-policy-evalu
 
 All agent executions are recorded in the `agent_runs` table.
 
-Note: `hiboss setup --config-file` (apply) clears `agent_runs`, so this audit trail is not preserved across declarative setup re-imports.
+Note: `agent_runs` audit history is retained across normal configuration sync from `settings.json`.
 
 ### Schema
 

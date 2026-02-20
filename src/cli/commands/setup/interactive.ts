@@ -45,11 +45,7 @@ export async function runInteractiveSetup(): Promise<void> {
 
   if (hasPersistedState) {
     console.error("\n❌ Interactive setup only supports first-time bootstrap on a clean state.\n");
-    console.error("Use the config-file reconciliation flow instead:");
-    console.error("  1. hiboss setup export");
-    console.error("  2. edit the exported JSON config");
-    console.error("  3. hiboss setup --config-file <path> --token <boss-token> --dry-run");
-    console.error("  4. hiboss setup --config-file <path> --token <boss-token>\n");
+    console.error("Edit ~/hiboss/settings.json directly, then restart the daemon.\n");
     process.exit(1);
   }
 
@@ -81,12 +77,20 @@ export async function runInteractiveSetup(): Promise<void> {
     })
   ).trim();
 
-  const adapterBossId = (
+  const adapterBossIdsRaw = (
     await input({
-      message: "Your Telegram username (to identify you as the boss):",
-      validate: (value) => (value.trim().length === 0 ? "Telegram username is required" : true),
+      message: "Boss Telegram usernames (comma-separated, e.g. ethanlee,alice):",
+      validate: (value) => (value.trim().length === 0 ? "At least one Telegram username is required" : true),
     })
-  ).trim().replace(/^@/, "");
+  ).trim();
+  const adapterBossIds = adapterBossIdsRaw
+    .split(",")
+    .map((value) => value.trim().replace(/^@/, ""))
+    .filter((value) => value.length > 0);
+  if (adapterBossIds.length < 1) {
+    console.error("\n❌ At least one Telegram username is required.\n");
+    process.exit(1);
+  }
 
   console.log("\n🔐 Boss Token\n");
   console.log("The boss token identifies you as the boss for administrative tasks.");
@@ -235,7 +239,7 @@ export async function runInteractiveSetup(): Promise<void> {
     adapter: {
       adapterType: "telegram",
       adapterToken,
-      adapterBossId,
+      adapterBossIds,
     },
     bossToken,
   };

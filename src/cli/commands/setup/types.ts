@@ -39,40 +39,7 @@ export interface SetupConfig {
   adapter: {
     adapterType: string;
     adapterToken: string;
-    adapterBossId: string;
+    adapterBossIds: string[];
   };
   bossToken: string;
-}
-
-export interface SetupDeclarativeAgentConfig extends SetupAgentConfig {
-  bindings: SetupBindingConfig[];
-}
-
-export interface SetupDeclarativeConfig {
-  version: 2;
-  bossName: string;
-  bossTimezone: string;
-  telegramBossId: string;
-  agents: SetupDeclarativeAgentConfig[];
-}
-
-export interface SetupDryRunDiff {
-  firstApply: boolean;
-  currentAgentNames: string[];
-  desiredAgentNames: string[];
-  removedAgentNames: string[];
-  recreatedAgentNames: string[];
-  newlyCreatedAgentNames: string[];
-  currentBindingCount: number;
-  desiredBindingCount: number;
-}
-
-export interface SetupReconcileResult {
-  dryRun: boolean;
-  diff: SetupDryRunDiff;
-  generatedAgentTokens: Array<{
-    name: string;
-    role: AgentRole;
-    token: string;
-  }>;
 }

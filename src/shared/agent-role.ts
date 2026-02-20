@@ -94,11 +94,11 @@ export function buildMissingAgentRolesGuidance(params: {
   void params;
   const lines: string[] = [
     "Daemon start blocked: setup is incomplete.",
-    "Repair with setup config export/apply:",
-    "1. hiboss setup export",
-    "2. edit the exported JSON config",
-    "3. hiboss setup --config-file <path> --token <boss-token> --dry-run",
-    "4. hiboss setup --config-file <path> --token <boss-token>",
+    "Repair by editing settings.json:",
+    "1. open ~/hiboss/settings.json",
+    "2. ensure at least one speaker and one leader are present",
+    "3. ensure each speaker has at least one binding",
+    "4. restart daemon: hiboss daemon start",
   ];
   return lines.join("\n");
 }

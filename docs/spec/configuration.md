@@ -8,7 +8,8 @@ Hi-Boss configuration comes from:
 
 1. CLI flags (`hiboss ... --flag`)
 2. Environment variables (`HIBOSS_TOKEN`, `HIBOSS_DIR`, …)
-3. SQLite state (`{{HIBOSS_DIR}}/.daemon/hiboss.db`)
+3. `settings.json` (`{{HIBOSS_DIR}}/settings.json`, source-of-truth)
+4. SQLite runtime cache (`{{HIBOSS_DIR}}/.daemon/hiboss.db`)
 
 ## Defaults
 
@@ -32,16 +33,11 @@ Built-in defaults are centralized in:
 
 ---
 
-## “Settings” That Are Not Yet Exposed
+## Settings Source of Truth
 
-Some settings exist in the database/schema but do not yet have dedicated CLI setters:
+`settings.json` is the canonical configuration. Operators can edit it directly and restart daemon.
 
-- Updating `boss_name`, `adapter_boss_id_<type>` after setup
-- Editing `config.permission_policy`
-- Editing `config.ui_locale` (fixed system-message locale; env override: `HIBOSS_UI_LOCALE`)
-- Changing the default data directory from `~/hiboss/` (override via `HIBOSS_DIR`)
-
-Today, changing those requires a reset + re-setup, or direct DB edits.
+SQLite remains a runtime cache for read-path performance and relational references.
 
 ---
 
@@ -49,7 +45,8 @@ Today, changing those requires a reset + re-setup, or direct DB edits.
 
 Hi-Boss authorizes operations via a configurable policy stored at:
 
-- `config.permission_policy`
+- `settings.json.permission-policy` (source-of-truth)
+- mirrored to `config.permission_policy` in SQLite runtime cache
 
 The policy maps an operation name to a minimum permission level:
 

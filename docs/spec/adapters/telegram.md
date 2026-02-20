@@ -16,7 +16,7 @@ Incoming (Telegram → agent):
 - The daemon creates an envelope:
   - `from: channel:telegram:<chat-id>`
   - `to: agent:<bound-agent-name>`
-  - `fromBoss: true` when sender matches `config.adapter_boss_id_telegram`
+  - `fromBoss: true` when sender matches one of `config.adapter_boss_ids_telegram` entries
 - Envelope metadata is populated so prompts can render `sender:` and reply previews (see `docs/spec/definitions.md`).
 
 Outgoing (agent → Telegram):
@@ -91,7 +91,7 @@ Use `hiboss agent set` with `--bind-adapter-type telegram` + `--bind-adapter-tok
 
 ## Boss Identification
 
-The `adapter-boss-id` config (set during `hiboss setup`) identifies the "boss" user. Messages from this username have `fromBoss: true` in envelopes.
+The `telegram.boss-ids` setting (set during `hiboss setup`) identifies boss users. Messages from any configured username have `fromBoss: true` in envelopes.
 
 See `docs/spec/cli/setup.md` and `docs/spec/configuration.md` for setup config fields and persistence.
 

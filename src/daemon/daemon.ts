@@ -53,6 +53,7 @@ import {
 } from "../shared/speaker-binding-invariant.js";
 import { TelegramTypingManager } from "./telegram-typing.js";
 import { resolveUiLocale } from "../shared/ui-locale.js";
+import { loadSettingsOrThrow, syncSettingsToDb } from "./settings-sync.js";
 
 // Re-export for CLI and external use
 export { isDaemonRunning, isSocketAcceptingConnections };
@@ -243,9 +244,6 @@ export class Daemon {
       this.running = true;
       this.startTimeMs = Date.now();
 
-      // All displayed timestamps (including daemon logs) use the boss timezone.
-      setDaemonLogTimeZone(this.db.getBossTimezone());
-
       const daemonMode = (process.env.HIBOSS_DAEMON_MODE ?? "").trim().toLowerCase();
       const examplesMode = daemonMode === "examples";
       if (examplesMode) {
@@ -253,6 +251,14 @@ export class Daemon {
         logEvent("info", "daemon-started", { "data-dir": this.config.dataDir, "adapters-count": 0, mode: "examples" });
         return;
       }
+
+      // Canonical startup path: load settings.json and mirror into DB runtime cache.
+      const settings = loadSettingsOrThrow(this.config.dataDir);
+      syncSettingsToDb(this.db, settings);
+      this.conversationHistory.setTimezone(this.db.getBossTimezone());
+
+      // All displayed timestamps (including daemon logs) use the boss timezone.
+      setDaemonLogTimeZone(this.db.getBossTimezone());
 
       const roleBackfill = this.db.backfillLegacyAgentRolesFromBindings();
       if (roleBackfill.updated > 0) {

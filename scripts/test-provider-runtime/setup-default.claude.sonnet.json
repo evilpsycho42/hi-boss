@@ -1,13 +1,25 @@
 {
-  "version": 2,
-  "boss-name": "Kevin",
-  "boss-timezone": "Asia/Shanghai",
+  "version": 3,
+  "boss": {
+    "name": "Kevin",
+    "timezone": "Asia/Shanghai",
+    "token": "REPLACE_ME_BOSS_TOKEN"
+  },
   "telegram": {
-    "adapter-boss-id": "kky1024"
+    "boss-ids": ["kky1024"]
+  },
+  "permission-policy": {
+    "version": 1,
+    "operations": {
+      "envelope.send": "restricted",
+      "envelope.list": "restricted",
+      "agent.register": "boss"
+    }
   },
   "agents": [
     {
       "name": "test-claude",
+      "token": "REPLACE_ME_TEST_CLAUDE_TOKEN",
       "role": "speaker",
       "provider": "claude",
       "description": "test-claude (claude/sonnet)",
@@ -24,6 +36,7 @@
     },
     {
       "name": "leader",
+      "token": "REPLACE_ME_LEADER_TOKEN",
       "role": "leader",
       "provider": "claude",
       "description": "leader for provider runtime validation",

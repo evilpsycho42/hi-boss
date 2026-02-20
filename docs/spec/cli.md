@@ -24,8 +24,6 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | Command | Purpose | Token required? | Default permission |
 |--------|---------|-----------------|--------------------|
 | `hiboss setup` | Initialize Hi-Boss (interactive first-time bootstrap) | No (bootstrap) | n/a |
-| `hiboss setup export` | Export current setup config (`version: 2`) | No | n/a |
-| `hiboss setup --config-file <path> --token <boss-token> [--dry-run]` | Validate/apply declarative setup config (`version: 2`) | Yes (`--token` or `HIBOSS_TOKEN`) | n/a |
 | `hiboss daemon start` | Start the daemon | Yes (boss-privileged token) | boss |
 | `hiboss daemon stop` | Stop the daemon | Yes (boss-privileged token) | boss |
 | `hiboss daemon status` | Show daemon status | Yes (boss-privileged token) | boss |

@@ -76,30 +76,38 @@ ${HIBOSS_DIR:-$HOME/hiboss}/
 
 Repair / reset:
 - Healthy setup rerun (safe no-op): `hiboss setup`
-- Broken/incomplete setup (non-destructive) via config export/apply:
+- Broken/incomplete setup (non-destructive) via `settings.json` edit:
 
 ```bash
 hiboss daemon stop --token <boss-token>
-hiboss setup export --out ./hiboss.setup.json
-# edit ./hiboss.setup.json
-hiboss setup --config-file ./hiboss.setup.json --token <boss-token> --dry-run
-hiboss setup --config-file ./hiboss.setup.json --token <boss-token>
+# edit ${HIBOSS_DIR:-$HOME/hiboss}/settings.json
 hiboss daemon start --token <boss-token>
 ```
 
-- Canonical repair for older single-agent Telegram setups (speaker only, missing leader). Save this as `./hiboss.repair.v2.json` and fill placeholders:
+- Canonical repair template for single-agent Telegram setups (speaker only, missing leader). Save this as `./hiboss.repair.v3.json`, fill placeholders, and copy to `${HIBOSS_DIR:-$HOME/hiboss}/settings.json`:
 
 ```json
 {
-  "version": 2,
-  "boss-name": "<your-name>",
-  "boss-timezone": "<IANA-timezone>",
+  "version": 3,
+  "boss": {
+    "name": "<your-name>",
+    "timezone": "<IANA-timezone>",
+    "token": "<boss-token>"
+  },
   "telegram": {
-    "adapter-boss-id": "<telegram-username-without-@>"
+    "boss-ids": ["<telegram-username-without-@>"]
+  },
+  "permission-policy": {
+    "version": 1,
+    "operations": {
+      "envelope.send": "restricted",
+      "agent.register": "boss"
+    }
   },
   "agents": [
     {
       "name": "nex",
+      "token": "<speaker-agent-token>",
       "role": "speaker",
       "provider": "<claude-or-codex>",
       "description": "Telegram speaker agent",
@@ -116,6 +124,7 @@ hiboss daemon start --token <boss-token>
     },
     {
       "name": "kai",
+      "token": "<leader-agent-token>",
       "role": "leader",
       "provider": "<claude-or-codex>",
       "description": "Background leader agent",
@@ -131,12 +140,9 @@ hiboss daemon start --token <boss-token>
 
 ```bash
 hiboss daemon stop --token <boss-token>
-hiboss setup --config-file ./hiboss.repair.v2.json --token <boss-token> --dry-run
-hiboss setup --config-file ./hiboss.repair.v2.json --token <boss-token>
+cp ./hiboss.repair.v3.json "${HIBOSS_DIR:-$HOME/hiboss}/settings.json"
 hiboss daemon start --token <boss-token>
 ```
-
-Note: setup config apply is a full reconcile and will regenerate agent tokens (printed once).
 
 Full reset (destructive):
 
