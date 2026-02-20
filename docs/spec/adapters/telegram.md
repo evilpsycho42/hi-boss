@@ -7,6 +7,7 @@ Key files:
 - `src/adapters/telegram/incoming.ts` (Telegram → `ChannelMessage`)
 - `src/adapters/telegram/outgoing.ts` (envelope → Telegram API calls)
 - `src/daemon/bridges/channel-bridge.ts` (channel message/command → envelope)
+- `src/daemon/telegram-typing.ts` (run lifecycle → Telegram typing heartbeat)
 
 ## Flow
 
@@ -48,6 +49,7 @@ Outgoing:
 - Captions: limited to 1024 chars. If attachments are present and text exceeds the caption limit, Hi-Boss sends the text as a separate message and sends attachments without a caption. (`src/adapters/telegram/shared.ts`, `src/adapters/telegram/outgoing.ts`)
 - Albums: when sending 2+ compatible attachments, Hi-Boss prefers `sendMediaGroup` so Telegram renders an album. (`src/adapters/telegram/outgoing.ts`)
 - Uploaded filenames: when uploading local files, Hi-Boss sets the Telegram upload filename (prefers `attachment.filename`, else local basename). (`src/adapters/telegram/outgoing.ts`)
+- Agent run presence: when a run is actively executing for a Telegram-origin envelope, Hi-Boss keeps Telegram `typing` chat-action active and stops it when the run leaves `running` (success, failed, or cancelled). (`src/agent/executor.ts`, `src/daemon/telegram-typing.ts`, `src/adapters/telegram.adapter.ts`)
 
 ## Address format
 

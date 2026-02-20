@@ -23,6 +23,10 @@ import {
 
 /** Milliseconds to wait for additional album parts before flushing. */
 const MEDIA_GROUP_DEBOUNCE_MS = 500;
+/** Telegram typing status expires quickly; refresh every few seconds while active. */
+const TELEGRAM_TYPING_HEARTBEAT_MS = 4500;
+/** Prevent noisy logs if chat action repeatedly fails (e.g., chat blocked). */
+const TELEGRAM_TYPING_ERROR_THROTTLE_MS = 60_000;
 
 /**
  * Telegram adapter for the chat bot.
@@ -45,6 +49,12 @@ export class TelegramAdapter implements ChatAdapter {
   private mediaGroupBuffer = new Map<string, ChannelMessage[]>();
   /** Debounce timers keyed by media_group_id. */
   private mediaGroupTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Active typing heartbeat timers keyed by chat id. */
+  private typingTimers = new Map<string, ReturnType<typeof setInterval>>();
+  /** Guards against overlapping chat-action calls per chat id. */
+  private typingInFlight = new Set<string>();
+  /** Last warning timestamp for chat-action failures per chat id. */
+  private typingLastErrorAtMs = new Map<string, number>();
 
   constructor(token: string) {
     const apiRoot = process.env.TELEGRAM_API_ROOT;
@@ -219,6 +229,49 @@ export class TelegramAdapter implements ChatAdapter {
     });
   }
 
+  async setTyping(chatId: string, active: boolean): Promise<void> {
+    if (!chatId.trim()) return;
+
+    if (!active) {
+      const timer = this.typingTimers.get(chatId);
+      if (timer) clearInterval(timer);
+      this.typingTimers.delete(chatId);
+      this.typingInFlight.delete(chatId);
+      return;
+    }
+
+    if (this.typingTimers.has(chatId)) {
+      return;
+    }
+
+    await this.sendTypingHeartbeat(chatId);
+
+    const timer = setInterval(() => {
+      void this.sendTypingHeartbeat(chatId);
+    }, TELEGRAM_TYPING_HEARTBEAT_MS);
+
+    this.typingTimers.set(chatId, timer);
+  }
+
+  private async sendTypingHeartbeat(chatId: string): Promise<void> {
+    if (this.stopped || !this.started) return;
+    if (this.typingInFlight.has(chatId)) return;
+
+    this.typingInFlight.add(chatId);
+    try {
+      await this.bot.telegram.sendChatAction(chatId, "typing");
+    } catch (err) {
+      const nowMs = Date.now();
+      const lastMs = this.typingLastErrorAtMs.get(chatId) ?? 0;
+      if (nowMs - lastMs >= TELEGRAM_TYPING_ERROR_THROTTLE_MS) {
+        this.typingLastErrorAtMs.set(chatId, nowMs);
+        console.warn(`[${this.platform}] Failed to send typing action for chat ${chatId}:`, err);
+      }
+    } finally {
+      this.typingInFlight.delete(chatId);
+    }
+  }
+
   private async registerCommands(): Promise<void> {
     const commands = [
       { command: "new", description: "Start a new session" },
@@ -284,6 +337,10 @@ export class TelegramAdapter implements ChatAdapter {
     for (const timer of this.mediaGroupTimers.values()) clearTimeout(timer);
     this.mediaGroupTimers.clear();
     this.mediaGroupBuffer.clear();
+    for (const timer of this.typingTimers.values()) clearInterval(timer);
+    this.typingTimers.clear();
+    this.typingInFlight.clear();
+    this.typingLastErrorAtMs.clear();
     this.bot.stop();
     console.log(`[${this.platform}] Bot stopped`);
   }

@@ -159,6 +159,11 @@ export interface ChatAdapter {
   onMessage(handler: ChannelMessageHandler): void;
   onCommand?(handler: ChannelCommandHandler): void;
   setReaction?(chatId: string, messageId: string, emoji: string): Promise<void>;
+  /**
+   * Toggle chat "typing…" presence when supported by the adapter.
+   * Best-effort: adapters may ignore this if the platform lacks such concept.
+   */
+  setTyping?(chatId: string, active: boolean): Promise<void>;
   start(): Promise<void>;
   stop(): Promise<void>;
 }

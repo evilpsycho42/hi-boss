@@ -4,6 +4,7 @@
 import type { ChildProcess } from "node:child_process";
 import type { Agent } from "./types.js";
 import type { HiBossDatabase } from "../daemon/db/database.js";
+import type { Envelope } from "../envelope/types.js";
 import { getHiBossDir } from "./home-setup.js";
 import { buildTurnInput } from "./turn-input.js";
 import {
@@ -40,6 +41,24 @@ type InFlightAgentRun = {
   abortReason?: string;
 };
 
+type RunCompletionState = "success" | "failed" | "cancelled";
+
+type AgentRunStartedHook = (params: {
+  agentName: string;
+  runId: string;
+  envelopes: Envelope[];
+  db: HiBossDatabase;
+}) => void | Promise<void>;
+
+type AgentRunFinishedHook = (params: {
+  agentName: string;
+  runId: string;
+  envelopes: Envelope[];
+  db: HiBossDatabase;
+  state: RunCompletionState;
+  error?: string;
+}) => void | Promise<void>;
+
 /**
  * Agent executor manages agent sessions and runs.
  */
@@ -52,6 +71,8 @@ export class AgentExecutor {
   private hibossDir: string;
   private conversationHistory: ConversationHistory | null;
   private onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
+  private onRunStarted?: AgentRunStartedHook;
+  private onRunFinished?: AgentRunFinishedHook;
 
   constructor(
     options: {
@@ -59,12 +80,16 @@ export class AgentExecutor {
       hibossDir?: string;
       conversationHistory?: ConversationHistory;
       onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
+      onRunStarted?: AgentRunStartedHook;
+      onRunFinished?: AgentRunFinishedHook;
     } = {}
   ) {
     this.db = options.db ?? null;
     this.hibossDir = options.hibossDir ?? getHiBossDir();
     this.conversationHistory = options.conversationHistory ?? null;
     this.onEnvelopesDone = options.onEnvelopesDone;
+    this.onRunStarted = options.onRunStarted;
+    this.onRunFinished = options.onRunFinished;
   }
 
   /**
@@ -216,6 +241,9 @@ export class AgentExecutor {
     const run = db.createAgentRun(agent.name, envelopeIds);
     const triggerFields = getTriggerFields(trigger);
     let runStartedAtMs: number | null = null;
+    let runLifecycleStarted = false;
+    let completionState: RunCompletionState | null = null;
+    let completionError: string | undefined;
 
     const inFlight: InFlightAgentRun = {
       runRecordId: run.id,
@@ -260,6 +288,24 @@ export class AgentExecutor {
         ...triggerFields,
       });
       runStartedAtMs = Date.now();
+      runLifecycleStarted = true;
+
+      if (this.onRunStarted) {
+        try {
+          await this.onRunStarted({
+            agentName: agent.name,
+            runId: run.id,
+            envelopes,
+            db,
+          });
+        } catch (err) {
+          logEvent("warn", "agent-run-start-hook-failed", {
+            "agent-name": agent.name,
+            "agent-run-id": run.id,
+            error: errorMessage(err),
+          });
+        }
+      }
 
       // Execute the turn via CLI
       const turn = await executeCliTurn(session, turnInput, {
@@ -282,6 +328,8 @@ export class AgentExecutor {
           "context-length": null,
           reason,
         });
+        completionState = "cancelled";
+        completionError = reason;
         return envelopeIds.length;
       }
 
@@ -346,6 +394,7 @@ export class AgentExecutor {
           `max-context-length:${turn.usage.contextLength}>${policy.maxContextLength}`
         );
       }
+      completionState = "success";
       return envelopeIds.length;
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
@@ -358,11 +407,32 @@ export class AgentExecutor {
         "context-length": null,
         error: errMsg,
       });
+      completionState = "failed";
+      completionError = errMsg;
       throw error;
     } finally {
       const existing = this.inFlightRuns.get(agent.name);
       if (existing && existing.runRecordId === run.id) {
         this.inFlightRuns.delete(agent.name);
+      }
+
+      if (runLifecycleStarted && completionState && this.onRunFinished) {
+        try {
+          await this.onRunFinished({
+            agentName: agent.name,
+            runId: run.id,
+            envelopes,
+            db,
+            state: completionState,
+            ...(completionError ? { error: completionError } : {}),
+          });
+        } catch (err) {
+          logEvent("warn", "agent-run-finish-hook-failed", {
+            "agent-name": agent.name,
+            "agent-run-id": run.id,
+            error: errorMessage(err),
+          });
+        }
       }
     }
   }
@@ -489,6 +559,8 @@ export function createAgentExecutor(options?: {
   hibossDir?: string;
   conversationHistory?: ConversationHistory;
   onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
+  onRunStarted?: AgentRunStartedHook;
+  onRunFinished?: AgentRunFinishedHook;
 }): AgentExecutor {
   return new AgentExecutor(options);
 }

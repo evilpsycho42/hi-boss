@@ -88,6 +88,35 @@ hiboss daemon start --token <boss-token>
 hiboss agent register --token <boss-token> --name nex --description "AI assistant" --workspace "$PWD"
 ```
 
+## Remote apply workflow (synced server)
+
+Use this flow when code is already synced to the server and you only need to apply runtime changes.
+
+Pre-check:
+- Confirm remote repo path exists: `/root/hiboss/agents/Shieru/workspace/hi-boss-dev`
+- Confirm daemon manager and process name: `pm2` / `hiboss-daemon`
+- Confirm changed source files are present on remote (`git status --short`)
+
+Apply on server:
+```bash
+cd /root/hiboss/agents/Shieru/workspace/hi-boss-dev
+npm run build && npm link
+pm2 restart hiboss-daemon
+pm2 describe hiboss-daemon
+pm2 logs hiboss-daemon --lines 80 --nostream
+```
+
+Rollback / recovery (quick):
+```bash
+cd /root/hiboss/agents/Shieru/workspace/hi-boss-dev
+pm2 logs hiboss-daemon --lines 200 --nostream
+pm2 restart hiboss-daemon
+```
+
+Credentials policy:
+- Read server credentials from local private knowledge files (for Shieru: `agents/Shieru/internal_space/knowledge/credentials.md`).
+- Never copy passwords/tokens/keys into repo files, specs, plans, commits, or PR comments.
+
 Useful checks (run when relevant):
 - `npm run typecheck`
 - `npm run prompts:check`

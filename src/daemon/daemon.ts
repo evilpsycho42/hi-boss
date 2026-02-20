@@ -51,6 +51,7 @@ import {
   hasSpeakerBindingIntegrityViolations,
   toSpeakerBindingIntegrityView,
 } from "../shared/speaker-binding-invariant.js";
+import { TelegramTypingManager } from "./telegram-typing.js";
 
 // Re-export for CLI and external use
 export { isDaemonRunning, isSocketAcceptingConnections };
@@ -109,6 +110,7 @@ export class Daemon {
   private cronScheduler: CronScheduler | null = null;
   private conversationHistory: ConversationHistory;
   private adapters: Map<string, ChatAdapter> = new Map(); // token -> adapter
+  private telegramTypingManager: TelegramTypingManager;
   private running = false;
   private startTimeMs: number | null = null;
   private pidLock: PidLock;
@@ -132,12 +134,19 @@ export class Daemon {
       onEnvelopeDone: (envelope) => this.cronScheduler?.onEnvelopeDone(envelope),
     });
     this.bridge = new ChannelBridge(this.router, this.db, config);
+    this.telegramTypingManager = new TelegramTypingManager(this.db, this.adapters);
     this.executor = createAgentExecutor({
       db: this.db,
       hibossDir: config.dataDir,
       conversationHistory: this.conversationHistory,
       onEnvelopesDone: (envelopeIds) => {
         this.cronScheduler?.onEnvelopesDone(envelopeIds);
+      },
+      onRunStarted: ({ runId, agentName, envelopes }) => {
+        return this.telegramTypingManager.onRunStarted({ runId, agentName, envelopes });
+      },
+      onRunFinished: ({ runId }) => {
+        return this.telegramTypingManager.onRunFinished({ runId });
       },
     });
     this.backgroundExecutor = createBackgroundExecutor({ db: this.db, router: this.router });
