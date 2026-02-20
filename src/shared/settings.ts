@@ -281,6 +281,28 @@ function parseAgent(raw: unknown, index: number): SettingsAgentV3 {
 }
 
 export function assertValidSettingsV3(settings: SettingsV3): void {
+  if (!Array.isArray(settings.telegram.bossIds) || settings.telegram.bossIds.length < 1) {
+    fail("telegram.boss-ids", "must contain at least one boss id");
+  }
+  const bossIds = settings.telegram.bossIds.map((value, index) => {
+    if (typeof value !== "string") {
+      fail(`telegram.boss-ids[${index}]`, "must be a string");
+    }
+    const normalized = normalizeBossId(value);
+    if (!normalized) {
+      fail(`telegram.boss-ids[${index}]`, "must not be empty");
+    }
+    return normalized;
+  });
+  const bossIdSet = new Set<string>();
+  for (const bossId of bossIds) {
+    const lowered = bossId.toLowerCase();
+    if (bossIdSet.has(lowered)) {
+      fail("telegram.boss-ids", `duplicate boss id '${bossId}'`);
+    }
+    bossIdSet.add(lowered);
+  }
+
   const byName = new Set<string>();
   const byToken = new Set<string>();
   const bindingIdentity = new Set<string>();

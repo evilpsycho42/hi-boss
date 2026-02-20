@@ -2,6 +2,7 @@
  * Hi-Boss daemon - manages agents, messages, and platform integrations.
  */
 
+import * as fs from "node:fs";
 import * as path from "path";
 import { HiBossDatabase } from "./db/database.js";
 import { IpcServer } from "./ipc/server.js";
@@ -53,6 +54,7 @@ import {
 } from "../shared/speaker-binding-invariant.js";
 import { TelegramTypingManager } from "./telegram-typing.js";
 import { resolveUiLocale } from "../shared/ui-locale.js";
+import { getSettingsPath } from "../shared/settings.js";
 import { loadSettingsOrThrow, syncSettingsToDb } from "./settings-sync.js";
 
 // Re-export for CLI and external use
@@ -253,8 +255,24 @@ export class Daemon {
       }
 
       // Canonical startup path: load settings.json and mirror into DB runtime cache.
-      const settings = loadSettingsOrThrow(this.config.dataDir);
-      syncSettingsToDb(this.db, settings);
+      // Compatibility path: pre-v3 installs may have DB state without settings.json.
+      const settingsPath = getSettingsPath(this.config.dataDir);
+      if (fs.existsSync(settingsPath)) {
+        const settings = loadSettingsOrThrow(this.config.dataDir);
+        syncSettingsToDb(this.db, settings);
+      } else if (!this.db.isSetupComplete()) {
+        throw new Error(
+          [
+            `Failed to load settings.json: Settings file not found: ${settingsPath}`,
+            "Run `hiboss setup` to generate settings, then restart the daemon.",
+          ].join("\n")
+        );
+      } else {
+        logEvent("warn", "daemon-settings-file-missing-legacy-cache", {
+          "settings-path": settingsPath,
+        });
+      }
+
       this.conversationHistory.setTimezone(this.db.getBossTimezone());
 
       // All displayed timestamps (including daemon logs) use the boss timezone.

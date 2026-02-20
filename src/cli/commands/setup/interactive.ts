@@ -31,21 +31,27 @@ export async function runInteractiveSetup(): Promise<void> {
     process.exit(1);
   }
 
-  if (setupStatus.ready) {
+  if (setupStatus.ready && setupStatus.hasSettingsFile) {
     console.log("✅ Setup is already complete!");
     console.log("\nTo start over: hiboss daemon stop && rm -rf ~/hiboss && hiboss setup\n");
     console.log("(Advanced: override the Hi-Boss dir with HIBOSS_DIR.)\n");
     return;
   }
 
+  if (!setupStatus.hasSettingsFile && (setupStatus.completed || setupStatus.agents.length > 0)) {
+    console.log("⚠️ settings.json is missing; entering recovery setup to regenerate canonical config.\n");
+  }
+  const hibossDirForDisplay = (process.env.HIBOSS_DIR ?? "").trim() || "~/hiboss";
+
   const hasPersistedState =
-    setupStatus.completed ||
-    setupStatus.agents.length > 0 ||
-    Object.values(setupStatus.userInfo.missing).some((v) => !v);
+    setupStatus.hasSettingsFile &&
+    (setupStatus.completed ||
+      setupStatus.agents.length > 0 ||
+      Object.values(setupStatus.userInfo.missing).some((v) => !v));
 
   if (hasPersistedState) {
     console.error("\n❌ Interactive setup only supports first-time bootstrap on a clean state.\n");
-    console.error("Edit ~/hiboss/settings.json directly, then restart the daemon.\n");
+    console.error(`Edit ${hibossDirForDisplay}/settings.json directly, then restart the daemon.\n`);
     process.exit(1);
   }
 
@@ -90,6 +96,15 @@ export async function runInteractiveSetup(): Promise<void> {
   if (adapterBossIds.length < 1) {
     console.error("\n❌ At least one Telegram username is required.\n");
     process.exit(1);
+  }
+  const uniqueBossIds = new Set<string>();
+  for (const bossId of adapterBossIds) {
+    const key = bossId.toLowerCase();
+    if (uniqueBossIds.has(key)) {
+      console.error(`\n❌ Duplicate Telegram username: ${bossId}\n`);
+      process.exit(1);
+    }
+    uniqueBossIds.add(key);
   }
 
   console.log("\n🔐 Boss Token\n");

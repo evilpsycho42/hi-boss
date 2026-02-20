@@ -15,7 +15,7 @@ import {
 import { generateToken } from "../../../agent/auth.js";
 import { DEFAULT_PERMISSION_POLICY } from "../../../shared/defaults.js";
 import type { SettingsV3 } from "../../../shared/settings.js";
-import { writeSettingsFileAtomic } from "../../../shared/settings.js";
+import { getSettingsPath, writeSettingsFileAtomic } from "../../../shared/settings.js";
 import { syncSettingsToDb } from "../../../daemon/settings-sync.js";
 
 export interface SetupUserInfoStatus {
@@ -34,6 +34,7 @@ export interface SetupUserInfoStatus {
 export interface SetupStatus {
   completed: boolean;
   ready: boolean;
+  hasSettingsFile: boolean;
   roleCounts: {
     speaker: number;
     leader: number;
@@ -93,6 +94,7 @@ function buildEmptySetupStatus(): SetupStatus {
   return {
     completed: false,
     ready: false,
+    hasSettingsFile: false,
     roleCounts: { speaker: 0, leader: 0 },
     missingRoles: ["speaker", "leader"],
     agents: [],
@@ -113,6 +115,8 @@ function buildEmptySetupStatus(): SetupStatus {
 }
 
 function buildSetupStatusFromDb(db: HiBossDatabase): SetupStatus {
+  const daemonConfig = getDefaultConfig();
+  const hasSettingsFile = fs.existsSync(getSettingsPath(daemonConfig.dataDir));
   const completed = db.isSetupComplete();
   const agents = db.listAgents();
   const bindings = db.listBindings();
@@ -127,6 +131,7 @@ function buildSetupStatusFromDb(db: HiBossDatabase): SetupStatus {
   const userInfo = buildUserInfoStatus(db);
   const hasMissingUserInfo = Object.values(userInfo.missing).some(Boolean);
   const ready =
+    hasSettingsFile &&
     completed &&
     missingRoles.length === 0 &&
     !hasMissingUserInfo &&
@@ -135,6 +140,7 @@ function buildSetupStatusFromDb(db: HiBossDatabase): SetupStatus {
   return {
     completed,
     ready,
+    hasSettingsFile,
     roleCounts,
     missingRoles,
     agents: agents.map((agent) => ({
@@ -152,6 +158,8 @@ function buildSetupStatusFromDb(db: HiBossDatabase): SetupStatus {
  * Check setup health (tries IPC first, falls back to direct DB).
  */
 export async function checkSetupStatus(): Promise<SetupStatus> {
+  const daemonConfig = getDefaultConfig();
+  const hasSettingsFile = fs.existsSync(getSettingsPath(daemonConfig.dataDir));
   try {
     const client = new IpcClient(getSocketPath());
     const result = await client.call<SetupCheckResult>("setup.check");
@@ -168,12 +176,14 @@ export async function checkSetupStatus(): Promise<SetupStatus> {
     return {
       completed: result.completed,
       ready:
-        typeof result.ready === "boolean"
+        hasSettingsFile &&
+        (typeof result.ready === "boolean"
           ? result.ready
           : result.completed &&
             missingRoles.length === 0 &&
             !hasMissingUserInfo &&
-            !hasIntegrityViolations(integrity),
+            !hasIntegrityViolations(integrity)),
+      hasSettingsFile,
       roleCounts,
       missingRoles,
       agents: result.agents ?? [],
@@ -185,7 +195,6 @@ export async function checkSetupStatus(): Promise<SetupStatus> {
       throw new Error(`Failed to check setup via daemon: ${(err as Error).message}`);
     }
 
-    const daemonConfig = getDefaultConfig();
     if (!fs.existsSync(daemonConfig.daemonDir)) {
       return buildEmptySetupStatus();
     }
@@ -232,13 +241,15 @@ export async function executeSetup(config: SetupConfig): Promise<{ speakerAgentT
 
 async function executeSetupDirect(config: SetupConfig): Promise<{ speakerAgentToken: string; leaderAgentToken: string }> {
   const daemonConfig = getDefaultConfig();
+  const settingsPath = getSettingsPath(daemonConfig.dataDir);
+  const hasSettingsFile = fs.existsSync(settingsPath);
   fs.mkdirSync(daemonConfig.dataDir, { recursive: true });
   fs.mkdirSync(daemonConfig.daemonDir, { recursive: true });
 
   const dbPath = path.join(daemonConfig.daemonDir, "hiboss.db");
   const db = new HiBossDatabase(dbPath);
   try {
-    if (db.isSetupComplete()) {
+    if (db.isSetupComplete() && hasSettingsFile) {
       throw new Error("Setup already completed");
     }
 

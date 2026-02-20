@@ -29,6 +29,7 @@ rm -rf ~/hiboss
 3) Copy one template to your Hi-Boss settings file and fill placeholders:
 
 ```bash
+mkdir -p ~/hiboss
 cp scripts/test-provider-runtime/setup-default.codex.gpt-5.2.json ~/hiboss/settings.json
 # or:
 cp scripts/test-provider-runtime/setup-default.claude.sonnet.json ~/hiboss/settings.json
@@ -42,7 +43,7 @@ hiboss daemon start --token "<boss-token>"
 
 Notes:
 - The setup templates include a placeholder Telegram bot token. For envelope-only tests it’s OK to leave it as-is (Telegram will fail to launch but the daemon keeps running). If you want Telegram I/O, replace it with a real bot token.
-- The setup templates are `settings.json` schema `version: 3` and include placeholder boss/agent tokens that must be replaced.
+- The setup templates are `settings.json` schema `version: 3` and include placeholder boss/agent tokens (`REPLACE_ME_*`) and workspace paths (`REPLACE_ME_WORKSPACE_PATH`) that must be replaced.
 
 ## Optional: test both providers in one run
 
@@ -53,10 +54,10 @@ If you want to validate **both** providers (Codex + Claude) against the Hi-Boss 
 
 ```bash
 # register Codex
-hiboss agent register --token "<boss-token>" --name test-codex --provider codex --model gpt-5.2 --reasoning-effort medium --permission-level standard --workspace "/Users/kky/Dev/hi-boss.test-provider-runtime"
+hiboss agent register --token "<boss-token>" --name test-codex --provider codex --model gpt-5.2 --reasoning-effort medium --permission-level standard --workspace "/absolute/workspace/path"
 
 # register Claude
-hiboss agent register --token "<boss-token>" --name test-claude --provider claude --model sonnet --reasoning-effort medium --permission-level standard --workspace "/Users/kky/Dev/hi-boss.test-provider-runtime"
+hiboss agent register --token "<boss-token>" --name test-claude --provider claude --model sonnet --reasoning-effort medium --permission-level standard --workspace "/absolute/workspace/path"
 ```
 
 Save the printed `token:` values — there is no “show token” command.

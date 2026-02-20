@@ -39,7 +39,7 @@ Validation and fail-fast checks:
 - On startup, daemon backfills missing/invalid `metadata.role` for legacy agents using bindings (`>=1` binding => speaker, none => leader), then persists it.
 - If role coverage/integrity is missing, daemon start fails with concise CLI guidance:
   - `Daemon start blocked: setup is incomplete.`
-  - `1. open ~/hiboss/settings.json`
+  - `1. open {{HIBOSS_DIR}}/settings.json`
   - `2. ensure at least one speaker and one leader exist`
   - `3. ensure every speaker has at least one binding`
   - `4. restart daemon: hiboss daemon start`
