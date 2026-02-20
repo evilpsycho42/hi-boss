@@ -70,6 +70,7 @@ export class TelegramAdapter implements ChatAdapter {
       args: TelegramAdapter.extractCommandArgs(rawText, commandName),
       chatId,
       authorUsername: username,
+      messageId: ctx.message?.message_id != null ? String(ctx.message.message_id) : undefined,
     };
 
     let response: MessageContent | undefined;
@@ -108,6 +109,14 @@ export class TelegramAdapter implements ChatAdapter {
 
     this.bot.command("abort", async (ctx) => {
       await this.dispatchCommand(ctx, "abort");
+    });
+
+    this.bot.command("isolated", async (ctx) => {
+      await this.dispatchCommand(ctx, "isolated");
+    });
+
+    this.bot.command("clone", async (ctx) => {
+      await this.dispatchCommand(ctx, "clone");
     });
 
     this.bot.on("text", (ctx) => this.handleMessage(ctx as unknown as MessageContext));
@@ -210,6 +219,22 @@ export class TelegramAdapter implements ChatAdapter {
     });
   }
 
+  private async registerCommands(): Promise<void> {
+    const commands = [
+      { command: "new", description: "Start a new session" },
+      { command: "status", description: "Show agent status" },
+      { command: "abort", description: "Abort current run and clear message queue" },
+      { command: "isolated", description: "One-shot with clean context" },
+      { command: "clone", description: "One-shot with current session context" },
+    ];
+    try {
+      await this.bot.telegram.setMyCommands(commands);
+      console.log(`[${this.platform}] Commands registered (${commands.length})`);
+    } catch (err) {
+      console.error(`[${this.platform}] Failed to register commands:`, err);
+    }
+  }
+
   async start(): Promise<void> {
     if (this.started) {
       return; // Already started, ignore duplicate calls
@@ -217,6 +242,9 @@ export class TelegramAdapter implements ChatAdapter {
     this.started = true;
     this.stopped = false;
     console.log(`[${this.platform}] Bot starting...`);
+
+    // Register commands with Telegram so they appear in the / menu.
+    await this.registerCommands();
 
     // Fire-and-forget: launch() only resolves when the bot stops,
     // so we run the retry loop in the background.

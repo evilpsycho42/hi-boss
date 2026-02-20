@@ -1,6 +1,29 @@
 import type { Address } from "../adapters/types.js";
 import type { EnvelopeAttachment, EnvelopeStatus } from "../envelope/types.js";
 
+/**
+ * Cron execution mode.
+ *
+ * - `"isolated"`: One-shot with fresh session context (default).
+ * - `"clone"`:    One-shot with cloned current session context.
+ * - `"inline"`:   Enter the main session queue (legacy behavior, NOT one-shot).
+ */
+export type CronExecutionMode = "isolated" | "clone" | "inline";
+
+const VALID_EXECUTION_MODES: ReadonlySet<string> = new Set(["isolated", "clone", "inline"]);
+
+/**
+ * Extract execution mode from schedule metadata, defaulting to "isolated".
+ */
+export function getCronExecutionMode(metadata?: Record<string, unknown>): CronExecutionMode {
+  if (!metadata) return "isolated";
+  const raw = metadata.executionMode;
+  if (typeof raw === "string" && VALID_EXECUTION_MODES.has(raw)) {
+    return raw as CronExecutionMode;
+  }
+  return "isolated";
+}
+
 export interface CronSchedule {
   id: string;
   agentName: string; // owner/sender agent

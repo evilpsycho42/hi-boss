@@ -1,6 +1,14 @@
 import type { Address } from "../adapters/types.js";
 
 /**
+ * One-shot execution mode for envelopes.
+ *
+ * - `"clone"`:    Clone current session context, execute once, discard clone.
+ * - `"isolated"`: Fresh session with full agent identity, no history.
+ */
+export type OneshotType = "clone" | "isolated";
+
+/**
  * Attachment format for envelopes.
  */
 export interface EnvelopeAttachment {

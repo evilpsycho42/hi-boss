@@ -130,6 +130,7 @@ export interface ChannelCommand {
   args: string;              // Arguments after command
   chatId: string;            // Chat ID where command was issued
   authorUsername?: string;   // Username of command issuer
+  messageId?: string;        // Platform message ID of the command message
 }
 
 export type MessageContent = ChannelMessage["content"];
