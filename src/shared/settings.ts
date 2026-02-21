@@ -1,6 +1,5 @@
 import * as path from "node:path";
 
-import { hashToken } from "../agent/auth.js";
 import { BACKGROUND_AGENT_NAME, DEFAULT_PERMISSION_POLICY, DEFAULT_SETUP_PERMISSION_LEVEL } from "./defaults.js";
 import { isPermissionLevel, parsePermissionPolicyV1FromObject } from "./permissions.js";
 import { parseDailyResetAt, parseDurationToMs } from "./session-policy.js";
@@ -13,6 +12,8 @@ export const SETTINGS_FILE_MODE = 0o600 as const;
 
 export type SettingsProvider = "claude" | "codex";
 export type SettingsReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
+const AGENT_TOKEN_REGEX = /^[0-9a-f]{32}$/;
+const MIN_ADMIN_TOKEN_LENGTH = 16;
 
 export interface SettingsBindingV4 {
   adapterType: string;
@@ -202,6 +203,9 @@ function parseAgent(raw: unknown, index: number): SettingsAgentV4 {
   if (!token) {
     fail(`agents[${index}].token`, "is required");
   }
+  if (!AGENT_TOKEN_REGEX.test(token)) {
+    fail(`agents[${index}].token`, "must be 32 lowercase hex characters");
+  }
 
   const role = raw.role;
   if (role !== "speaker" && role !== "leader") {
@@ -288,6 +292,9 @@ function parseAgent(raw: unknown, index: number): SettingsAgentV4 {
 }
 
 export function assertValidSettingsV4(settings: SettingsV4): void {
+  if (settings.admin.token.trim().length < MIN_ADMIN_TOKEN_LENGTH) {
+    fail("admin.token", `must be at least ${MIN_ADMIN_TOKEN_LENGTH} characters`);
+  }
   validateBossIds(settings.telegram.bossIds);
 
   const byName = new Set<string>();
@@ -306,6 +313,9 @@ export function assertValidSettingsV4(settings: SettingsV4): void {
 
     if (byToken.has(agent.token)) {
       fail("agents", `duplicate agent token for '${agent.name}'`);
+    }
+    if (!AGENT_TOKEN_REGEX.test(agent.token)) {
+      fail(`agents[${agent.name}]`, "token must be 32 lowercase hex characters");
     }
     byToken.add(agent.token);
 
@@ -363,8 +373,8 @@ export function parseSettingsV4Json(json: string): SettingsV4 {
     fail("admin", "must be an object");
   }
   const adminToken = typeof adminRaw.token === "string" ? adminRaw.token.trim() : "";
-  if (adminToken.length < 4) {
-    fail("admin.token", "must be at least 4 characters");
+  if (adminToken.length < MIN_ADMIN_TOKEN_LENGTH) {
+    fail("admin.token", `must be at least ${MIN_ADMIN_TOKEN_LENGTH} characters`);
   }
 
   const telegramRaw = raw.telegram;
@@ -448,8 +458,4 @@ export function stringifySettingsV4(settings: SettingsV4): string {
 
 export function normalizeBossIds(ids: string[]): string[] {
   return ids.map(normalizeBossId).filter((value) => value.length > 0);
-}
-
-export function toAdminTokenHash(settings: SettingsV4): string {
-  return hashToken(settings.admin.token);
 }

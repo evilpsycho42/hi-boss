@@ -109,13 +109,13 @@ export async function runInteractiveSetup(): Promise<void> {
 
   console.log("\n🔐 Admin Token\n");
   console.log("The admin token identifies you for administrative tasks.");
-  console.log("Choose something short you'll remember.\n");
+  console.log("Choose something strong you'll remember.\n");
 
   let adminToken: string;
   while (true) {
     adminToken = await password({
       message: "Enter your admin token:",
-      validate: (value) => (value.length < 4 ? "Admin token must be at least 4 characters" : true),
+      validate: (value) => (value.length < 16 ? "Admin token must be at least 16 characters" : true),
     });
 
     const confirmToken = await password({ message: "Confirm admin token:" });

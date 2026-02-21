@@ -374,12 +374,39 @@ export class HiBossDatabase {
           metadata ? JSON.stringify(metadata) : null
         );
 
-        this.db.prepare("DELETE FROM agent_bindings WHERE agent_name = ?").run(agent.name);
-        for (const binding of agent.bindings) {
-          this.db.prepare(`
-            INSERT INTO agent_bindings (id, agent_name, adapter_type, adapter_token, created_at)
-            VALUES (?, ?, ?, ?, ?)
-          `).run(generateUUID(), agent.name, binding.adapterType, binding.adapterToken, now);
+        const currentBindings = this.getBindingsByAgentName(agent.name);
+        const currentByType = new Map(currentBindings.map((binding) => [binding.adapterType, binding]));
+        const desiredByType = new Map(agent.bindings.map((binding) => [binding.adapterType, binding]));
+        const bindingsUnchanged =
+          currentByType.size === desiredByType.size &&
+          Array.from(desiredByType.entries()).every(
+            ([adapterType, binding]) => currentByType.get(adapterType)?.adapterToken === binding.adapterToken
+          );
+
+        if (!bindingsUnchanged) {
+          for (const [adapterType] of currentByType) {
+            if (desiredByType.has(adapterType)) continue;
+            this.db.prepare("DELETE FROM agent_bindings WHERE agent_name = ? AND adapter_type = ?").run(
+              agent.name,
+              adapterType
+            );
+          }
+
+          for (const desiredBinding of agent.bindings) {
+            const currentBinding = currentByType.get(desiredBinding.adapterType);
+            if (!currentBinding) {
+              this.db.prepare(`
+                INSERT INTO agent_bindings (id, agent_name, adapter_type, adapter_token, created_at)
+                VALUES (?, ?, ?, ?, ?)
+              `).run(generateUUID(), agent.name, desiredBinding.adapterType, desiredBinding.adapterToken, now);
+              continue;
+            }
+            if (currentBinding.adapterToken !== desiredBinding.adapterToken) {
+              this.db.prepare(
+                "UPDATE agent_bindings SET adapter_token = ? WHERE agent_name = ? AND adapter_type = ?"
+              ).run(desiredBinding.adapterToken, agent.name, desiredBinding.adapterType);
+            }
+          }
         }
       }
 
