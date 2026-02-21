@@ -113,13 +113,20 @@ export async function runInteractiveSetup(): Promise<void> {
 
   let adminToken: string;
   while (true) {
-    adminToken = await password({
+    const enteredAdminToken = await password({
       message: "Enter your admin token:",
-      validate: (value) => (value.length < 16 ? "Admin token must be at least 16 characters" : true),
+      validate: (value) =>
+        value.trim().length < 16
+          ? "Admin token must be at least 16 characters (excluding leading/trailing whitespace)"
+          : true,
     });
+    const normalizedAdminToken = enteredAdminToken.trim();
 
-    const confirmToken = await password({ message: "Confirm admin token:" });
-    if (adminToken === confirmToken) break;
+    const confirmToken = (await password({ message: "Confirm admin token:" })).trim();
+    if (normalizedAdminToken === confirmToken) {
+      adminToken = normalizedAdminToken;
+      break;
+    }
     console.error("\n❌ Tokens do not match. Please try again.\n");
   }
 
