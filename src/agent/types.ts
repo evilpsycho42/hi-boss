@@ -5,7 +5,7 @@ import type { AgentRole } from "../shared/agent-role.js";
 /**
  * Agent permission level.
  *
- * Note: `permissionLevel: "boss"` grants boss-equivalent authorization but does
+ * Note: `permissionLevel: "admin"` grants admin-equivalent authorization but does
  * not make the agent the boss identity (no `[boss]` markers; no `fromBoss: true`).
  */
 export type AgentPermissionLevel = PermissionLevel;

@@ -6,21 +6,15 @@ import type { Agent } from "../../agent/types.js";
 import { isValidAgentName, AGENT_NAME_ERROR_MESSAGE } from "../../shared/validation.js";
 import { parseDailyResetAt, parseDurationToMs } from "../../shared/session-policy.js";
 import { setupAgentHome } from "../../agent/home-setup.js";
-import { BACKGROUND_AGENT_NAME, getDefaultAgentDescription } from "../../shared/defaults.js";
+import {
+  BACKGROUND_AGENT_NAME,
+  getDefaultAgentDescription,
+} from "../../shared/defaults.js";
 import { isPermissionLevel } from "../../shared/permissions.js";
 import { isAgentRole } from "../../shared/agent-role.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
-
-function deleteAgentRow(ctx: DaemonContext, agentName: string): boolean {
-  const rawDb = (ctx.db as any).db as {
-    prepare: (sql: string) => { run: (...args: any[]) => { changes: number } };
-  };
-  if (!rawDb || typeof rawDb.prepare !== "function") {
-    rpcError(RPC_ERRORS.INTERNAL_ERROR, "Database handle unavailable");
-  }
-  const info = rawDb.prepare("DELETE FROM agents WHERE name = ?").run(agentName);
-  return info.changes > 0;
-}
+import { generateToken } from "../../agent/auth.js";
+import { mutateSettingsAndSync } from "../settings-sync.js";
 
 export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler {
   return async (params) => {
@@ -128,10 +122,10 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
         if (!isPermissionLevel(p.permissionLevel)) {
           rpcError(
             RPC_ERRORS.INVALID_PARAMS,
-            "Invalid permission-level (expected restricted, standard, privileged, boss)"
+            "Invalid permission-level (expected restricted, standard, privileged, admin)"
           );
         }
-        if (p.permissionLevel === "boss" && principal.level !== "boss") {
+        if (p.permissionLevel === "admin" && principal.level !== "admin") {
           rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
         }
         permissionLevel = p.permissionLevel;
@@ -203,65 +197,58 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
         };
       }
 
-      const result = ctx.db.registerAgent({
-        name: p.name,
-        role,
-        description: p.description,
-        workspace: p.workspace,
-        provider,
-        model: typeof p.model === "string" && p.model.trim() ? p.model.trim() : undefined,
-        reasoningEffort,
-        permissionLevel,
-        sessionPolicy: Object.keys(sessionPolicy).length > 0 ? (sessionPolicy as any) : undefined,
-        metadata,
-      });
-
-      // Setup agent home directory
+      // Setup agent home directory first.
       await setupAgentHome(p.name, ctx.config.dataDir);
 
-      try {
-        if (normalizedBind) {
-          const adapterType = normalizedBind.adapterType;
-          const adapterToken = normalizedBind.adapterToken;
-
-          const agentBinding = ctx.db.getAgentBindingByType(p.name, adapterType);
-          if (agentBinding) {
-            rpcError(
-              RPC_ERRORS.ALREADY_EXISTS,
-              `Agent '${p.name}' already has a ${adapterType} binding`
-            );
-          }
-
-          const hadAdapterAlready = ctx.adapters.has(adapterToken);
-          let createdAdapterForRegister = false;
-
-          if (ctx.running) {
-            try {
-              const adapter = await ctx.createAdapterForBinding(adapterType, adapterToken);
-              if (!adapter) {
-                rpcError(RPC_ERRORS.INVALID_PARAMS, `Unknown adapter type: ${adapterType}`);
-              }
-              createdAdapterForRegister = !hadAdapterAlready;
-            } catch (err) {
-              if (!hadAdapterAlready) {
-                await ctx.removeAdapter(adapterToken).catch(() => undefined);
-              }
-              throw err;
-            }
-          }
-
-          try {
-            ctx.db.createBinding(p.name, adapterType, adapterToken);
-          } catch (err) {
-            if (createdAdapterForRegister) {
-              await ctx.removeAdapter(adapterToken).catch(() => undefined);
-            }
-            throw err;
-          }
+      let createdAdapterForRegister = false;
+      if (normalizedBind && ctx.running) {
+        const hadAdapterAlready = ctx.adapters.has(normalizedBind.adapterToken);
+        const adapter = await ctx.createAdapterForBinding(
+          normalizedBind.adapterType,
+          normalizedBind.adapterToken
+        );
+        if (!adapter) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, `Unknown adapter type: ${normalizedBind.adapterType}`);
         }
+        createdAdapterForRegister = !hadAdapterAlready;
+      }
+
+      const generatedToken = generateToken();
+      try {
+        await mutateSettingsAndSync({
+          hibossDir: ctx.config.dataDir,
+          db: ctx.db,
+          mutate: (settings) => {
+            const exists = settings.agents.some((agent) => agent.name.toLowerCase() === p.name.trim().toLowerCase());
+            if (exists) {
+              rpcError(RPC_ERRORS.ALREADY_EXISTS, "Agent already exists");
+            }
+
+            settings.agents.push({
+              name: p.name.trim(),
+              token: generatedToken,
+              role,
+              provider,
+              description:
+                typeof p.description === "string"
+                  ? p.description
+                  : getDefaultAgentDescription(p.name.trim()),
+              workspace:
+                typeof p.workspace === "string" && p.workspace.trim()
+                  ? p.workspace.trim()
+                  : null,
+              model: typeof p.model === "string" && p.model.trim() ? p.model.trim() : null,
+              reasoningEffort: reasoningEffort ?? null,
+              permissionLevel: permissionLevel ?? "standard",
+              sessionPolicy: Object.keys(sessionPolicy).length > 0 ? (sessionPolicy as any) : undefined,
+              metadata,
+              bindings: normalizedBind ? [normalizedBind] : [],
+            });
+          },
+        });
       } catch (err) {
-        if (role === "speaker") {
-          deleteAgentRow(ctx, p.name);
+        if (createdAdapterForRegister && normalizedBind) {
+          await ctx.removeAdapter(normalizedBind.adapterToken).catch(() => undefined);
         }
         throw err;
       }
@@ -271,20 +258,23 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
 
       logEvent("info", "agent-register", {
         actor: principal.kind,
-        "agent-name": result.agent.name,
+        "agent-name": p.name.trim(),
         state: "success",
         "duration-ms": Date.now() - startedAtMs,
       });
 
       return {
         agent: {
-          name: result.agent.name,
-          role: result.agent.role,
-          description: result.agent.description,
-          workspace: result.agent.workspace,
-          createdAt: result.agent.createdAt,
+          name: p.name.trim(),
+          role,
+          description:
+            typeof p.description === "string"
+              ? p.description
+              : getDefaultAgentDescription(p.name.trim()),
+          workspace: typeof p.workspace === "string" && p.workspace.trim() ? p.workspace.trim() : undefined,
+          createdAt: Date.now(),
         },
-        token: result.token,
+        token: generatedToken,
       };
     } catch (err) {
       logEvent("info", "agent-register", {

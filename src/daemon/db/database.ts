@@ -22,6 +22,7 @@ import { generateToken, hashToken, verifyToken } from "../../agent/auth.js";
 import { generateUUID } from "../../shared/uuid.js";
 import { assertValidAgentName } from "../../shared/validation.js";
 import { getDaemonIanaTimeZone } from "../../shared/timezone.js";
+import type { SettingsV4 } from "../../shared/settings.js";
 
 /**
  * Database row types for SQLite mapping.
@@ -291,6 +292,126 @@ export class HiBossDatabase {
     this.db.prepare("DELETE FROM agent_bindings").run();
     this.db.prepare("DELETE FROM agent_runs").run();
     this.db.prepare("DELETE FROM agents").run();
+  }
+
+  /**
+   * Apply settings snapshot into runtime cache tables.
+   * Keeps envelopes and agent run history intact.
+   */
+  applySettingsSnapshot(settings: SettingsV4): void {
+    this.runInTransaction(() => {
+      this.setBossName(settings.boss.name);
+      this.setConfig("boss_timezone", settings.boss.timezone);
+      if (!this.verifyAdminToken(settings.admin.token)) {
+        this.setAdminToken(settings.admin.token);
+      }
+      this.setConfig("permission_policy", JSON.stringify(settings.permissionPolicy));
+      this.setAdapterBossIds("telegram", settings.telegram.bossIds);
+
+      const existingAgents = this.listAgents();
+      const existingByName = new Map(existingAgents.map((agent) => [agent.name.toLowerCase(), agent]));
+      const desiredByName = new Map(settings.agents.map((agent) => [agent.name.toLowerCase(), agent]));
+
+      for (const existing of existingAgents) {
+        if (desiredByName.has(existing.name.toLowerCase())) continue;
+        this.db.prepare("DELETE FROM cron_schedules WHERE agent_name = ?").run(existing.name);
+        this.db.prepare("DELETE FROM agent_bindings WHERE agent_name = ?").run(existing.name);
+        this.db.prepare("DELETE FROM agents WHERE name = ?").run(existing.name);
+      }
+
+      const upsertAgentStmt = this.db.prepare(`
+        INSERT INTO agents
+          (name, token, description, workspace, provider, model, reasoning_effort, permission_level, session_policy, created_at, metadata)
+        VALUES
+          (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(name) DO UPDATE SET
+          token = excluded.token,
+          description = excluded.description,
+          workspace = excluded.workspace,
+          provider = excluded.provider,
+          model = excluded.model,
+          reasoning_effort = excluded.reasoning_effort,
+          permission_level = excluded.permission_level,
+          session_policy = excluded.session_policy,
+          metadata = excluded.metadata
+      `);
+
+      const now = Date.now();
+      for (const agent of settings.agents) {
+        const existing = existingByName.get(agent.name.toLowerCase());
+        const existingSessionHandle =
+          existing &&
+          existing.metadata &&
+          typeof existing.metadata.sessionHandle === "string" &&
+          existing.metadata.sessionHandle.trim().length > 0
+            ? existing.metadata.sessionHandle
+            : undefined;
+
+        const metadataInput: Record<string, unknown> = {
+          ...(agent.metadata ?? {}),
+        };
+        if (existingSessionHandle && metadataInput.sessionHandle === undefined) {
+          metadataInput.sessionHandle = existingSessionHandle;
+        }
+
+        const metadata = withAgentRoleMetadata({
+          metadata: metadataInput,
+          role: agent.role,
+          stripSessionHandle: false,
+        });
+
+        upsertAgentStmt.run(
+          agent.name,
+          agent.token,
+          agent.description,
+          agent.workspace,
+          agent.provider,
+          agent.model ?? null,
+          agent.reasoningEffort ?? null,
+          agent.permissionLevel,
+          agent.sessionPolicy ? JSON.stringify(agent.sessionPolicy) : null,
+          now,
+          metadata ? JSON.stringify(metadata) : null
+        );
+
+        const currentBindings = this.getBindingsByAgentName(agent.name);
+        const currentByType = new Map(currentBindings.map((binding) => [binding.adapterType, binding]));
+        const desiredByType = new Map(agent.bindings.map((binding) => [binding.adapterType, binding]));
+        const bindingsUnchanged =
+          currentByType.size === desiredByType.size &&
+          Array.from(desiredByType.entries()).every(
+            ([adapterType, binding]) => currentByType.get(adapterType)?.adapterToken === binding.adapterToken
+          );
+
+        if (!bindingsUnchanged) {
+          for (const [adapterType] of currentByType) {
+            if (desiredByType.has(adapterType)) continue;
+            this.db.prepare("DELETE FROM agent_bindings WHERE agent_name = ? AND adapter_type = ?").run(
+              agent.name,
+              adapterType
+            );
+          }
+
+          for (const desiredBinding of agent.bindings) {
+            const currentBinding = currentByType.get(desiredBinding.adapterType);
+            if (!currentBinding) {
+              this.db.prepare(`
+                INSERT INTO agent_bindings (id, agent_name, adapter_type, adapter_token, created_at)
+                VALUES (?, ?, ?, ?, ?)
+              `).run(generateUUID(), agent.name, desiredBinding.adapterType, desiredBinding.adapterToken, now);
+              continue;
+            }
+            if (currentBinding.adapterToken !== desiredBinding.adapterToken) {
+              this.db.prepare(
+                "UPDATE agent_bindings SET adapter_token = ? WHERE agent_name = ? AND adapter_type = ?"
+              ).run(desiredBinding.adapterToken, agent.name, desiredBinding.adapterType);
+            }
+          }
+        }
+      }
+
+      this.markSetupComplete();
+    });
   }
 
   // ==================== Agent Operations ====================
@@ -683,7 +804,7 @@ export class HiBossDatabase {
       row.permission_level === "restricted" ||
       row.permission_level === "standard" ||
       row.permission_level === "privileged" ||
-      row.permission_level === "boss"
+      row.permission_level === "admin"
     ) {
       permissionLevel = row.permission_level;
     }
@@ -1502,18 +1623,18 @@ export class HiBossDatabase {
   }
 
   /**
-   * Set the boss token.
+   * Set the admin token.
    */
-  setBossToken(token: string): void {
+  setAdminToken(token: string): void {
     const tokenHash = hashToken(token);
-    this.setConfig("boss_token_hash", tokenHash);
+    this.setConfig("admin_token_hash", tokenHash);
   }
 
   /**
-   * Verify a boss token.
+   * Verify an admin token.
    */
-  verifyBossToken(token: string): boolean {
-    const storedHash = this.getConfig("boss_token_hash");
+  verifyAdminToken(token: string): boolean {
+    const storedHash = this.getConfig("admin_token_hash");
     if (!storedHash) return false;
     return verifyToken(token, storedHash);
   }
@@ -1546,13 +1667,45 @@ export class HiBossDatabase {
    * Get the boss ID for an adapter type.
    */
   getAdapterBossId(adapterType: string): string | null {
+    const ids = this.getAdapterBossIds(adapterType);
+    if (ids.length > 0) return ids[0]!;
     return this.getConfig(`adapter_boss_id_${adapterType}`);
+  }
+
+  /**
+   * Get all boss IDs for an adapter type.
+   */
+  getAdapterBossIds(adapterType: string): string[] {
+    const listRaw = (this.getConfig(`adapter_boss_ids_${adapterType}`) ?? "").trim();
+    if (listRaw.length > 0) {
+      return listRaw
+        .split(",")
+        .map((value) => value.trim().replace(/^@/, ""))
+        .filter((value) => value.length > 0);
+    }
+
+    const singular = (this.getConfig(`adapter_boss_id_${adapterType}`) ?? "").trim();
+    if (!singular) return [];
+    return [singular.replace(/^@/, "")];
   }
 
   /**
    * Set the boss ID for an adapter type.
    */
   setAdapterBossId(adapterType: string, bossId: string): void {
-    this.setConfig(`adapter_boss_id_${adapterType}`, bossId);
+    const normalized = bossId.trim().replace(/^@/, "");
+    this.setConfig(`adapter_boss_id_${adapterType}`, normalized);
+    this.setConfig(`adapter_boss_ids_${adapterType}`, normalized ? normalized : "");
+  }
+
+  /**
+   * Set all boss IDs for an adapter type.
+   */
+  setAdapterBossIds(adapterType: string, bossIds: string[]): void {
+    const normalized = bossIds
+      .map((id) => id.trim().replace(/^@/, ""))
+      .filter((id) => id.length > 0);
+    this.setConfig(`adapter_boss_ids_${adapterType}`, normalized.join(","));
+    this.setConfig(`adapter_boss_id_${adapterType}`, normalized[0] ?? "");
   }
 }

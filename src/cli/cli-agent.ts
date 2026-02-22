@@ -30,7 +30,7 @@ export function registerAgentCommands(program: Command): void {
     )
     .option(
       "--permission-level <level>",
-      "Permission level (restricted, standard, privileged, boss)"
+      "Permission level (restricted, standard, privileged, admin)"
     )
     .option(
       "--session-daily-reset-at <time>",
@@ -91,7 +91,7 @@ export function registerAgentCommands(program: Command): void {
     )
     .option(
       "--permission-level <level>",
-      "Permission level (restricted, standard, privileged, boss; boss-privileged only)"
+      "Permission level (restricted, standard, privileged, admin; admin-privileged only)"
     )
     .option(
       "--session-daily-reset-at <time>",

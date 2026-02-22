@@ -12,13 +12,16 @@ import {
 import { formatUnixMsAsTimeZoneOffset } from "../shared/time.js";
 import { formatShortId } from "../shared/id-format.js";
 import { logEvent, errorMessage } from "../shared/daemon-log.js";
+import { resolveUiLocale } from "../shared/ui-locale.js";
+import { getUiText } from "../shared/ui-text.js";
 
 type EnrichedChannelCommand = ChannelCommand & { agentName?: string };
 
 function buildAgentStatusText(params: { db: HiBossDatabase; executor: AgentExecutor; agentName: string }): string {
+  const ui = getUiText(resolveUiLocale(params.db.getConfig("ui_locale")));
   const agent = params.db.getAgentByNameCaseInsensitive(params.agentName);
   if (!agent) {
-    return "error: Agent not found";
+    return ui.channel.agentNotFound;
   }
 
   const bossTz = params.db.getBossTimezone();
@@ -104,12 +107,13 @@ export function createChannelCommandHandler(params: {
   router: MessageRouter;
 }): ChannelCommandHandler {
   return (command): MessageContent | void | Promise<MessageContent | void> => {
+    const ui = getUiText(resolveUiLocale(params.db.getConfig("ui_locale")));
     const c = command as EnrichedChannelCommand;
     if (typeof c.command !== "string") return;
 
     if (c.command === "new" && typeof c.agentName === "string" && c.agentName) {
       params.executor.requestSessionRefresh(c.agentName, "telegram:/new");
-      return { text: "Session refresh requested." };
+      return { text: ui.channel.sessionRefreshRequested };
     }
 
     if (c.command === "status" && typeof c.agentName === "string" && c.agentName) {
@@ -120,7 +124,7 @@ export function createChannelCommandHandler(params: {
       const cancelledRun = params.executor.abortCurrentRun(c.agentName, "telegram:/abort");
       const clearedPendingCount = params.db.markDuePendingNonCronEnvelopesDoneForAgent(c.agentName);
       const lines = [
-        "abort: ok",
+        ui.channel.abortOk,
         `agent-name: ${c.agentName}`,
         `cancelled-run: ${cancelledRun ? "true" : "false"}`,
         `cleared-pending-count: ${clearedPendingCount}`,
@@ -143,11 +147,12 @@ async function handleOneshotCommand(
   command: EnrichedChannelCommand,
   mode: OneshotType,
 ): Promise<MessageContent | void> {
+  const ui = getUiText(resolveUiLocale(params.db.getConfig("ui_locale")));
   const agentName = command.agentName!;
   const text = command.args?.trim();
 
   if (!text) {
-    return { text: `Usage: /${mode} <message>` };
+    return { text: ui.channel.usage(mode) };
   }
 
   const fromAddress = formatChannelAddress("telegram", command.chatId);
@@ -175,9 +180,8 @@ async function handleOneshotCommand(
       mode,
       error: errorMessage(err),
     });
-    return { text: `Failed to create ${mode} envelope.` };
+    return { text: ui.channel.failedToCreateEnvelope(mode) };
   }
 
-  const label = mode === "clone" ? "Clone" : "Isolated";
-  return { text: `${label} turn initiated.` };
+  return { text: ui.channel.turnInitiated(mode) };
 }

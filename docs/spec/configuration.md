@@ -8,7 +8,8 @@ Hi-Boss configuration comes from:
 
 1. CLI flags (`hiboss ... --flag`)
 2. Environment variables (`HIBOSS_TOKEN`, `HIBOSS_DIR`, …)
-3. SQLite state (`{{HIBOSS_DIR}}/.daemon/hiboss.db`)
+3. `settings.json` (`{{HIBOSS_DIR}}/settings.json`, source-of-truth)
+4. SQLite runtime cache (`{{HIBOSS_DIR}}/.daemon/hiboss.db`)
 
 ## Defaults
 
@@ -32,15 +33,11 @@ Built-in defaults are centralized in:
 
 ---
 
-## “Settings” That Are Not Yet Exposed
+## Settings Source of Truth
 
-Some settings exist in the database/schema but do not yet have dedicated CLI setters:
+`settings.json` is the canonical configuration. Operators can edit it directly and restart daemon.
 
-- Updating `boss_name`, `adapter_boss_id_<type>` after setup
-- Editing `config.permission_policy`
-- Changing the default data directory from `~/hiboss/` (override via `HIBOSS_DIR`)
-
-Today, changing those requires a reset + re-setup, or direct DB edits.
+SQLite remains a runtime cache for read-path performance and relational references.
 
 ---
 
@@ -48,13 +45,14 @@ Today, changing those requires a reset + re-setup, or direct DB edits.
 
 Hi-Boss authorizes operations via a configurable policy stored at:
 
-- `config.permission_policy`
+- `settings.json.permission-policy` (source-of-truth)
+- mirrored to `config.permission_policy` in SQLite runtime cache
 
 The policy maps an operation name to a minimum permission level:
 
-- `restricted < standard < privileged < boss`
+- `restricted < standard < privileged < admin`
 
-If an operation is missing from the policy, it defaults to `boss` (safe-by-default).
+If an operation is missing from the policy, it defaults to `admin` (safe-by-default).
 
 ### Default Policy
 
@@ -62,16 +60,16 @@ If an operation is missing from the policy, it defaults to `boss` (safe-by-defau
 |-----------|---------------|
 | `envelope.send` | `restricted` |
 | `envelope.list` | `restricted` |
-| `daemon.status` | `boss` |
+| `daemon.status` | `admin` |
 | `daemon.ping` | `standard` |
-| `daemon.start` | `boss` |
-| `daemon.stop` | `boss` |
-| `agent.register` | `boss` |
+| `daemon.start` | `admin` |
+| `daemon.stop` | `admin` |
+| `agent.register` | `admin` |
 | `agent.list` | `restricted` |
 | `agent.bind` | `privileged` |
 | `agent.unbind` | `privileged` |
 | `agent.status` | `restricted` |
-| `agent.refresh` | `boss` |
-| `agent.abort` | `boss` |
+| `agent.refresh` | `admin` |
+| `agent.abort` | `admin` |
 | `agent.set` | `privileged` |
 | `agent.session-policy.set` | `privileged` |

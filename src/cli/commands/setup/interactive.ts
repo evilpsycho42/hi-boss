@@ -31,25 +31,27 @@ export async function runInteractiveSetup(): Promise<void> {
     process.exit(1);
   }
 
-  if (setupStatus.ready) {
+  if (setupStatus.ready && setupStatus.hasSettingsFile) {
     console.log("✅ Setup is already complete!");
     console.log("\nTo start over: hiboss daemon stop && rm -rf ~/hiboss && hiboss setup\n");
     console.log("(Advanced: override the Hi-Boss dir with HIBOSS_DIR.)\n");
     return;
   }
 
+  if (!setupStatus.hasSettingsFile && (setupStatus.completed || setupStatus.agents.length > 0)) {
+    console.log("⚠️ settings.json is missing; entering recovery setup to regenerate canonical config.\n");
+  }
+  const hibossDirForDisplay = (process.env.HIBOSS_DIR ?? "").trim() || "~/hiboss";
+
   const hasPersistedState =
-    setupStatus.completed ||
-    setupStatus.agents.length > 0 ||
-    Object.values(setupStatus.userInfo.missing).some((v) => !v);
+    setupStatus.hasSettingsFile &&
+    (setupStatus.completed ||
+      setupStatus.agents.length > 0 ||
+      Object.values(setupStatus.userInfo.missing).some((v) => !v));
 
   if (hasPersistedState) {
     console.error("\n❌ Interactive setup only supports first-time bootstrap on a clean state.\n");
-    console.error("Use the config-file reconciliation flow instead:");
-    console.error("  1. hiboss setup export");
-    console.error("  2. edit the exported JSON config");
-    console.error("  3. hiboss setup --config-file <path> --token <boss-token> --dry-run");
-    console.error("  4. hiboss setup --config-file <path> --token <boss-token>\n");
+    console.error(`Edit ${hibossDirForDisplay}/settings.json directly, then restart the daemon.\n`);
     process.exit(1);
   }
 
@@ -81,26 +83,50 @@ export async function runInteractiveSetup(): Promise<void> {
     })
   ).trim();
 
-  const adapterBossId = (
+  const adapterBossIdsRaw = (
     await input({
-      message: "Your Telegram username (to identify you as the boss):",
-      validate: (value) => (value.trim().length === 0 ? "Telegram username is required" : true),
+      message: "Boss Telegram usernames (comma-separated, e.g. ethanlee,alice):",
+      validate: (value) => (value.trim().length === 0 ? "At least one Telegram username is required" : true),
     })
-  ).trim().replace(/^@/, "");
+  ).trim();
+  const adapterBossIds = adapterBossIdsRaw
+    .split(",")
+    .map((value) => value.trim().replace(/^@/, ""))
+    .filter((value) => value.length > 0);
+  if (adapterBossIds.length < 1) {
+    console.error("\n❌ At least one Telegram username is required.\n");
+    process.exit(1);
+  }
+  const uniqueBossIds = new Set<string>();
+  for (const bossId of adapterBossIds) {
+    const key = bossId.toLowerCase();
+    if (uniqueBossIds.has(key)) {
+      console.error(`\n❌ Duplicate Telegram username: ${bossId}\n`);
+      process.exit(1);
+    }
+    uniqueBossIds.add(key);
+  }
 
-  console.log("\n🔐 Boss Token\n");
-  console.log("The boss token identifies you as the boss for administrative tasks.");
-  console.log("Choose something short you'll remember.\n");
+  console.log("\n🔐 Admin Token\n");
+  console.log("The admin token identifies you for administrative tasks.");
+  console.log("Choose something strong you'll remember.\n");
 
-  let bossToken: string;
+  let adminToken: string;
   while (true) {
-    bossToken = await password({
-      message: "Enter your boss token:",
-      validate: (value) => (value.length < 4 ? "Boss token must be at least 4 characters" : true),
+    const enteredAdminToken = await password({
+      message: "Enter your admin token:",
+      validate: (value) =>
+        value.trim().length < 16
+          ? "Admin token must be at least 16 characters (excluding leading/trailing whitespace)"
+          : true,
     });
+    const normalizedAdminToken = enteredAdminToken.trim();
 
-    const confirmToken = await password({ message: "Confirm boss token:" });
-    if (bossToken === confirmToken) break;
+    const confirmToken = (await password({ message: "Confirm admin token:" })).trim();
+    if (normalizedAdminToken === confirmToken) {
+      adminToken = normalizedAdminToken;
+      break;
+    }
     console.error("\n❌ Tokens do not match. Please try again.\n");
   }
 
@@ -235,9 +261,9 @@ export async function runInteractiveSetup(): Promise<void> {
     adapter: {
       adapterType: "telegram",
       adapterToken,
-      adapterBossId,
+      adapterBossIds,
     },
-    bossToken,
+    adminToken,
   };
 
   try {
@@ -251,7 +277,7 @@ export async function runInteractiveSetup(): Promise<void> {
     console.log(`   speaker-agent-token: ${setupResult.speakerAgentToken}`);
     console.log(`   leader-agent-name:   ${leaderAgentName}`);
     console.log(`   leader-agent-token:  ${setupResult.leaderAgentToken}`);
-    console.log(`   boss-token:  ${bossToken}`);
+    console.log(`   admin-token: ${adminToken}`);
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("\n⚠️  Save these tokens! They won't be shown again.\n");
     console.log("📱 Telegram bot is configured. Start the daemon with:");

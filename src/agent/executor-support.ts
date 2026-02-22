@@ -65,7 +65,7 @@ export function getBossInfo(
 
   // Get boss ID for each bound adapter type
   for (const binding of bindings) {
-    const bossId = db.getAdapterBossId(binding.adapterType);
+    const bossId = db.getAdapterBossIds(binding.adapterType)[0];
     if (bossId) {
       adapterIds[binding.adapterType] = bossId;
     }

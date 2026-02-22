@@ -15,7 +15,7 @@ Flags:
 - `--provider <claude|codex>` (required)
 - `--model <model>` (optional)
 - `--reasoning-effort <default|none|low|medium|high|xhigh>` (optional; use `default` to clear and use provider default)
-- `--permission-level <restricted|standard|privileged|boss>` (optional; `boss` requires boss-privileged token)
+- `--permission-level <restricted|standard|privileged|admin>` (optional; `admin` requires admin-privileged token)
 - `--metadata-json <json>` or `--metadata-file <path>` (optional)
 - Optional binding at creation:
   - `--bind-adapter-type <type>`
@@ -72,7 +72,7 @@ Flags:
 - `--provider <claude|codex>` (optional)
 - `--model <model>` (optional; use `default` to clear and use provider default)
 - `--reasoning-effort <default|none|low|medium|high|xhigh>` (optional)
-- `--permission-level <restricted|standard|privileged|boss>` (optional; boss-privileged token only)
+- `--permission-level <restricted|standard|privileged|admin>` (optional; admin-privileged token only)
 - Session policy:
   - `--session-daily-reset-at HH:MM` (optional)
   - `--session-idle-timeout <duration>` (optional; units: `d/h/m/s`)
@@ -120,7 +120,7 @@ This removes the agent record, its bindings, its cron schedules, and its home di
 
 Flags:
 - `--name <name>` (required)
-- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`; boss-privileged token required)
+- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`; admin-privileged token required)
 
 Output (parseable):
 - `success: true|false`
@@ -169,7 +169,7 @@ Default permission:
 Shows runtime status for a single agent (intended for operator UX and dashboards).
 
 Notes:
-- Requires a token (agent or boss). The output must not include secrets (agent token, adapter token).
+- Requires a token (agent or admin). The output must not include secrets (agent token, adapter token).
 - When called with an agent token, only `--name <self>` is allowed (agents cannot query other agents).
 - `workspace:` in status is the effective runtime workspace. If unset on the agent record, it falls back to the user's home directory.
 - `agent-state` is a **busy-ness** signal: `running` means the daemon currently has a queued or in-flight task for this agent (so replies may be delayed).
@@ -244,7 +244,7 @@ Notes:
 
 Flags:
 - `--name <name>` (required)
-- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`; boss token required)
+- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`; admin token required)
 
 Output (parseable):
 - `success: true|false`

@@ -37,13 +37,13 @@ Notes:
 | `boss.name` | string | Boss name (how agent should address the user, or empty) |
 | `boss.adapterIds` | object | Boss identity per adapter type (e.g. `{ telegram: "kevin" }`, or `{}`) |
 | `agent.name` | string | Agent name |
-| `agent.role` | string | `speaker|leader` (required) |
+| `agent.role` | string | one of: `speaker`, `leader` (required) |
 | `agent.description` | string | Agent description (or empty) |
 | `agent.workspace` | string | Agent workspace directory (resolved; falls back to `process.cwd()`) |
 | `agent.provider` | string | `claude` or `codex` |
 | `agent.model` | string | Model id/alias (or empty) |
-| `agent.reasoningEffort` | string | `none|low|medium|high|xhigh` (or empty) |
-| `agent.permissionLevel` | string | `restricted|standard|privileged|boss` (or empty) |
+| `agent.reasoningEffort` | string | one of: `none`, `low`, `medium`, `high`, `xhigh` (or empty) |
+| `agent.permissionLevel` | string | one of: `restricted`, `standard`, `privileged`, `admin` (or empty) |
 | `agent.sessionPolicy.dailyResetAt` | string | Daily reset time in `HH:MM` format (or empty) |
 | `agent.sessionPolicy.idleTimeout` | string | Idle timeout duration like `2h`, `30m` (or empty) |
 | `agent.sessionPolicy.maxContextLength` | number | Max context length before session refresh (or `0`) |
@@ -86,7 +86,7 @@ Notes:
 | `envelopes[].cronId` | string | Cron schedule id (short id) if this envelope was created by a cron schedule (or empty) |
 | `envelopes[].content.text` | string | Text content (or `(none)`) |
 | `envelopes[].content.attachments` | array | Attachment objects |
-| `envelopes[].content.attachments[].type` | string | `image|video|audio|file` |
+| `envelopes[].content.attachments[].type` | string | one of: `image`, `video`, `audio`, `file` |
 | `envelopes[].content.attachments[].source` | string | Source path/URL |
 | `envelopes[].content.attachments[].filename` | string | Filename (or empty) |
 | `envelopes[].content.attachments[].displayName` | string | Display name (or empty) |

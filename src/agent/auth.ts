@@ -9,7 +9,7 @@ const HASH_DIGEST = "sha512";
  * Generate a secure random token.
  */
 export function generateToken(): string {
-  return crypto.randomBytes(3).toString("hex");
+  return crypto.randomBytes(16).toString("hex");
 }
 
 /**

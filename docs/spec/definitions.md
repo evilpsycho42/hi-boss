@@ -12,6 +12,7 @@ Canonical mapping (selected):
 - `envelope.createdAt` → SQLite `created_at` → `created-at:`
 - `envelope.fromBoss` → SQLite `from_boss` → `[boss]` suffix in rendered sender lines
 - `config.bossTimezone` → SQLite `config.boss_timezone` → setup `boss-timezone` → `boss-timezone:`
+- `config.uiLocale` → SQLite `config.ui_locale` → env override `HIBOSS_UI_LOCALE` (fixed system-message locale)
 
 Derived (not stored):
 - `daemon-timezone:` is computed from the daemon host (`Intl.DateTimeFormat().resolvedOptions().timeZone`) and printed by setup for operator clarity.
@@ -155,7 +156,7 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 | `agent.provider` | `provider` | `claude` or `codex` |
 | `agent.model` | `model` | Nullable; `NULL` means “use provider default model” |
 | `agent.reasoningEffort` | `reasoning_effort` | See `src/agent/types.ts` for allowed values; `NULL` means “use provider default reasoning effort” |
-| `agent.permissionLevel` | `permission_level` | `restricted`, `standard`, `privileged`, `boss` |
+| `agent.permissionLevel` | `permission_level` | `restricted`, `standard`, `privileged`, `admin` |
 | `agent.sessionPolicy` | `session_policy` | JSON (nullable) |
 | `agent.role` | `metadata.role` | `speaker` or `leader` (stored in metadata JSON) |
 | `agent.createdAt` | `created_at` | Unix epoch ms (UTC) |
@@ -212,22 +213,8 @@ Clearing nullable overrides:
   - `boss-timezone: <iana>`
   - `speaker-agent-token:`
   - `leader-agent-token:`
-  - `boss-token:`
-- `hiboss setup --config-file ... --dry-run` prints parseable diff keys including:
-  - `dry-run: true`
-  - `first-apply:`
-  - `current-agent-count:`
-  - `desired-agent-count:`
-  - `removed-agents:`
-  - `recreated-agents:`
-  - `new-agents:`
-  - `current-binding-count:`
-  - `desired-binding-count:`
-- `hiboss setup --config-file ...` (apply) prints the same summary keys with `dry-run: false`, plus per-agent token lines:
-  - `agent-name:`
-  - `agent-role:`
-  - `agent-token:` (printed once)
-- `hiboss setup export` never writes `boss-token` or `agent-token` into exported files.
+  - `admin-token:`
+- Setup writes canonical config to `{{HIBOSS_DIR}}/settings.json` (`version: 4`) and mirrors to SQLite runtime cache.
 - `hiboss agent delete` prints:
   - `success: true|false`
   - `agent-name:`

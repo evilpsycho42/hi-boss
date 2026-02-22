@@ -20,6 +20,8 @@ import {
   splitTextForTelegram,
   TELEGRAM_MAX_TEXT_CHARS,
 } from "./telegram/shared.js";
+import type { UiLocale } from "../shared/ui-locale.js";
+import { getUiText } from "../shared/ui-text.js";
 
 /** Milliseconds to wait for additional album parts before flushing. */
 const MEDIA_GROUP_DEBOUNCE_MS = 500;
@@ -55,11 +57,13 @@ export class TelegramAdapter implements ChatAdapter {
   private typingInFlight = new Set<string>();
   /** Last warning timestamp for chat-action failures per chat id. */
   private typingLastErrorAtMs = new Map<string, number>();
+  private readonly uiLocale: UiLocale;
 
-  constructor(token: string) {
+  constructor(token: string, uiLocale: UiLocale = "en") {
     const apiRoot = process.env.TELEGRAM_API_ROOT;
     this.bot = new Telegraf(token, apiRoot ? { telegram: { apiRoot } } : {});
     this.mediaDir = getHiBossPaths().mediaDir;
+    this.uiLocale = uiLocale;
     this.setupListeners();
   }
 
@@ -273,13 +277,7 @@ export class TelegramAdapter implements ChatAdapter {
   }
 
   private async registerCommands(): Promise<void> {
-    const commands = [
-      { command: "new", description: "Start a new session" },
-      { command: "status", description: "Show agent status" },
-      { command: "abort", description: "Abort current run and clear message queue" },
-      { command: "isolated", description: "One-shot with clean context" },
-      { command: "clone", description: "One-shot with current session context" },
-    ];
+    const commands = getUiText(this.uiLocale).telegram.commandDescriptions;
     try {
       await this.bot.telegram.setMyCommands(commands);
       console.log(`[${this.platform}] Commands registered (${commands.length})`);

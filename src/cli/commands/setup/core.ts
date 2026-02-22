@@ -5,30 +5,36 @@ import { IpcClient } from "../../ipc-client.js";
 import { getSocketPath, getDefaultConfig, isDaemonRunning } from "../../../daemon/daemon.js";
 import { HiBossDatabase } from "../../../daemon/db/database.js";
 import { setupAgentHome } from "../../../agent/home-setup.js";
-import type { SetupCheckResult, SetupExecuteResult } from "../../../daemon/ipc/types.js";
+import type { SetupCheckResult } from "../../../daemon/ipc/types.js";
 import type { SetupConfig } from "./types.js";
 import type { AgentRole } from "../../../shared/agent-role.js";
 import {
   getSpeakerBindingIntegrity,
   toSpeakerBindingIntegrityView,
 } from "../../../shared/speaker-binding-invariant.js";
+import { generateToken } from "../../../agent/auth.js";
+import { DEFAULT_PERMISSION_POLICY } from "../../../shared/defaults.js";
+import type { SettingsV4 } from "../../../shared/settings.js";
+import { getSettingsPath, writeSettingsFileAtomic } from "../../../shared/settings-io.js";
+import { syncSettingsToDb } from "../../../daemon/settings-sync.js";
 
 export interface SetupUserInfoStatus {
   bossName?: string;
   bossTimezone?: string;
   telegramBossId?: string;
-  hasBossToken: boolean;
+  hasAdminToken: boolean;
   missing: {
     bossName: boolean;
     bossTimezone: boolean;
     telegramBossId: boolean;
-    bossToken: boolean;
+    adminToken: boolean;
   };
 }
 
 export interface SetupStatus {
   completed: boolean;
   ready: boolean;
+  hasSettingsFile: boolean;
   roleCounts: {
     speaker: number;
     leader: number;
@@ -68,18 +74,18 @@ function hasIntegrityViolations(integrity: SetupStatus["integrity"]): boolean {
 function buildUserInfoStatus(db: HiBossDatabase): SetupUserInfoStatus {
   const bossName = (db.getBossName() ?? "").trim();
   const bossTimezone = (db.getConfig("boss_timezone") ?? "").trim();
-  const telegramBossId = (db.getAdapterBossId("telegram") ?? "").trim();
-  const hasBossToken = Boolean((db.getConfig("boss_token_hash") ?? "").trim());
+  const telegramBossId = (db.getAdapterBossIds("telegram")[0] ?? "").trim();
+  const hasAdminToken = Boolean((db.getConfig("admin_token_hash") ?? "").trim());
   return {
     bossName: bossName || undefined,
     bossTimezone: bossTimezone || undefined,
     telegramBossId: telegramBossId || undefined,
-    hasBossToken,
+    hasAdminToken,
     missing: {
       bossName: bossName.length === 0,
       bossTimezone: bossTimezone.length === 0,
       telegramBossId: telegramBossId.length === 0,
-      bossToken: !hasBossToken,
+      adminToken: !hasAdminToken,
     },
   };
 }
@@ -88,6 +94,7 @@ function buildEmptySetupStatus(): SetupStatus {
   return {
     completed: false,
     ready: false,
+    hasSettingsFile: false,
     roleCounts: { speaker: 0, leader: 0 },
     missingRoles: ["speaker", "leader"],
     agents: [],
@@ -96,18 +103,20 @@ function buildEmptySetupStatus(): SetupStatus {
       duplicateSpeakerBindings: [],
     },
     userInfo: {
-      hasBossToken: false,
+      hasAdminToken: false,
       missing: {
         bossName: true,
         bossTimezone: true,
         telegramBossId: true,
-        bossToken: true,
+        adminToken: true,
       },
     },
   };
 }
 
 function buildSetupStatusFromDb(db: HiBossDatabase): SetupStatus {
+  const daemonConfig = getDefaultConfig();
+  const hasSettingsFile = fs.existsSync(getSettingsPath(daemonConfig.dataDir));
   const completed = db.isSetupComplete();
   const agents = db.listAgents();
   const bindings = db.listBindings();
@@ -122,6 +131,7 @@ function buildSetupStatusFromDb(db: HiBossDatabase): SetupStatus {
   const userInfo = buildUserInfoStatus(db);
   const hasMissingUserInfo = Object.values(userInfo.missing).some(Boolean);
   const ready =
+    hasSettingsFile &&
     completed &&
     missingRoles.length === 0 &&
     !hasMissingUserInfo &&
@@ -130,6 +140,7 @@ function buildSetupStatusFromDb(db: HiBossDatabase): SetupStatus {
   return {
     completed,
     ready,
+    hasSettingsFile,
     roleCounts,
     missingRoles,
     agents: agents.map((agent) => ({
@@ -147,6 +158,8 @@ function buildSetupStatusFromDb(db: HiBossDatabase): SetupStatus {
  * Check setup health (tries IPC first, falls back to direct DB).
  */
 export async function checkSetupStatus(): Promise<SetupStatus> {
+  const daemonConfig = getDefaultConfig();
+  const hasSettingsFile = fs.existsSync(getSettingsPath(daemonConfig.dataDir));
   try {
     const client = new IpcClient(getSocketPath());
     const result = await client.call<SetupCheckResult>("setup.check");
@@ -159,16 +172,18 @@ export async function checkSetupStatus(): Promise<SetupStatus> {
       speakerWithoutBindings: [],
       duplicateSpeakerBindings: [],
     };
+    const remoteReady =
+      typeof result.ready === "boolean"
+        ? result.ready
+        : result.completed &&
+          missingRoles.length === 0 &&
+          !hasMissingUserInfo &&
+          !hasIntegrityViolations(integrity);
 
     return {
       completed: result.completed,
-      ready:
-        typeof result.ready === "boolean"
-          ? result.ready
-          : result.completed &&
-            missingRoles.length === 0 &&
-            !hasMissingUserInfo &&
-            !hasIntegrityViolations(integrity),
+      ready: hasSettingsFile && remoteReady,
+      hasSettingsFile,
       roleCounts,
       missingRoles,
       agents: result.agents ?? [],
@@ -180,7 +195,6 @@ export async function checkSetupStatus(): Promise<SetupStatus> {
       throw new Error(`Failed to check setup via daemon: ${(err as Error).message}`);
     }
 
-    const daemonConfig = getDefaultConfig();
     if (!fs.existsSync(daemonConfig.daemonDir)) {
       return buildEmptySetupStatus();
     }
@@ -216,87 +230,102 @@ function ensureBossProfileFile(hibossDir: string): void {
 }
 
 /**
- * Execute full first-time setup (tries IPC first, falls back to direct DB).
+ * Execute full first-time setup.
  */
 export async function executeSetup(config: SetupConfig): Promise<{ speakerAgentToken: string; leaderAgentToken: string }> {
-  try {
-    const client = new IpcClient(getSocketPath());
-    const result = await client.call<SetupExecuteResult>("setup.execute", {
-      bossName: config.bossName,
-      bossTimezone: config.bossTimezone,
-      speakerAgent: config.speakerAgent,
-      leaderAgent: config.leaderAgent,
-      bossToken: config.bossToken,
-      adapter: config.adapter,
-    });
-    return {
-      speakerAgentToken: result.speakerAgentToken,
-      leaderAgentToken: result.leaderAgentToken,
-    };
-  } catch (err) {
-    if (await isDaemonRunning()) {
-      throw new Error(`Failed to run setup via daemon: ${(err as Error).message}`);
-    }
-    return executeSetupDirect(config);
+  if (await isDaemonRunning()) {
+    throw new Error("Daemon is running. Stop it first: hiboss daemon stop --token <admin-token>");
   }
+  return executeSetupDirect(config);
 }
 
 async function executeSetupDirect(config: SetupConfig): Promise<{ speakerAgentToken: string; leaderAgentToken: string }> {
   const daemonConfig = getDefaultConfig();
+  const settingsPath = getSettingsPath(daemonConfig.dataDir);
+  const hasSettingsFile = fs.existsSync(settingsPath);
   fs.mkdirSync(daemonConfig.dataDir, { recursive: true });
   fs.mkdirSync(daemonConfig.daemonDir, { recursive: true });
 
   const dbPath = path.join(daemonConfig.daemonDir, "hiboss.db");
   const db = new HiBossDatabase(dbPath);
   try {
-    if (db.isSetupComplete()) {
+    // Recovery/migration: allow setup to rewrite settings+DB when either side is missing.
+    // Block only when both DB completion marker and settings file are already present.
+    // NOTE: if DB is complete but settings.json is missing, new agent tokens are generated
+    // and previous tokens are invalidated (plaintext tokens are not recoverable from DB hashes).
+    if (db.isSetupComplete() && hasSettingsFile) {
       throw new Error("Setup already completed");
+    }
+    if (db.isSetupComplete() && !hasSettingsFile) {
+      console.warn(
+        "Warning: settings.json is missing while DB is marked complete. New tokens will be generated; previously issued agent tokens will stop working."
+      );
     }
 
     await setupAgentHome(config.speakerAgent.name, daemonConfig.dataDir);
     await setupAgentHome(config.leaderAgent.name, daemonConfig.dataDir);
     ensureBossProfileFile(daemonConfig.dataDir);
 
-    return db.runInTransaction(() => {
-      db.setBossName(config.bossName);
-      db.setConfig("boss_timezone", config.bossTimezone);
-      db.setAdapterBossId(config.adapter.adapterType, config.adapter.adapterBossId.trim().replace(/^@/, ""));
+    const speakerAgentToken = generateToken();
+    const leaderAgentToken = generateToken();
 
-      const speakerAgentResult = db.registerAgent({
-        name: config.speakerAgent.name,
-        role: "speaker",
-        description: config.speakerAgent.description,
-        workspace: config.speakerAgent.workspace,
-        provider: config.speakerAgent.provider,
-        model: config.speakerAgent.model,
-        reasoningEffort: config.speakerAgent.reasoningEffort,
-        permissionLevel: config.speakerAgent.permissionLevel,
-        sessionPolicy: config.speakerAgent.sessionPolicy,
-        metadata: config.speakerAgent.metadata,
-      });
+    const settings: SettingsV4 = {
+      version: 4,
+      boss: {
+        name: config.bossName,
+        timezone: config.bossTimezone,
+      },
+      admin: {
+        token: config.adminToken,
+      },
+      telegram: {
+        bossIds: config.adapter.adapterBossIds,
+      },
+      permissionPolicy: DEFAULT_PERMISSION_POLICY,
+      agents: [
+        {
+          name: config.speakerAgent.name,
+          token: speakerAgentToken,
+          role: "speaker",
+          provider: config.speakerAgent.provider,
+          description: config.speakerAgent.description ?? "",
+          workspace: config.speakerAgent.workspace,
+          model: config.speakerAgent.model ?? null,
+          reasoningEffort: config.speakerAgent.reasoningEffort ?? null,
+          permissionLevel: config.speakerAgent.permissionLevel ?? "standard",
+          sessionPolicy: config.speakerAgent.sessionPolicy,
+          metadata: config.speakerAgent.metadata,
+          bindings: [
+            {
+              adapterType: config.adapter.adapterType,
+              adapterToken: config.adapter.adapterToken,
+            },
+          ],
+        },
+        {
+          name: config.leaderAgent.name,
+          token: leaderAgentToken,
+          role: "leader",
+          provider: config.leaderAgent.provider,
+          description: config.leaderAgent.description ?? "",
+          workspace: config.leaderAgent.workspace,
+          model: config.leaderAgent.model ?? null,
+          reasoningEffort: config.leaderAgent.reasoningEffort ?? null,
+          permissionLevel: config.leaderAgent.permissionLevel ?? "standard",
+          sessionPolicy: config.leaderAgent.sessionPolicy,
+          metadata: config.leaderAgent.metadata,
+          bindings: [],
+        },
+      ],
+    };
 
-      const leaderAgentResult = db.registerAgent({
-        name: config.leaderAgent.name,
-        role: "leader",
-        description: config.leaderAgent.description,
-        workspace: config.leaderAgent.workspace,
-        provider: config.leaderAgent.provider,
-        model: config.leaderAgent.model,
-        reasoningEffort: config.leaderAgent.reasoningEffort,
-        permissionLevel: config.leaderAgent.permissionLevel,
-        sessionPolicy: config.leaderAgent.sessionPolicy,
-        metadata: config.leaderAgent.metadata,
-      });
+    await writeSettingsFileAtomic(daemonConfig.dataDir, settings);
+    syncSettingsToDb(db, settings);
 
-      db.createBinding(config.speakerAgent.name, config.adapter.adapterType, config.adapter.adapterToken);
-      db.setBossToken(config.bossToken);
-      db.markSetupComplete();
-
-      return {
-        speakerAgentToken: speakerAgentResult.token,
-        leaderAgentToken: leaderAgentResult.token,
-      };
-    });
+    return {
+      speakerAgentToken,
+      leaderAgentToken,
+    };
   } finally {
     db.close();
   }

@@ -93,7 +93,7 @@ export async function promptAgentPermissionLevel(params: {
       { value: "restricted", name: "Restricted" },
       { value: "standard", name: "Standard (recommended)" },
       { value: "privileged", name: "Privileged" },
-      { value: "boss", name: "Boss" },
+      { value: "admin", name: "Admin" },
     ],
     default: params.defaultValue ?? DEFAULT_SETUP_PERMISSION_LEVEL,
   });

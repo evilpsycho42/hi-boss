@@ -10,6 +10,8 @@ import type { MessageRouter } from "../router/message-router.js";
 import type { HiBossDatabase } from "../db/database.js";
 import type { DaemonConfig } from "../daemon.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
+import { resolveUiLocale } from "../../shared/ui-locale.js";
+import { getUiText } from "../../shared/ui-text.js";
 
 /**
  * Bridge between ChannelMessages and Envelopes.
@@ -19,11 +21,9 @@ export class ChannelBridge {
   private adapterTokens: Map<ChatAdapter, string> = new Map();
   private commandHandler: ChannelCommandHandler | null = null;
 
-  private static getUnboundAdapterText(platform: string): string {
-    return [
-      `not-configured: no agent is bound to this ${platform} bot`,
-      `fix: hiboss agent set --token <boss-token> --name <agent-name> --bind-adapter-type ${platform} --bind-adapter-token <adapter-token>`,
-    ].join("\n");
+  private getUnboundAdapterText(platform: string): string {
+    const ui = getUiText(resolveUiLocale(this.db.getConfig("ui_locale")));
+    return ui.bridge.unboundAdapter(platform);
   }
 
   constructor(
@@ -80,7 +80,7 @@ export class ChannelBridge {
         "from-boss": fromBoss,
       });
 
-      return { text: ChannelBridge.getUnboundAdapterText(adapter.platform) };
+      return { text: this.getUnboundAdapterText(adapter.platform) };
     }
 
     // Enrich command with agent name
@@ -115,7 +115,7 @@ export class ChannelBridge {
       if (fromBoss) {
         try {
           await adapter.sendMessage(message.chat.id, {
-            text: ChannelBridge.getUnboundAdapterText(platform),
+            text: this.getUnboundAdapterText(platform),
           });
         } catch (err) {
           logEvent("warn", "channel-send-failed", {
@@ -157,14 +157,11 @@ export class ChannelBridge {
   private isBoss(platform: string, username?: string): boolean {
     if (!username) return false;
 
-    const adapterBossId = this.db.getAdapterBossId(platform);
-    if (!adapterBossId) return false;
+    const adapterBossIds = this.db.getAdapterBossIds(platform);
+    if (adapterBossIds.length < 1) return false;
 
     const normalizedUser = username.replace(/^@/, '').toLowerCase();
 
-    // Support comma-separated list of boss usernames
-    return adapterBossId
-      .split(',')
-      .some((id) => id.trim().replace(/^@/, '').toLowerCase() === normalizedUser);
+    return adapterBossIds.some((id) => id.toLowerCase() === normalizedUser);
   }
 }

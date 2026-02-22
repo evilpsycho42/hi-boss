@@ -132,7 +132,7 @@ export interface AgentRegisterParams {
   provider: "claude" | "codex";
   model?: string;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | null;
-  permissionLevel?: "restricted" | "standard" | "privileged" | "boss";
+  permissionLevel?: "restricted" | "standard" | "privileged" | "admin";
   metadata?: Record<string, unknown>;
   sessionDailyResetAt?: string;
   sessionIdleTimeout?: string;
@@ -216,7 +216,7 @@ export interface AgentStatusResult {
     provider?: "claude" | "codex";
     model?: string;
     reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
-    permissionLevel?: "restricted" | "standard" | "privileged" | "boss";
+    permissionLevel?: "restricted" | "standard" | "privileged" | "admin";
     sessionPolicy?: {
       dailyResetAt?: string;
       idleTimeout?: string;
@@ -227,7 +227,7 @@ export interface AgentStatusResult {
   effective: {
     workspace: string;
     provider: "claude" | "codex";
-    permissionLevel: "restricted" | "standard" | "privileged" | "boss";
+    permissionLevel: "restricted" | "standard" | "privileged" | "admin";
   };
   status: {
     agentState: "running" | "idle";
@@ -266,7 +266,7 @@ export interface AgentSetParams {
   provider?: "claude" | "codex" | null;
   model?: string | null;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | null;
-  permissionLevel?: "restricted" | "standard" | "privileged" | "boss";
+  permissionLevel?: "restricted" | "standard" | "privileged" | "admin";
   sessionPolicy?: {
     dailyResetAt?: string;
     idleTimeout?: string;
@@ -288,7 +288,7 @@ export interface AgentSetResult {
     provider: "claude" | "codex";
     model?: string;
     reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
-    permissionLevel: "restricted" | "standard" | "privileged" | "boss";
+    permissionLevel: "restricted" | "standard" | "privileged" | "admin";
     sessionPolicy?: unknown;
     metadata?: unknown;
   };
@@ -344,12 +344,12 @@ export interface SetupCheckResult {
     bossName?: string;
     bossTimezone?: string;
     telegramBossId?: string;
-    hasBossToken: boolean;
+    hasAdminToken: boolean;
     missing: {
       bossName: boolean;
       bossTimezone: boolean;
       telegramBossId: boolean;
-      bossToken: boolean;
+      adminToken: boolean;
     };
   };
 }
@@ -365,7 +365,7 @@ export interface SetupExecuteParams {
     workspace?: string;
     model?: string | null;
     reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null;
-    permissionLevel?: 'restricted' | 'standard' | 'privileged' | 'boss';
+    permissionLevel?: 'restricted' | 'standard' | 'privileged' | 'admin';
     sessionPolicy?: {
       dailyResetAt?: string;
       idleTimeout?: string;
@@ -381,7 +381,7 @@ export interface SetupExecuteParams {
     workspace?: string;
     model?: string | null;
     reasoningEffort?: 'none' | 'low' | 'medium' | 'high' | 'xhigh' | null;
-    permissionLevel?: 'restricted' | 'standard' | 'privileged' | 'boss';
+    permissionLevel?: 'restricted' | 'standard' | 'privileged' | 'admin';
     sessionPolicy?: {
       dailyResetAt?: string;
       idleTimeout?: string;
@@ -389,11 +389,11 @@ export interface SetupExecuteParams {
     };
     metadata?: Record<string, unknown>;
   };
-  bossToken: string;
+  adminToken: string;
   adapter: {
     adapterType: string;
     adapterToken: string;
-    adapterBossId: string;
+    adapterBossIds: string[];
   };
 }
 
@@ -402,10 +402,10 @@ export interface SetupExecuteResult {
   leaderAgentToken: string;
 }
 
-export interface BossVerifyParams {
+export interface AdminVerifyParams {
   token: string;
 }
 
-export interface BossVerifyResult {
+export interface AdminVerifyResult {
   valid: boolean;
 }
