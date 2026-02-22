@@ -160,3 +160,6 @@ examples/cli/*
 # Brainstorm & plan documents (personal workflow artifacts)
 docs/brainstorms/
 docs/plans/
+
+# Serena IDE config
+.serena/
