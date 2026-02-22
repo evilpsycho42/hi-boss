@@ -156,3 +156,7 @@ prompts/examples/*
 # Generated CLI examples
 examples/cli/*
 !examples/cli/.gitkeep
+
+# Brainstorm & plan documents (personal workflow artifacts)
+docs/brainstorms/
+docs/plans/
