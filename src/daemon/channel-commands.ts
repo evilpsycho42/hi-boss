@@ -5,6 +5,7 @@ import type { OneshotType } from "../envelope/types.js";
 import { DEFAULT_AGENT_PERMISSION_LEVEL, DEFAULT_AGENT_PROVIDER, getDefaultRuntimeWorkspace } from "../shared/defaults.js";
 import { logEvent, errorMessage } from "../shared/daemon-log.js";
 import { DEFAULT_ID_PREFIX_LEN, formatShortId, isHexLower, normalizeIdPrefixInput } from "../shared/id-format.js";
+import { SESSIONS_CALLBACK_PREFIX } from "../shared/session-callbacks.js";
 import { formatUnixMsAsTimeZoneOffset } from "../shared/time.js";
 import { resolveUiLocale } from "../shared/ui-locale.js";
 import { getUiText } from "../shared/ui-text.js";
@@ -20,8 +21,6 @@ type SessionsView = {
 
 const SESSIONS_PAGE_SIZE = 10;
 const SESSIONS_MAX_TOTAL = 100;
-const SESSIONS_CALLBACK_PREFIX = "hiboss:sessions:";
-
 const SESSION_SCOPE_VALUES: SessionListScope[] = ["current-chat", "my-chats", "agent-all"];
 
 function isSessionScope(value: string): value is SessionListScope {
@@ -352,7 +351,7 @@ async function handleSessionSwitchCommand(params: {
       return { text: params.ui.channel.sessionSwitchInvalidId };
     }
     if (resolved.message === "not-found") {
-      return { text: params.ui.channel.sessionSwitchInvalidId };
+      return { text: params.ui.channel.sessionSwitchNotFound };
     }
     return { text: resolved.message };
   }
@@ -443,7 +442,7 @@ export function createChannelCommandHandler(params: {
     }
 
     if (c.command === "abort" && typeof c.agentName === "string" && c.agentName) {
-      const cancelledRun = params.executor.abortCurrentRun(c.agentName, "telegram:/abort");
+      const cancelledRun = params.executor.abortCurrentRun(c.agentName, `${c.adapterType ?? "telegram"}:/abort`);
       const clearedPendingCount = params.db.markDuePendingNonCronEnvelopesDoneForAgent(c.agentName);
       const lines = [
         ui.channel.abortOk,

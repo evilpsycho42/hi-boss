@@ -1,11 +1,13 @@
 export class AsyncSemaphore {
   private inUse = 0;
+  private capacity: number;
   private waiters: Array<(release: () => void) => void> = [];
 
-  constructor(private readonly capacity: number) {
-    if (!Number.isFinite(capacity) || capacity < 1) {
+  constructor(capacity: number) {
+    if (!Number.isFinite(capacity) || !Number.isInteger(capacity) || capacity < 1) {
       throw new Error("Semaphore capacity must be >= 1");
     }
+    this.capacity = capacity;
   }
 
   async acquire(): Promise<() => void> {
@@ -25,11 +27,26 @@ export class AsyncSemaphore {
       if (released) return;
       released = true;
       this.inUse--;
-      const next = this.waiters.shift();
-      if (next) {
-        this.inUse++;
-        next(this.releaseFactory());
-      }
+      this.flushWaiters();
     };
+  }
+
+  setCapacity(capacity: number): void {
+    if (!Number.isFinite(capacity) || !Number.isInteger(capacity) || capacity < 1) {
+      throw new Error("Semaphore capacity must be >= 1");
+    }
+    this.capacity = capacity;
+    this.flushWaiters();
+  }
+
+  private flushWaiters(): void {
+    while (this.inUse < this.capacity) {
+      const next = this.waiters.shift();
+      if (!next) {
+        break;
+      }
+      this.inUse++;
+      next(this.releaseFactory());
+    }
   }
 }

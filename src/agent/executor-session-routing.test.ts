@@ -19,6 +19,20 @@ function withTempDb(run: (db: HiBossDatabase) => void): void {
   }
 }
 
+async function waitUntilIdle(
+  executor: AgentExecutor,
+  agentName: string,
+  timeoutMs = 1000
+): Promise<void> {
+  const startedAt = Date.now();
+  while (executor.isAgentBusy(agentName)) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error(`executor did not become idle within ${timeoutMs}ms`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
 test("abortCurrentRun skips queued tasks enqueued before abort generation bump", async () => {
   const executor = new AgentExecutor();
   const calls: string[] = [];
@@ -61,7 +75,7 @@ test("abortCurrentRun skips queued tasks enqueued before abort generation bump",
   assert.equal(cancelled, true);
 
   releaseFirst();
-  await new Promise((resolve) => setTimeout(resolve, 25));
+  await waitUntilIdle(executor, "nex");
 
   assert.deepEqual(calls, ["e1"]);
 });

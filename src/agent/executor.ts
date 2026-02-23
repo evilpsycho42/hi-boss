@@ -132,8 +132,10 @@ export class AgentExecutor {
     const global = Math.max(perAgent, Math.min(256, Math.trunc(input.global)));
     this.concurrencyPerAgent = perAgent;
     this.concurrencyGlobal = global;
-    this.globalRunSemaphore = new AsyncSemaphore(global);
-    this.perAgentRunSemaphores.clear();
+    this.globalRunSemaphore.setCapacity(global);
+    for (const semaphore of this.perAgentRunSemaphores.values()) {
+      semaphore.setCapacity(perAgent);
+    }
   }
 
   private getAgentSemaphore(agentName: string): AsyncSemaphore {
@@ -598,16 +600,25 @@ export class AgentExecutor {
           }
         }
       } else {
-        params.db.updateAgentSessionProviderSessionId(
-          params.scope.agentSessionId,
-          session.sessionId ?? null,
-          { provider: session.provider }
-        );
-        params.db.touchAgentSession(params.scope.agentSessionId, {
-          lastActiveAt: Date.now(),
-          adapterType: params.scope.adapterType,
-          chatId: params.scope.chatId,
-        });
+        try {
+          params.db.updateAgentSessionProviderSessionId(
+            params.scope.agentSessionId,
+            session.sessionId ?? null,
+            { provider: session.provider }
+          );
+          params.db.touchAgentSession(params.scope.agentSessionId, {
+            lastActiveAt: Date.now(),
+            adapterType: params.scope.adapterType,
+            chatId: params.scope.chatId,
+          });
+        } catch (err) {
+          logEvent("warn", "agent-session-channel-persist-failed", {
+            "agent-name": params.agent.name,
+            "agent-session-id": params.scope.agentSessionId,
+            provider: session.provider,
+            error: errorMessage(err),
+          });
+        }
       }
 
       params.db.completeAgentRun(run.id, response, turn.usage.contextLength);
@@ -747,9 +758,6 @@ export class AgentExecutor {
       reasoningEffort: agent.reasoningEffort,
       sessionId: persistedRow?.providerSessionId ?? undefined,
       createdAtMs: persistedRow?.createdAt ?? Date.now(),
-      ...(provider === "codex" && baseSession.codexCumulativeUsageTotals
-        ? { codexCumulativeUsageTotals: baseSession.codexCumulativeUsageTotals }
-        : {}),
       ...(persistedRow ? { lastRunCompletedAtMs: persistedRow.lastActiveAt } : {}),
     };
     this.channelSessions.set(scope.cacheKey, session);

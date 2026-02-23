@@ -182,6 +182,7 @@ export class OneShotExecutor {
         const msg = err instanceof Error ? err.message : String(err);
         finalText = [
           `One-shot (${effectiveMode}) execution failed. Check daemon logs for details.`,
+          "",
           `oneshot-mode: ${effectiveMode}`,
           `execution-session-id: ${executionSessionId ?? "(none)"}`,
           "active-session-changed: false",

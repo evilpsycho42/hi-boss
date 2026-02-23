@@ -130,3 +130,78 @@ test("/new uses command adapter type instead of hardcoded telegram", async () =>
     assert.equal(telegramBinding, null);
   });
 });
+
+test("/abort uses adapter-specific reason", async () => {
+  await withTempDb(async (db) => {
+    db.registerAgent({ name: "nex", provider: "codex", role: "speaker" });
+    let abortReason = "";
+
+    const handler = createChannelCommandHandler({
+      db,
+      executor: {
+        isAgentBusy: () => false,
+        abortCurrentRun: (_agent: string, reason: string) => {
+          abortReason = reason;
+          return false;
+        },
+        invalidateChannelSessionCache: () => undefined,
+      } as any,
+      router: { routeEnvelope: async () => undefined } as any,
+    });
+
+    await handler({
+      command: "abort",
+      args: "",
+      adapterType: "slack",
+      chatId: "channel-1",
+      authorId: "u-1",
+      authorUsername: "alice",
+      agentName: "nex",
+    } as any);
+
+    assert.equal(abortReason, "slack:/abort");
+  });
+});
+
+test("/session not-found uses distinct message from invalid-id", async () => {
+  await withTempDb(async (db) => {
+    db.registerAgent({ name: "nex", provider: "codex", role: "speaker" });
+    db.getOrCreateChannelActiveSession({
+      agentName: "nex",
+      adapterType: "telegram",
+      chatId: "chat-1",
+      ownerUserId: "u-1",
+      provider: "codex",
+    });
+
+    const handler = createChannelCommandHandler({
+      db,
+      executor: {
+        isAgentBusy: () => false,
+        abortCurrentRun: () => false,
+        invalidateChannelSessionCache: () => undefined,
+      } as any,
+      router: { routeEnvelope: async () => undefined } as any,
+    });
+
+    const invalid = await handler({
+      command: "session",
+      args: "not-a-hex-id",
+      chatId: "chat-1",
+      authorId: "u-1",
+      authorUsername: "alice",
+      agentName: "nex",
+    } as any);
+    const notFound = await handler({
+      command: "session",
+      args: "aaaaaaaa",
+      chatId: "chat-1",
+      authorId: "u-1",
+      authorUsername: "alice",
+      agentName: "nex",
+    } as any);
+
+    assert.equal(invalid?.text, "error: Invalid session id");
+    assert.equal(notFound?.text, "error: Session not found");
+  });
+});

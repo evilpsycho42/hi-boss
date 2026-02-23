@@ -9,11 +9,12 @@ import { HiBossDatabase } from "./database.js";
 function withTempDb(run: (db: HiBossDatabase) => void): void {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hiboss-db-session-test-"));
   const dbPath = path.join(dir, "hiboss.db");
-  const db = new HiBossDatabase(dbPath);
+  let db: HiBossDatabase | null = null;
   try {
+    db = new HiBossDatabase(dbPath);
     run(db);
   } finally {
-    db.close();
+    db?.close();
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }

@@ -45,8 +45,10 @@ Top-level required fields:
 - `admin`
 - `telegram`
 - `permission-policy`
-- `runtime`
 - `agents[]`
+
+Top-level optional fields:
+- `runtime` (defaults are applied when omitted)
 
 Key fields:
 - `boss.name`

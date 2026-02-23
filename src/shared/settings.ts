@@ -172,7 +172,7 @@ function parseRuntime(raw: unknown): SettingsRuntimeV4 {
     DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
     { min: 1, max: 64 }
   );
-  const global = parsePositiveInt(
+  const globalLimit = parsePositiveInt(
     concurrencyRaw ? concurrencyRaw.global : undefined,
     "runtime.session-concurrency.global",
     DEFAULT_SESSION_CONCURRENCY_GLOBAL,
@@ -182,7 +182,7 @@ function parseRuntime(raw: unknown): SettingsRuntimeV4 {
   return {
     sessionConcurrency: {
       perAgent,
-      global: Math.max(perAgent, global),
+      global: globalLimit,
     },
   };
 }
@@ -368,14 +368,14 @@ export function assertValidSettingsV4(settings: SettingsV4): void {
   }
   validateBossIds(settings.telegram.bossIds);
   const perAgent = settings.runtime?.sessionConcurrency?.perAgent ?? DEFAULT_SESSION_CONCURRENCY_PER_AGENT;
-  const global = settings.runtime?.sessionConcurrency?.global ?? DEFAULT_SESSION_CONCURRENCY_GLOBAL;
+  const globalLimit = settings.runtime?.sessionConcurrency?.global ?? DEFAULT_SESSION_CONCURRENCY_GLOBAL;
   if (!Number.isFinite(perAgent) || Math.trunc(perAgent) < 1 || Math.trunc(perAgent) > 64) {
     fail("runtime.session-concurrency.per-agent", "must be between 1 and 64");
   }
-  if (!Number.isFinite(global) || Math.trunc(global) < 1 || Math.trunc(global) > 256) {
+  if (!Number.isFinite(globalLimit) || Math.trunc(globalLimit) < 1 || Math.trunc(globalLimit) > 256) {
     fail("runtime.session-concurrency.global", "must be between 1 and 256");
   }
-  if (Math.trunc(global) < Math.trunc(perAgent)) {
+  if (Math.trunc(globalLimit) < Math.trunc(perAgent)) {
     fail("runtime.session-concurrency.global", "must be >= runtime.session-concurrency.per-agent");
   }
 

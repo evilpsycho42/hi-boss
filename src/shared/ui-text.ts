@@ -14,6 +14,7 @@ interface UiTextBundle {
     agentNotFound: string;
     sessionRefreshRequested: string;
     sessionSwitchInvalidId: string;
+    sessionSwitchNotFound: string;
     sessionSwitchNotVisible: string;
     abortOk: string;
     usage(mode: OneshotType): string;
@@ -38,6 +39,7 @@ const EN_TEXT: UiTextBundle = {
     agentNotFound: "error: Agent not found",
     sessionRefreshRequested: "Session refresh requested.",
     sessionSwitchInvalidId: "error: Invalid session id",
+    sessionSwitchNotFound: "error: Session not found",
     sessionSwitchNotVisible: "error: Session is not visible in this scope",
     abortOk: "abort: ok",
     usage: (mode) => `Usage: /${mode} <message>`,
@@ -73,6 +75,7 @@ const ZH_CN_TEXT: UiTextBundle = {
     agentNotFound: "error: 未找到对应 Agent",
     sessionRefreshRequested: "已请求刷新会话。",
     sessionSwitchInvalidId: "error: 会话 ID 无效",
+    sessionSwitchNotFound: "error: 未找到该会话",
     sessionSwitchNotVisible: "error: 该会话当前不可见",
     abortOk: "abort: ok",
     usage: (mode) => `用法: /${mode} <消息>`,

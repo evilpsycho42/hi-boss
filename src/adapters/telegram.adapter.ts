@@ -24,6 +24,7 @@ import {
 } from "./telegram/shared.js";
 import type { UiLocale } from "../shared/ui-locale.js";
 import { getUiText } from "../shared/ui-text.js";
+import { SESSIONS_CALLBACK_PREFIX } from "../shared/session-callbacks.js";
 
 /** Milliseconds to wait for additional album parts before flushing. */
 const MEDIA_GROUP_DEBOUNCE_MS = 500;
@@ -31,8 +32,6 @@ const MEDIA_GROUP_DEBOUNCE_MS = 500;
 const TELEGRAM_TYPING_HEARTBEAT_MS = 4500;
 /** Prevent noisy logs if chat action repeatedly fails (e.g., chat blocked). */
 const TELEGRAM_TYPING_ERROR_THROTTLE_MS = 60_000;
-const SESSIONS_CALLBACK_PREFIX = "hiboss:sessions:";
-
 /**
  * Telegram adapter for the chat bot.
  *
@@ -117,11 +116,14 @@ export class TelegramAdapter implements ChatAdapter {
 
     const inlineKeyboard = response.telegram?.inlineKeyboard;
     const replyMarkup = inlineKeyboard ? this.toInlineKeyboard(inlineKeyboard) : undefined;
+    const safeText = text.length <= TELEGRAM_MAX_TEXT_CHARS
+      ? text
+      : `${text.slice(0, TELEGRAM_MAX_TEXT_CHARS - 3)}...`;
 
     if (command.isCallback && response.telegram?.editMessageId) {
       try {
         const messageId = parseTelegramMessageId(response.telegram.editMessageId, "callback-message-id");
-        await this.bot.telegram.editMessageText(chatId, messageId, undefined, text, {
+        await this.bot.telegram.editMessageText(chatId, messageId, undefined, safeText, {
           ...(replyMarkup ? { reply_markup: replyMarkup as never } : {}),
         } as never);
         await this.safeAnswerCallback(command.callbackQueryId);
@@ -132,7 +134,7 @@ export class TelegramAdapter implements ChatAdapter {
     }
 
     if (replyMarkup) {
-      await this.bot.telegram.sendMessage(chatId, text, {
+      await this.bot.telegram.sendMessage(chatId, safeText, {
         reply_markup: replyMarkup as never,
       } as never);
       await this.safeAnswerCallback(command.callbackQueryId);
