@@ -19,7 +19,7 @@ import { buildTurnInput } from "./turn-input.js";
 import { executeCliTurn } from "./executor-turn.js";
 import { readPersistedAgentSession } from "./persisted-session.js";
 import { cloneSessionFile, cleanupClonedSession, type ClonedSession } from "./session-clone.js";
-import { formatAgentAddress } from "../adapters/types.js";
+import { formatAgentAddress, parseAddress } from "../adapters/types.js";
 import {
   DEFAULT_AGENT_PROVIDER,
   DEFAULT_ONESHOT_MAX_CONCURRENT,
@@ -129,7 +129,7 @@ export class OneShotExecutor {
       // For clone mode: attempt to clone the session file.
       let cloneSessionId: string | undefined;
       if (mode === "clone") {
-        clone = await this.tryCloneSession(agent);
+        clone = await this.tryCloneSession(agent, envelope);
         if (clone) {
           cloneSessionId = clone.clonedSessionId;
         } else {
@@ -219,23 +219,66 @@ export class OneShotExecutor {
    *
    * Returns the cloned session info, or null if no session exists to clone.
    */
-  private async tryCloneSession(agent: Agent): Promise<ClonedSession | null> {
-    const agentRecord = this.deps.db.getAgentByName(agent.name);
-    if (!agentRecord) return null;
-
-    const persisted = readPersistedAgentSession(agentRecord);
-    if (!persisted?.handle.sessionId) return null;
-
-    const provider = persisted.provider;
-    const sessionId = persisted.handle.sessionId;
+  private resolveCloneSource(agent: Agent, envelope: Envelope): { provider: "claude" | "codex"; sessionId: string } | null {
+    const md = (envelope.metadata ?? {}) as Record<string, unknown>;
+    const sourceSessionId = typeof md.oneshotSourceSessionId === "string" ? md.oneshotSourceSessionId.trim() : "";
+    if (sourceSessionId) {
+      const sourceSession = this.deps.db.getAgentSessionById(sourceSessionId);
+      if (
+        sourceSession &&
+        sourceSession.agentName === agent.name &&
+        sourceSession.providerSessionId
+      ) {
+        return {
+          provider: sourceSession.provider,
+          sessionId: sourceSession.providerSessionId,
+        };
+      }
+    }
 
     try {
-      return await cloneSessionFile({ provider, sessionId });
+      const from = parseAddress(envelope.from);
+      if (from.type === "channel") {
+        const activeBinding = this.deps.db.getChannelSessionBinding(agent.name, from.adapter, from.chatId);
+        if (activeBinding) {
+          const activeSession = this.deps.db.getAgentSessionById(activeBinding.activeSessionId);
+          if (
+            activeSession &&
+            activeSession.agentName === agent.name &&
+            activeSession.providerSessionId
+          ) {
+            return {
+              provider: activeSession.provider,
+              sessionId: activeSession.providerSessionId,
+            };
+          }
+        }
+      }
+    } catch {
+      // Best-effort fallback to persisted default session handle.
+    }
+
+    const agentRecord = this.deps.db.getAgentByName(agent.name);
+    if (!agentRecord) return null;
+    const persisted = readPersistedAgentSession(agentRecord);
+    if (!persisted?.handle.sessionId) return null;
+    return {
+      provider: persisted.provider,
+      sessionId: persisted.handle.sessionId,
+    };
+  }
+
+  private async tryCloneSession(agent: Agent, envelope: Envelope): Promise<ClonedSession | null> {
+    const source = this.resolveCloneSource(agent, envelope);
+    if (!source) return null;
+
+    try {
+      return await cloneSessionFile({ provider: source.provider, sessionId: source.sessionId });
     } catch (err) {
       logEvent("warn", "oneshot-clone-failed", {
         "agent-name": agent.name,
-        provider,
-        "session-id": sessionId,
+        provider: source.provider,
+        "session-id": source.sessionId,
         error: errorMessage(err),
       });
       return null;

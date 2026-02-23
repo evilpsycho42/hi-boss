@@ -2204,6 +2204,17 @@ export class HiBossDatabase {
   }
 
   /**
+   * Verify legacy boss token hash for pre-settings compatibility.
+   *
+   * Older installs may only have `boss_token_hash` populated.
+   */
+  verifyLegacyBossToken(token: string): boolean {
+    const storedHash = this.getConfig("boss_token_hash");
+    if (!storedHash) return false;
+    return verifyToken(token, storedHash);
+  }
+
+  /**
    * Get the boss name.
    */
   getBossName(): string | null {

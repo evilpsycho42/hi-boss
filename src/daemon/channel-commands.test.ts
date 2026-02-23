@@ -314,3 +314,45 @@ test("/isolated acknowledgement does not include one-shot metadata lines", async
     assert.equal(response?.text?.includes("active-session-changed:"), false);
   });
 });
+
+test("/clone records source active session id in oneshot metadata", async () => {
+  await withTempDb(async (db) => {
+    db.registerAgent({ name: "nex", provider: "codex", role: "speaker" });
+    const active = db.getOrCreateChannelActiveSession({
+      agentName: "nex",
+      adapterType: "telegram",
+      chatId: "chat-1",
+      ownerUserId: "u-1",
+      provider: "codex",
+    });
+    let routedPayload: any = null;
+
+    const handler = createChannelCommandHandler({
+      db,
+      executor: {
+        isAgentBusy: () => false,
+        abortCurrentRun: () => false,
+        invalidateChannelSessionCache: () => undefined,
+      } as any,
+      router: {
+        routeEnvelope: async (payload: unknown) => {
+          routedPayload = payload;
+          return undefined;
+        },
+      } as any,
+    });
+
+    await handler({
+      command: "clone",
+      args: "hello",
+      chatId: "chat-1",
+      authorId: "u-1",
+      authorUsername: "alice",
+      agentName: "nex",
+      messageId: "123",
+    } as any);
+
+    assert.equal(routedPayload?.metadata?.oneshotType, "clone");
+    assert.equal(routedPayload?.metadata?.oneshotSourceSessionId, active.session.id);
+  });
+});

@@ -504,9 +504,10 @@ async function handleOneshotCommand(
 
   const fromAddress = formatChannelAddress(command.adapterType ?? "telegram", command.chatId);
   const toAddress = formatAgentAddress(agentName);
+  const adapterType = command.adapterType ?? "telegram";
+  const activeBinding = params.db.getChannelSessionBinding(agentName, adapterType, command.chatId);
 
   try {
-    const adapterType = command.adapterType ?? "telegram";
     await params.router.routeEnvelope({
       from: fromAddress,
       to: toAddress,
@@ -515,6 +516,7 @@ async function handleOneshotCommand(
       metadata: {
         oneshotType: mode,
         platform: adapterType,
+        ...(activeBinding ? { oneshotSourceSessionId: activeBinding.activeSessionId } : {}),
         channelMessageId: command.messageId,
         author:
           command.authorId || command.authorUsername

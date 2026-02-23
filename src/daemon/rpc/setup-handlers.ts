@@ -35,7 +35,10 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const bossTimezone = (ctx.db.getConfig("boss_timezone") ?? "").trim();
       const telegramBossId = (ctx.db.getAdapterBossIds("telegram")[0] ?? "").trim();
       const wechatpadproBossId = (ctx.db.getAdapterBossIds("wechatpadpro")[0] ?? "").trim();
-      const hasAdminToken = Boolean((ctx.db.getConfig("admin_token_hash") ?? "").trim());
+      const hasAdminToken = Boolean(
+        (ctx.db.getConfig("admin_token_hash") ?? "").trim() ||
+        (ctx.db.getConfig("boss_token_hash") ?? "").trim()
+      );
       const hasChannelBossId = telegramBossId.length > 0 || wechatpadproBossId.length > 0;
       const missingUserInfo = {
         bossName: bossName.length === 0,

@@ -80,7 +80,10 @@ function buildUserInfoStatus(db: HiBossDatabase): SetupUserInfoStatus {
   const telegramBossId = (db.getAdapterBossIds("telegram")[0] ?? "").trim();
   const wechatpadproBossId = (db.getAdapterBossIds("wechatpadpro")[0] ?? "").trim();
   const hasChannelBossId = telegramBossId.length > 0 || wechatpadproBossId.length > 0;
-  const hasAdminToken = Boolean((db.getConfig("admin_token_hash") ?? "").trim());
+  const hasAdminToken = Boolean(
+    (db.getConfig("admin_token_hash") ?? "").trim() ||
+    (db.getConfig("boss_token_hash") ?? "").trim()
+  );
   return {
     bossName: bossName || undefined,
     bossTimezone: bossTimezone || undefined,

@@ -179,7 +179,7 @@ export class Daemon {
   }
 
   private resolvePrincipal(token: string): Principal {
-    if (this.db.verifyAdminToken(token)) {
+    if (this.db.verifyAdminToken(token) || this.db.verifyLegacyBossToken(token)) {
       return { kind: "admin", level: "admin" };
     }
 
