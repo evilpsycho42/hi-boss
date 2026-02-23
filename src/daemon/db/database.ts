@@ -418,7 +418,8 @@ export class HiBossDatabase {
         this.setAdminToken(settings.admin.token);
       }
       this.setConfig("permission_policy", JSON.stringify(settings.permissionPolicy));
-      this.setAdapterBossIds("telegram", settings.telegram.bossIds);
+      this.setAdapterBossIds("telegram", settings.telegram?.bossIds ?? []);
+      this.setAdapterBossIds("wechatpadpro", settings.wechatpadpro?.bossIds ?? []);
       this.setRuntimeSessionConcurrency({
         perAgent: settings.runtime?.sessionConcurrency?.perAgent ?? DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
         global: settings.runtime?.sessionConcurrency?.global ?? DEFAULT_SESSION_CONCURRENCY_GLOBAL,

@@ -65,7 +65,10 @@ export class ChannelBridge {
     adapterToken: string,
     command: ChannelCommand
   ): Promise<ChannelCommandResponse | void> {
-    const fromBoss = this.isBoss(adapter.platform, command.authorUsername);
+    const fromBoss = this.isBoss(adapter.platform, {
+      id: command.authorId,
+      username: command.authorUsername,
+    });
     if (!fromBoss) {
       // Boss-only commands: do not reply to non-boss users.
       return;
@@ -102,7 +105,10 @@ export class ChannelBridge {
     message: ChannelMessage
   ): Promise<void> {
     const platform = adapter.platform;
-    const fromBoss = this.isBoss(platform, message.author.username);
+    const fromBoss = this.isBoss(platform, {
+      id: message.author.id,
+      username: message.author.username,
+    });
 
     // Find the agent bound to this adapter
     const binding = this.db.getBindingByAdapter(platform, adapterToken);
@@ -168,14 +174,14 @@ export class ChannelBridge {
     });
   }
 
-  private isBoss(platform: string, username?: string): boolean {
-    if (!username) return false;
-
+  private isBoss(platform: string, author: { id?: string; username?: string }): boolean {
     const adapterBossIds = this.db.getAdapterBossIds(platform);
     if (adapterBossIds.length < 1) return false;
-
-    const normalizedUser = username.replace(/^@/, '').toLowerCase();
-
-    return adapterBossIds.some((id) => id.toLowerCase() === normalizedUser);
+    const authorIds = [author.username, author.id]
+      .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      .map((value) => value.trim().replace(/^@/, "").toLowerCase());
+    if (authorIds.length < 1) return false;
+    const allowed = new Set(adapterBossIds.map((id) => id.replace(/^@/, "").toLowerCase()));
+    return authorIds.some((id) => allowed.has(id));
   }
 }

@@ -22,6 +22,7 @@ Behavior:
 - Creates one speaker and one leader.
 - Prints speaker/leader/admin tokens once.
 - Writes `settings.json` with owner-only permissions (`0600`, best effort across platforms).
+- Interactive setup binds speaker to one selected adapter (`telegram` or `wechatpadpro`).
 
 Interactive defaults:
 - `boss.name`: OS username
@@ -43,18 +44,20 @@ Top-level required fields:
 - `version: 4`
 - `boss`
 - `admin`
-- `telegram`
 - `permission-policy`
 - `agents[]`
 
 Top-level optional fields:
+- `telegram`
+- `wechatpadpro`
 - `runtime` (defaults are applied when omitted)
 
 Key fields:
 - `boss.name`
 - `boss.timezone`
 - `admin.token` (plaintext)
-- `telegram.boss-ids[]` (supports multiple boss usernames)
+- `telegram.boss-ids[]` (optional; supports multiple boss usernames)
+- `wechatpadpro.boss-ids[]` (optional; supports multiple wxids)
 - `permission-policy` (`version: 1`)
 - `runtime.session-concurrency.per-agent` (default `4`)
 - `runtime.session-concurrency.global` (default `16`, must be `>= per-agent`)
@@ -64,6 +67,7 @@ Key fields:
 Invariants:
 - At least one `speaker` and one `leader`.
 - Every `speaker` has at least one binding.
+- At least one channel boss allowlist is configured: `telegram.boss-ids` or `wechatpadpro.boss-ids`.
 - Agent names are unique (case-insensitive).
 - Agent tokens are unique.
 - Adapter identity (`adapter-type` + `adapter-token`) is unique across agents.
@@ -82,6 +86,7 @@ Core mappings:
 - `boss.timezone` → `config.boss_timezone`
 - `admin.token` → `config.admin_token_hash`
 - `telegram.boss-ids` → `config.adapter_boss_ids_telegram` (first value also mirrored to `config.adapter_boss_id_telegram` for compatibility)
+- `wechatpadpro.boss-ids` → `config.adapter_boss_ids_wechatpadpro` (first value also mirrored to `config.adapter_boss_id_wechatpadpro` for compatibility)
 - `permission-policy` → `config.permission_policy`
 - `runtime.session-concurrency.per-agent` → `config.runtime_session_concurrency_per_agent`
 - `runtime.session-concurrency.global` → `config.runtime_session_concurrency_global`

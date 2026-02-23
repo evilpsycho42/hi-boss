@@ -16,9 +16,13 @@ import { HiBossDatabase } from "../db/database.js";
 import { ChannelBridge } from "./channel-bridge.js";
 
 class TestAdapter implements ChatAdapter {
-  readonly platform = "telegram";
+  readonly platform: string;
   private messageHandler: ChannelMessageHandler | null = null;
   private commandHandler: ChannelCommandHandler | null = null;
+
+  constructor(platform = "telegram") {
+    this.platform = platform;
+  }
 
   async sendMessage(_chatId: string, _content: MessageContent, _options?: SendMessageOptions): Promise<void> {}
   onMessage(handler: ChannelMessageHandler): void {
@@ -104,5 +108,50 @@ test("channel bridge stamps channelSessionId at ingest and does not drift owner 
 
     const bindingAfterMember = db.getChannelSessionBinding("nex", "telegram", "chat-1");
     assert.equal(bindingAfterMember?.ownerUserId, "boss-1");
+  });
+});
+
+test("channel bridge treats author id as boss identity for non-username adapters", async () => {
+  await withTempDb(async (db) => {
+    db.registerAgent({ name: "nex", provider: "codex", role: "speaker" });
+    db.createBinding("nex", "wechatpadpro", "wx-token");
+    db.setAdapterBossIds("wechatpadpro", ["wxid_boss"]);
+
+    let seenCommand: Record<string, unknown> | null = null;
+    const router = {
+      registerAdapter: () => undefined,
+      routeEnvelope: async () => undefined,
+    } as any;
+
+    const bridge = new ChannelBridge(router, db, {} as any);
+    bridge.setCommandHandler(async (command) => {
+      seenCommand = command as unknown as Record<string, unknown>;
+      return { text: "ok" };
+    });
+
+    const adapter = new TestAdapter("wechatpadpro");
+    bridge.connect(adapter, "wx-token");
+    const commandHandler = adapter.getCommandHandler();
+    assert.ok(commandHandler);
+
+    const response = await commandHandler?.({
+      command: "status",
+      args: "",
+      chatId: "room-1",
+      authorId: "wxid_boss",
+    } as any);
+
+    assert.equal(response?.text, "ok");
+    assert.equal((seenCommand as any)?.agentName, "nex");
+
+    seenCommand = null;
+    const denied = await commandHandler?.({
+      command: "status",
+      args: "",
+      chatId: "room-1",
+      authorId: "wxid_not_boss",
+    } as any);
+    assert.equal(denied, undefined);
+    assert.equal(seenCommand, null);
   });
 });

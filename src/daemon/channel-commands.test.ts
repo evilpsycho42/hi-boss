@@ -99,6 +99,78 @@ test("/sessions returns keyboard with tabs and pager", async () => {
   });
 });
 
+test("/sessions accepts --tab/--page syntax", async () => {
+  await withTempDb(async (db) => {
+    db.registerAgent({ name: "nex", provider: "codex", role: "speaker" });
+    db.getOrCreateChannelActiveSession({
+      agentName: "nex",
+      adapterType: "telegram",
+      chatId: "chat-1",
+      ownerUserId: "u-1",
+      provider: "codex",
+    });
+
+    const handler = createChannelCommandHandler({
+      db,
+      executor: {
+        isAgentBusy: () => false,
+        abortCurrentRun: () => false,
+        invalidateChannelSessionCache: () => undefined,
+      } as any,
+      router: { routeEnvelope: async () => undefined } as any,
+    });
+
+    const response = await handler({
+      command: "sessions",
+      args: "--tab agent-all --page 2",
+      chatId: "chat-1",
+      authorId: "u-1",
+      authorUsername: "alice",
+      agentName: "nex",
+    } as any);
+
+    assert.ok(response?.text?.includes("scope: agent-all"));
+    assert.ok(response?.text?.includes("page: 1"));
+  });
+});
+
+test("/sessions for non-telegram channel is text-only", async () => {
+  await withTempDb(async (db) => {
+    db.registerAgent({ name: "nex", provider: "codex", role: "speaker" });
+    db.getOrCreateChannelActiveSession({
+      agentName: "nex",
+      adapterType: "wechatpadpro",
+      chatId: "room-1",
+      ownerUserId: "boss-1",
+      provider: "codex",
+    });
+
+    const handler = createChannelCommandHandler({
+      db,
+      executor: {
+        isAgentBusy: () => false,
+        abortCurrentRun: () => false,
+        invalidateChannelSessionCache: () => undefined,
+      } as any,
+      router: { routeEnvelope: async () => undefined } as any,
+    });
+
+    const response = await handler({
+      command: "sessions",
+      args: "--tab current-chat --page 1",
+      adapterType: "wechatpadpro",
+      chatId: "room-1",
+      authorId: "boss-1",
+      authorUsername: "boss-1",
+      agentName: "nex",
+    } as any);
+
+    assert.ok(response?.text?.includes("usage-text-flags: /sessions"));
+    assert.ok(response?.text?.includes("usage-cli-flags: /sessions --tab"));
+    assert.equal(response?.telegram, undefined);
+  });
+});
+
 test("/new uses command adapter type instead of hardcoded telegram", async () => {
   await withTempDb(async (db) => {
     db.registerAgent({ name: "nex", provider: "codex", role: "speaker" });
@@ -203,5 +275,42 @@ test("/session not-found uses distinct message from invalid-id", async () => {
 
     assert.equal(invalid?.text, "error: Invalid session id");
     assert.equal(notFound?.text, "error: Session not found");
+  });
+});
+
+test("/isolated acknowledgement does not include one-shot metadata lines", async () => {
+  await withTempDb(async (db) => {
+    db.registerAgent({ name: "nex", provider: "codex", role: "speaker" });
+    let routed = 0;
+
+    const handler = createChannelCommandHandler({
+      db,
+      executor: {
+        isAgentBusy: () => false,
+        abortCurrentRun: () => false,
+        invalidateChannelSessionCache: () => undefined,
+      } as any,
+      router: {
+        routeEnvelope: async () => {
+          routed += 1;
+          return undefined;
+        },
+      } as any,
+    });
+
+    const response = await handler({
+      command: "isolated",
+      args: "hello",
+      chatId: "chat-1",
+      authorId: "u-1",
+      authorUsername: "alice",
+      agentName: "nex",
+      messageId: "123",
+    } as any);
+
+    assert.equal(routed, 1);
+    assert.equal(typeof response?.text, "string");
+    assert.equal(response?.text?.includes("oneshot-mode:"), false);
+    assert.equal(response?.text?.includes("active-session-changed:"), false);
   });
 });

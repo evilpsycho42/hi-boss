@@ -42,6 +42,7 @@ Optional flags (defaults):
 
 Notes:
 - `--role speaker` requires binding at registration (`--bind-adapter-type` + `--bind-adapter-token`).
+- Supported adapter types for binding are `telegram` and `wechatpadpro`.
 - `--model default` on register clears the model override to provider default (`NULL`).
 - `--reasoning-effort default` on register clears the reasoning-effort override to provider default (`NULL`).
 
@@ -94,6 +95,7 @@ Notes:
 - `--role speaker` requires at least one resulting binding in the same command.
 - `--bind-adapter-*` and `--unbind-adapter-type` may be used together for same-command binding swaps.
 - `--bind-adapter-*` alone replaces an existing binding token for that same adapter type on the target agent (atomic replace).
+- Supported adapter types for bind/unbind are `telegram` and `wechatpadpro`.
 
 Provider-home behavior follows `docs/spec/cli/conventions.md#provider-homes`.
 

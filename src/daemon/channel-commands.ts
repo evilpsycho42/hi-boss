@@ -35,8 +35,32 @@ function parseSessionsView(args: string | undefined): SessionsView {
 
   let scope: SessionListScope = "current-chat";
   let page = 1;
+  const tokens = raw.split(/\s+/).filter(Boolean);
 
-  for (const token of raw.split(/\s+/).filter(Boolean)) {
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i]!;
+    if (token === "--tab" || token === "--scope") {
+      const value = (tokens[i + 1] ?? "").trim();
+      if (isSessionScope(value)) scope = value;
+      i += 1;
+      continue;
+    }
+    if (token === "--page") {
+      const maybe = Number(tokens[i + 1] ?? "");
+      if (Number.isFinite(maybe) && maybe > 0) page = Math.trunc(maybe);
+      i += 1;
+      continue;
+    }
+    if (token.startsWith("--tab=") || token.startsWith("--scope=")) {
+      const value = token.split("=", 2)[1]?.trim() ?? "";
+      if (isSessionScope(value)) scope = value;
+      continue;
+    }
+    if (token.startsWith("--page=")) {
+      const maybe = Number(token.split("=", 2)[1] ?? "");
+      if (Number.isFinite(maybe) && maybe > 0) page = Math.trunc(maybe);
+      continue;
+    }
     if (token.startsWith("tab=")) {
       const value = token.slice(4).trim();
       if (isSessionScope(value)) scope = value;
@@ -299,6 +323,8 @@ async function handleSessionsCommand(params: {
   lines.push(`total-pages: ${totalPages}`);
   lines.push(`active-session-id: ${active ? formatShortId(active.activeSessionId) : "(none)"}`);
   lines.push(`session-count: ${items.length}`);
+  lines.push(`usage-text-flags: /sessions tab=${view.scope} page=${page}`);
+  lines.push(`usage-cli-flags: /sessions --tab ${view.scope} --page ${page}`);
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i]!;
@@ -510,10 +536,6 @@ async function handleOneshotCommand(
   }
 
   return {
-    text: [
-      ui.channel.turnInitiated(mode),
-      `oneshot-mode: ${mode}`,
-      "active-session-changed: false",
-    ].join("\n"),
+    text: ui.channel.turnInitiated(mode),
   };
 }

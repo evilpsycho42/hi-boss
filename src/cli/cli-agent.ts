@@ -47,7 +47,7 @@ export function registerAgentCommands(program: Command): void {
     )
     .option("--metadata-json <json>", "Agent metadata JSON object")
     .option("--metadata-file <path>", "Path to agent metadata JSON file")
-    .option("--bind-adapter-type <type>", "Bind adapter type at creation (e.g., telegram)")
+    .option("--bind-adapter-type <type>", "Bind adapter type at creation (e.g., telegram, wechatpadpro)")
     .option("--bind-adapter-token <token>", "Bind adapter token at creation (e.g., bot token)")
     .option("--dry-run", "Validate registration without creating the agent")
     .action((options) => {
@@ -112,13 +112,13 @@ export function registerAgentCommands(program: Command): void {
     .option("--clear-metadata", "Clear agent metadata")
     .option(
       "--bind-adapter-type <type>",
-      "Bind/replace adapter type (e.g., telegram)"
+      "Bind/replace adapter type (e.g., telegram, wechatpadpro)"
     )
     .option(
       "--bind-adapter-token <token>",
       "Bind/replace adapter token (e.g., bot token)"
     )
-    .option("--unbind-adapter-type <type>", "Unbind adapter type (e.g., telegram)")
+    .option("--unbind-adapter-type <type>", "Unbind adapter type (e.g., telegram, wechatpadpro)")
     .action((options) => {
       setAgent({
         token: options.token,

@@ -30,11 +30,26 @@ Supported values:
 
 Current scope:
 - Telegram slash-command descriptions (`/new`, `/sessions`, `/session`, `/status`, `/abort`, `/isolated`, `/clone`)
-- Telegram fixed system messages (for example unbound-adapter guidance, `/new` ack, oneshot usage/errors)
+- Channel fixed system messages (for example unbound-adapter guidance, `/new` ack, oneshot usage/errors)
 
 Notes:
 - If set, this environment variable overrides `config.ui_locale` when present.
 - Parseable CLI output keys remain stable English `kebab-case` (see `docs/spec/cli/conventions.md`).
+
+---
+
+## WeChatPadPro adapter env
+
+Used by `wechatpadpro` bindings when adapter token JSON omits these fields:
+
+- `HIBOSS_WECHATPADPRO_BASE_URL`
+- `HIBOSS_WECHATPADPRO_WEBHOOK_LISTEN_HOST`
+- `HIBOSS_WECHATPADPRO_WEBHOOK_LISTEN_PORT`
+- `HIBOSS_WECHATPADPRO_WEBHOOK_PUBLIC_BASE_URL`
+- `HIBOSS_WECHATPADPRO_WEBHOOK_SECRET`
+- `HIBOSS_WECHATPADPRO_WEBHOOK_INCLUDE_SELF`
+
+Ingress mode is webhook-only.
 
 ---
 

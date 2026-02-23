@@ -68,7 +68,7 @@ Core session tables:
 
 Legacy best-effort default resume handle remains in `agents.metadata.sessionHandle` for default per-agent scope.
 
-## Session Listing / Switching (Telegram)
+## Session Listing / Switching (Channel Commands)
 
 Boss-only commands:
 
@@ -76,7 +76,10 @@ Boss-only commands:
   - 3 tabs: `current-chat`, `my-chats`, `agent-all`
   - pagination: 10 per page, up to 100 sessions
   - sorted by `last-active-at` desc
-  - supports inline keyboard tab + pager callbacks
+  - accepts both syntaxes:
+    - `tab=current-chat page=2`
+    - `--tab current-chat --page 2`
+  - Telegram supports inline keyboard callbacks; other adapters use text-only interaction
 - `/session <session-id>`
   - accepts short id / prefix / full UUID
   - switches current chat binding to target session if visible
@@ -108,4 +111,5 @@ Config keys mirrored into SQLite config cache:
 | `src/daemon/db/database.ts` | Session registry/binding/link persistence |
 | `src/daemon/channel-commands.ts` | `/new`, `/sessions`, `/session` behavior |
 | `src/adapters/telegram.adapter.ts` | Telegram command + callback wiring |
+| `src/adapters/wechatpadpro.adapter.ts` | WeChatPadPro command + message wiring (webhook-only) |
 | `src/shared/settings.ts` | runtime session concurrency parsing/validation |

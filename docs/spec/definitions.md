@@ -24,7 +24,7 @@ Derived (not stored):
 | Type | Format | Example |
 |------|--------|---------|
 | Agent | `agent:<name>` | `agent:nex` |
-| Channel | `channel:<adapter>:<chat-id>` | `channel:telegram:123456` |
+| Channel | `channel:<adapter>:<chat-id>` | `channel:telegram:123456`, `channel:wechatpadpro:wxid_xxx` |
 
 Reserved agent addresses:
 - `agent:background` — one-shot daemon-executed background job (see `docs/spec/components/agent.md`).
@@ -55,7 +55,7 @@ Active mapping per channel conversation:
 | Code (TypeScript) | SQLite column | Notes |
 |-------------------|-------------|-------|
 | `binding.agentName` | `agent_name` | Owner agent |
-| `binding.adapterType` | `adapter_type` | e.g. `telegram` |
+| `binding.adapterType` | `adapter_type` | e.g. `telegram`, `wechatpadpro` |
 | `binding.chatId` | `chat_id` | Channel chat id |
 | `binding.activeSessionId` | `active_session_id` | FK -> `agent_sessions.id` |
 | `binding.ownerUserId` | `owner_user_id` | Boss user id (nullable; adapter-specific) |
@@ -300,7 +300,7 @@ Table: `agent_bindings` (see `src/daemon/db/schema.ts`)
 |-------------------|-------------|-------|
 | `binding.id` | `id` | UUID |
 | `binding.agentName` | `agent_name` | Agent name |
-| `binding.adapterType` | `adapter_type` | e.g. `telegram` |
+| `binding.adapterType` | `adapter_type` | e.g. `telegram`, `wechatpadpro` |
 | `binding.adapterToken` | `adapter_token` | Adapter credential |
 | `binding.createdAt` | `created_at` | Unix epoch ms (UTC) |
 

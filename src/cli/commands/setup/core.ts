@@ -21,12 +21,15 @@ import { syncSettingsToDb } from "../../../daemon/settings-sync.js";
 export interface SetupUserInfoStatus {
   bossName?: string;
   bossTimezone?: string;
-  telegramBossId?: string;
+  channelBossIds?: {
+    telegram?: string;
+    wechatpadpro?: string;
+  };
   hasAdminToken: boolean;
   missing: {
     bossName: boolean;
     bossTimezone: boolean;
-    telegramBossId: boolean;
+    channelBossId: boolean;
     adminToken: boolean;
   };
 }
@@ -75,16 +78,21 @@ function buildUserInfoStatus(db: HiBossDatabase): SetupUserInfoStatus {
   const bossName = (db.getBossName() ?? "").trim();
   const bossTimezone = (db.getConfig("boss_timezone") ?? "").trim();
   const telegramBossId = (db.getAdapterBossIds("telegram")[0] ?? "").trim();
+  const wechatpadproBossId = (db.getAdapterBossIds("wechatpadpro")[0] ?? "").trim();
+  const hasChannelBossId = telegramBossId.length > 0 || wechatpadproBossId.length > 0;
   const hasAdminToken = Boolean((db.getConfig("admin_token_hash") ?? "").trim());
   return {
     bossName: bossName || undefined,
     bossTimezone: bossTimezone || undefined,
-    telegramBossId: telegramBossId || undefined,
+    channelBossIds: {
+      ...(telegramBossId ? { telegram: telegramBossId } : {}),
+      ...(wechatpadproBossId ? { wechatpadpro: wechatpadproBossId } : {}),
+    },
     hasAdminToken,
     missing: {
       bossName: bossName.length === 0,
       bossTimezone: bossTimezone.length === 0,
-      telegramBossId: telegramBossId.length === 0,
+      channelBossId: !hasChannelBossId,
       adminToken: !hasAdminToken,
     },
   };
@@ -107,7 +115,7 @@ function buildEmptySetupStatus(): SetupStatus {
       missing: {
         bossName: true,
         bossTimezone: true,
-        telegramBossId: true,
+        channelBossId: true,
         adminToken: true,
       },
     },
@@ -278,9 +286,20 @@ async function executeSetupDirect(config: SetupConfig): Promise<{ speakerAgentTo
       admin: {
         token: config.adminToken,
       },
-      telegram: {
-        bossIds: config.adapter.adapterBossIds,
-      },
+      ...(config.adapter.adapterType === "telegram"
+        ? {
+            telegram: {
+              bossIds: config.adapter.adapterBossIds,
+            },
+          }
+        : {}),
+      ...(config.adapter.adapterType === "wechatpadpro"
+        ? {
+            wechatpadpro: {
+              bossIds: config.adapter.adapterBossIds,
+            },
+          }
+        : {}),
       permissionPolicy: DEFAULT_PERMISSION_POLICY,
       agents: [
         {

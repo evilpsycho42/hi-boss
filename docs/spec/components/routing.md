@@ -10,11 +10,11 @@ Key files:
 - `src/daemon/scheduler/envelope-scheduler.ts`
 - `src/agent/executor.ts`
 
-## Inbound Flow (Telegram -> Agent)
+## Inbound Flow (Channel -> Agent)
 
-1. Telegram update -> `TelegramAdapter` emits `ChannelMessage`.
+1. Channel adapter update (for example Telegram or WeChatPadPro) -> adapter emits `ChannelMessage`.
 2. `ChannelBridge` resolves bound agent and creates envelope:
-   - `from: channel:telegram:<chat-id>`
+   - `from: channel:<adapter>:<chat-id>`
    - `to: agent:<agent-name>`
 3. Envelope is persisted as `pending`.
 4. Agent handler triggers `executor.checkAndRun(...)`.
@@ -39,11 +39,11 @@ Execution semantics:
 3. For Telegram, optional quote/reply resolution uses `replyToEnvelopeId` when same adapter+chat route exists.
 4. Adapter sends platform message; envelope is marked `done` on success.
 
-## Telegram Command Routing
+## Channel Command Routing
 
 Boss-only command flow:
 
-1. Telegram command/callback -> `TelegramAdapter` emits `ChannelCommand`.
+1. Adapter command event -> adapter emits `ChannelCommand`.
 2. `ChannelBridge` enforces boss identity and binds `agentName`.
 3. `createChannelCommandHandler(...)` handles command:
    - `/status`
@@ -52,7 +52,9 @@ Boss-only command flow:
    - `/sessions` (tabbed, paged session list)
    - `/session <id>` (switch current chat mapping)
    - `/isolated`, `/clone` (one-shot; active mapping unchanged)
-4. Adapter replies in parseable text format; `/sessions` includes inline keyboard for tabs/pager.
+4. Adapter replies in parseable text format.
+   - Telegram includes inline keyboard for tabs/pager.
+   - WeChatPadPro uses text-only args (`tab=... page=...` or `--tab ... --page ...`).
 
 ## Scheduled Delivery
 

@@ -21,6 +21,8 @@ interface UiTextBundle {
     sessionUsage: string;
     failedToCreateEnvelope(mode: OneshotType): string;
     turnInitiated(mode: OneshotType): string;
+    emptyAssistantReply: string;
+    oneShotExecutionFailed(mode: OneshotType): string;
   };
   telegram: {
     commandDescriptions: TelegramCommandDescription[];
@@ -49,6 +51,9 @@ const EN_TEXT: UiTextBundle = {
       const label = mode === "clone" ? "Clone" : "Isolated";
       return `${label} turn initiated.`;
     },
+    emptyAssistantReply: "(no response)",
+    oneShotExecutionFailed: (mode) =>
+      `One-shot (${mode}) execution failed. Check daemon logs for details.`,
   },
   telegram: {
     commandDescriptions: [
@@ -85,6 +90,9 @@ const ZH_CN_TEXT: UiTextBundle = {
       const label = mode === "clone" ? "克隆模式" : "隔离模式";
       return `${label} 已启动。`;
     },
+    emptyAssistantReply: "（无回复）",
+    oneShotExecutionFailed: (mode) =>
+      `单次执行（${mode}）失败。请查看 daemon 日志。`,
   },
   telegram: {
     commandDescriptions: [

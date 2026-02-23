@@ -34,11 +34,13 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const bossName = (ctx.db.getBossName() ?? "").trim();
       const bossTimezone = (ctx.db.getConfig("boss_timezone") ?? "").trim();
       const telegramBossId = (ctx.db.getAdapterBossIds("telegram")[0] ?? "").trim();
+      const wechatpadproBossId = (ctx.db.getAdapterBossIds("wechatpadpro")[0] ?? "").trim();
       const hasAdminToken = Boolean((ctx.db.getConfig("admin_token_hash") ?? "").trim());
+      const hasChannelBossId = telegramBossId.length > 0 || wechatpadproBossId.length > 0;
       const missingUserInfo = {
         bossName: bossName.length === 0,
         bossTimezone: bossTimezone.length === 0,
-        telegramBossId: telegramBossId.length === 0,
+        channelBossId: !hasChannelBossId,
         adminToken: !hasAdminToken,
       };
       const hasMissingUserInfo = Object.values(missingUserInfo).some(Boolean);
@@ -65,7 +67,10 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
         userInfo: {
           bossName: bossName || undefined,
           bossTimezone: bossTimezone || undefined,
-          telegramBossId: telegramBossId || undefined,
+          channelBossIds: {
+            ...(telegramBossId ? { telegram: telegramBossId } : {}),
+            ...(wechatpadproBossId ? { wechatpadpro: wechatpadproBossId } : {}),
+          },
           hasAdminToken,
           missing: missingUserInfo,
         },

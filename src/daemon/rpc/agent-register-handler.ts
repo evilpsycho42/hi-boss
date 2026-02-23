@@ -15,6 +15,7 @@ import { isAgentRole } from "../../shared/agent-role.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 import { generateToken } from "../../agent/auth.js";
 import { mutateSettingsAndSync } from "../settings-sync.js";
+import { isKnownAdapterType } from "../../shared/adapter-types.js";
 
 export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler {
   return async (params) => {
@@ -77,12 +78,12 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
       const normalizedBind =
         wantsBind && typeof bindAdapterType === "string" && typeof bindAdapterToken === "string"
           ? {
-              adapterType: bindAdapterType.trim(),
+              adapterType: bindAdapterType.trim().toLowerCase(),
               adapterToken: bindAdapterToken.trim(),
             }
           : undefined;
 
-      if (normalizedBind && normalizedBind.adapterType !== "telegram") {
+      if (normalizedBind && !isKnownAdapterType(normalizedBind.adapterType)) {
         rpcError(RPC_ERRORS.INVALID_PARAMS, `Unknown adapter type: ${normalizedBind.adapterType}`);
       }
 

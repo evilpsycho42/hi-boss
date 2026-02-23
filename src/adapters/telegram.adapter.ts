@@ -17,6 +17,7 @@ import { sendTelegramMessage } from "./telegram/outgoing.js";
 import {
   computeBackoff,
   isGetUpdatesConflict,
+  isReplyToMessageNotFound,
   isTransientNetworkError,
   sleep,
   splitTextForTelegram,
@@ -116,6 +117,12 @@ export class TelegramAdapter implements ChatAdapter {
 
     const inlineKeyboard = response.telegram?.inlineKeyboard;
     const replyMarkup = inlineKeyboard ? this.toInlineKeyboard(inlineKeyboard) : undefined;
+    const replyParameters =
+      !command.isCallback && command.messageId?.trim()
+        ? {
+            message_id: parseTelegramMessageId(command.messageId, "command-message-id"),
+          }
+        : undefined;
     const safeText = text.length <= TELEGRAM_MAX_TEXT_CHARS
       ? text
       : `${text.slice(0, TELEGRAM_MAX_TEXT_CHARS - 3)}...`;
@@ -134,16 +141,38 @@ export class TelegramAdapter implements ChatAdapter {
     }
 
     if (replyMarkup) {
-      await this.bot.telegram.sendMessage(chatId, safeText, {
+      const sendOptions = {
         reply_markup: replyMarkup as never,
-      } as never);
+        ...(replyParameters ? { reply_parameters: replyParameters } : {}),
+      } as never;
+      try {
+        await this.bot.telegram.sendMessage(chatId, safeText, sendOptions);
+      } catch (err) {
+        if (!(replyParameters && isReplyToMessageNotFound(err))) {
+          throw err;
+        }
+        await this.bot.telegram.sendMessage(chatId, safeText, {
+          reply_markup: replyMarkup as never,
+        } as never);
+      }
       await this.safeAnswerCallback(command.callbackQueryId);
       return;
     }
 
     const chunks = splitTextForTelegram(text, TELEGRAM_MAX_TEXT_CHARS);
-    for (const chunk of chunks) {
-      await this.bot.telegram.sendMessage(chatId, chunk);
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const sendOptions = i === 0 && replyParameters
+        ? { reply_parameters: replyParameters } as never
+        : undefined;
+      try {
+        await this.bot.telegram.sendMessage(chatId, chunk, sendOptions);
+      } catch (err) {
+        if (!(i === 0 && replyParameters && isReplyToMessageNotFound(err))) {
+          throw err;
+        }
+        await this.bot.telegram.sendMessage(chatId, chunk);
+      }
     }
     await this.safeAnswerCallback(command.callbackQueryId);
   }

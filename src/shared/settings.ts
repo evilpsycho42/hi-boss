@@ -11,6 +11,7 @@ import { isPermissionLevel, parsePermissionPolicyV1FromObject } from "./permissi
 import { parseDailyResetAt, parseDurationToMs } from "./session-policy.js";
 import { isValidIanaTimeZone } from "./timezone.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "./validation.js";
+import { isKnownAdapterType } from "./adapter-types.js";
 
 export const SETTINGS_VERSION = 4 as const;
 export const SETTINGS_FILENAME = "settings.json" as const;
@@ -63,7 +64,10 @@ export interface SettingsV4 {
   admin: {
     token: string;
   };
-  telegram: {
+  telegram?: {
+    bossIds: string[];
+  };
+  wechatpadpro?: {
     bossIds: string[];
   };
   permissionPolicy: {
@@ -86,36 +90,36 @@ function normalizeBossId(raw: string): string {
   return raw.trim().replace(/^@/, "");
 }
 
-function validateBossIds(raw: unknown): string[] {
+function validateBossIds(raw: unknown, fieldPath: string): string[] {
   if (!Array.isArray(raw)) {
-    fail("telegram.boss-ids", "must be an array of strings");
+    fail(fieldPath, "must be an array of strings");
   }
   const ids = raw.map((value, index) => {
     if (typeof value !== "string") {
-      fail(`telegram.boss-ids[${index}]`, "must be a string");
+      fail(`${fieldPath}[${index}]`, "must be a string");
     }
     const normalized = normalizeBossId(value);
     if (!normalized) {
-      fail(`telegram.boss-ids[${index}]`, "must not be empty");
+      fail(`${fieldPath}[${index}]`, "must not be empty");
     }
     return normalized;
   });
   if (ids.length < 1) {
-    fail("telegram.boss-ids", "must contain at least one boss id");
+    fail(fieldPath, "must contain at least one boss id");
   }
   const seen = new Set<string>();
   for (const id of ids) {
     const key = id.toLowerCase();
     if (seen.has(key)) {
-      fail("telegram.boss-ids", `duplicate boss id '${id}'`);
+      fail(fieldPath, `duplicate boss id '${id}'`);
     }
     seen.add(key);
   }
   return ids;
 }
 
-function parseBossIds(raw: unknown): string[] {
-  return validateBossIds(raw);
+function parseBossIds(raw: unknown, fieldPath: string): string[] {
+  return validateBossIds(raw, fieldPath);
 }
 
 function parsePermissionPolicy(raw: unknown): SettingsV4["permissionPolicy"] {
@@ -238,6 +242,9 @@ function parseBindings(raw: unknown, agentName: string): SettingsBindingV4[] {
     const adapterType = typeof value["adapter-type"] === "string" ? value["adapter-type"].trim() : "";
     if (!adapterType) {
       fail(`agents[${agentName}].bindings[${index}].adapter-type`, "is required");
+    }
+    if (!isKnownAdapterType(adapterType)) {
+      fail(`agents[${agentName}].bindings[${index}].adapter-type`, `unknown adapter type '${adapterType}'`);
     }
     const adapterToken = typeof value["adapter-token"] === "string" ? value["adapter-token"].trim() : "";
     if (!adapterToken) {
@@ -366,7 +373,17 @@ export function assertValidSettingsV4(settings: SettingsV4): void {
   if (settings.admin.token.trim().length < MIN_ADMIN_TOKEN_LENGTH) {
     fail("admin.token", `must be at least ${MIN_ADMIN_TOKEN_LENGTH} characters`);
   }
-  validateBossIds(settings.telegram.bossIds);
+  const telegramBossIds = settings.telegram?.bossIds;
+  const wechatBossIds = settings.wechatpadpro?.bossIds;
+  if (telegramBossIds !== undefined) {
+    validateBossIds(telegramBossIds, "telegram.boss-ids");
+  }
+  if (wechatBossIds !== undefined) {
+    validateBossIds(wechatBossIds, "wechatpadpro.boss-ids");
+  }
+  if ((telegramBossIds?.length ?? 0) < 1 && (wechatBossIds?.length ?? 0) < 1) {
+    fail("channels", "must configure at least one of telegram.boss-ids or wechatpadpro.boss-ids");
+  }
   const perAgent = settings.runtime?.sessionConcurrency?.perAgent ?? DEFAULT_SESSION_CONCURRENCY_PER_AGENT;
   const globalLimit = settings.runtime?.sessionConcurrency?.global ?? DEFAULT_SESSION_CONCURRENCY_GLOBAL;
   if (!Number.isFinite(perAgent) || Math.trunc(perAgent) < 1 || Math.trunc(perAgent) > 64) {
@@ -460,9 +477,17 @@ export function parseSettingsV4Json(json: string): SettingsV4 {
   }
 
   const telegramRaw = raw.telegram;
-  if (!isObject(telegramRaw)) {
+  if (telegramRaw !== undefined && !isObject(telegramRaw)) {
     fail("telegram", "must be an object");
   }
+  const wechatRaw = raw.wechatpadpro;
+  if (wechatRaw !== undefined && !isObject(wechatRaw)) {
+    fail("wechatpadpro", "must be an object");
+  }
+  const telegramBossIds = telegramRaw ? parseBossIds(telegramRaw["boss-ids"], "telegram.boss-ids") : undefined;
+  const wechatBossIds = wechatRaw
+    ? parseBossIds(wechatRaw["boss-ids"], "wechatpadpro.boss-ids")
+    : undefined;
 
   const agentsRaw = raw.agents;
   if (!Array.isArray(agentsRaw) || agentsRaw.length < 1) {
@@ -478,9 +503,8 @@ export function parseSettingsV4Json(json: string): SettingsV4 {
     admin: {
       token: adminToken,
     },
-    telegram: {
-      bossIds: parseBossIds(telegramRaw["boss-ids"]),
-    },
+    ...(telegramBossIds ? { telegram: { bossIds: telegramBossIds } } : {}),
+    ...(wechatBossIds ? { wechatpadpro: { bossIds: wechatBossIds } } : {}),
     permissionPolicy: parsePermissionPolicy(raw["permission-policy"] ?? DEFAULT_PERMISSION_POLICY),
     runtime: parseRuntime(raw.runtime),
     agents: agentsRaw.map((agent, index) => parseAgent(agent, index)),
@@ -501,9 +525,20 @@ export function stringifySettingsV4(settings: SettingsV4): string {
     admin: {
       token: settings.admin.token,
     },
-    telegram: {
-      "boss-ids": settings.telegram.bossIds,
-    },
+    ...(settings.telegram
+      ? {
+          telegram: {
+            "boss-ids": settings.telegram.bossIds,
+          },
+        }
+      : {}),
+    ...(settings.wechatpadpro
+      ? {
+          wechatpadpro: {
+            "boss-ids": settings.wechatpadpro.bossIds,
+          },
+        }
+      : {}),
     "permission-policy": settings.permissionPolicy,
     runtime: {
       "session-concurrency": {

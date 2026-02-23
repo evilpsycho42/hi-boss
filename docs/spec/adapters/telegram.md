@@ -43,6 +43,11 @@ Telegram commands are boss-only (non-boss receives no reply):
 
 Callbacks are handled through Telegram `callback_query`, mapped back to the same command handler and edited in-place when possible (fallback to new message when edit fails).
 
+`/sessions` also accepts text args:
+
+- `tab=current-chat page=2`
+- `--tab current-chat --page 2`
+
 ## Address and Metadata
 
 Address format:

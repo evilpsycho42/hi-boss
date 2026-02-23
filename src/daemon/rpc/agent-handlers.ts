@@ -34,6 +34,7 @@ import {
   buildMutationInvariantViolationMessage,
 } from "../../shared/agent-role-mutation.js";
 import { mutateSettingsAndSync } from "../settings-sync.js";
+import { isKnownAdapterType } from "../../shared/adapter-types.js";
 
 /**
  * Create agent RPC handlers (excluding agent.set which is in its own file).
@@ -212,6 +213,18 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const token = requireToken(p.token);
       const principal = ctx.resolvePrincipal(token);
       ctx.assertOperationAllowed("agent.bind", principal);
+      const adapterType = typeof p.adapterType === "string" ? p.adapterType.trim().toLowerCase() : "";
+      const adapterToken = typeof p.adapterToken === "string" ? p.adapterToken.trim() : "";
+
+      if (!adapterType) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid adapter-type");
+      }
+      if (!adapterToken) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid adapter-token");
+      }
+      if (!isKnownAdapterType(adapterType)) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, `Unknown adapter type: ${adapterType}`);
+      }
 
       // Check if agent exists
       const agent = ctx.db.getAgentByNameCaseInsensitive(p.agentName);
@@ -222,26 +235,29 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const agentName = agent.name;
 
       // Check if this adapter token is already bound to another agent
-      const existingBinding = ctx.db.getBindingByAdapter(p.adapterType, p.adapterToken);
+      const existingBinding = ctx.db.getBindingByAdapter(adapterType, adapterToken);
       if (existingBinding && existingBinding.agentName !== agentName) {
         rpcError(
           RPC_ERRORS.ALREADY_EXISTS,
-          `This ${p.adapterType} bot is already bound to agent '${existingBinding.agentName}'`
+          `This ${adapterType} bot is already bound to agent '${existingBinding.agentName}'`
         );
       }
 
       // Check if agent already has a binding for this adapter type
-      const agentBinding = ctx.db.getAgentBindingByType(agentName, p.adapterType);
+      const agentBinding = ctx.db.getAgentBindingByType(agentName, adapterType);
       if (agentBinding) {
         rpcError(
           RPC_ERRORS.ALREADY_EXISTS,
-          `Agent '${agentName}' already has a ${p.adapterType} binding`
+          `Agent '${agentName}' already has a ${adapterType} binding`
         );
       }
 
-      const hadAdapterAlready = ctx.adapters.has(p.adapterToken);
+      const hadAdapterAlready = ctx.adapters.has(adapterToken);
       if (ctx.running) {
-        await ctx.createAdapterForBinding(p.adapterType, p.adapterToken);
+        const adapter = await ctx.createAdapterForBinding(adapterType, adapterToken);
+        if (!adapter) {
+          rpcError(RPC_ERRORS.INVALID_PARAMS, `Unknown adapter type: ${adapterType}`);
+        }
       }
 
       try {
@@ -257,39 +273,39 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
             const conflict = settings.agents.find((item) =>
               item.bindings.some(
                 (binding) =>
-                  binding.adapterType === p.adapterType &&
-                  binding.adapterToken === p.adapterToken &&
+                  binding.adapterType === adapterType &&
+                  binding.adapterToken === adapterToken &&
                   item.name.toLowerCase() !== agentName.toLowerCase()
               )
             );
             if (conflict) {
               rpcError(
                 RPC_ERRORS.ALREADY_EXISTS,
-                `This ${p.adapterType} bot is already bound to agent '${conflict.name}'`
+                `This ${adapterType} bot is already bound to agent '${conflict.name}'`
               );
             }
 
-            if (target.bindings.some((binding) => binding.adapterType === p.adapterType)) {
+            if (target.bindings.some((binding) => binding.adapterType === adapterType)) {
               rpcError(
                 RPC_ERRORS.ALREADY_EXISTS,
-                `Agent '${agentName}' already has a ${p.adapterType} binding`
+                `Agent '${agentName}' already has a ${adapterType} binding`
               );
             }
 
             target.bindings.push({
-              adapterType: p.adapterType,
-              adapterToken: p.adapterToken,
+              adapterType,
+              adapterToken,
             });
           },
         });
       } catch (err) {
         if (ctx.running && !hadAdapterAlready) {
-          await ctx.removeAdapter(p.adapterToken).catch(() => undefined);
+          await ctx.removeAdapter(adapterToken).catch(() => undefined);
         }
         throw err;
       }
 
-      const binding = ctx.db.getAgentBindingByType(agentName, p.adapterType);
+      const binding = ctx.db.getAgentBindingByType(agentName, adapterType);
       if (!binding) {
         rpcError(RPC_ERRORS.INTERNAL_ERROR, "Binding was not created");
       }
@@ -309,6 +325,13 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const token = requireToken(p.token);
       const principal = ctx.resolvePrincipal(token);
       ctx.assertOperationAllowed("agent.unbind", principal);
+      const adapterType = typeof p.adapterType === "string" ? p.adapterType.trim().toLowerCase() : "";
+      if (!adapterType) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid adapter-type");
+      }
+      if (!isKnownAdapterType(adapterType)) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, `Unknown adapter type: ${adapterType}`);
+      }
 
       const agent = ctx.db.getAgentByNameCaseInsensitive(p.agentName);
       if (!agent) {
@@ -317,7 +340,7 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const agentName = agent.name;
 
       // Get the binding to find the adapter token
-      const binding = ctx.db.getAgentBindingByType(agentName, p.adapterType);
+      const binding = ctx.db.getAgentBindingByType(agentName, adapterType);
       if (!binding) {
         rpcError(RPC_ERRORS.NOT_FOUND, "Binding not found");
       }
@@ -361,7 +384,7 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
           if (!target) {
             rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
           }
-          target.bindings = target.bindings.filter((item) => item.adapterType !== p.adapterType);
+          target.bindings = target.bindings.filter((item) => item.adapterType !== adapterType);
         },
       });
 
