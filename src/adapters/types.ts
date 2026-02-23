@@ -128,14 +128,32 @@ export type ChannelMessageHandler = (message: ChannelMessage) => void | Promise<
 export interface ChannelCommand {
   command: string;           // Command name without slash (e.g., "new")
   args: string;              // Arguments after command
+  adapterType?: string;      // Adapter origin (e.g., "telegram")
   chatId: string;            // Chat ID where command was issued
+  authorId?: string;         // Platform user ID of command issuer
   authorUsername?: string;   // Username of command issuer
   messageId?: string;        // Platform message ID of the command message
+  callbackQueryId?: string;  // Platform callback query ID (for interactive buttons)
+  isCallback?: boolean;      // True when command was triggered by a button callback
+}
+
+export interface TelegramInlineKeyboardButton {
+  text: string;
+  callbackData: string;
+}
+
+export interface ChannelCommandResponse {
+  text?: string;
+  attachments?: Attachment[];
+  telegram?: {
+    inlineKeyboard?: TelegramInlineKeyboardButton[][];
+    editMessageId?: string;
+  };
 }
 
 export type MessageContent = ChannelMessage["content"];
 export type ChannelCommandHandler =
-  (command: ChannelCommand) => MessageContent | void | Promise<MessageContent | void>;
+  (command: ChannelCommand) => ChannelCommandResponse | void | Promise<ChannelCommandResponse | void>;
 
 export type OutgoingParseMode = "plain" | "markdownv2" | "html";
 

@@ -10,6 +10,8 @@ import {
   BACKGROUND_AGENT_NAME,
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
+  DEFAULT_SESSION_CONCURRENCY_GLOBAL,
+  DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
   getDefaultAgentDescription,
 } from "../../shared/defaults.js";
 import type { AgentRole } from "../../shared/agent-role.js";
@@ -92,6 +94,44 @@ interface AgentRunRow {
   error: string | null;
 }
 
+interface AgentSessionRow {
+  id: string;
+  agent_name: string;
+  provider: string;
+  provider_session_id: string | null;
+  created_at: number;
+  last_active_at: number;
+  last_adapter_type: string | null;
+  last_chat_id: string | null;
+}
+
+interface ChannelSessionBindingRow {
+  id: string;
+  agent_name: string;
+  adapter_type: string;
+  chat_id: string;
+  active_session_id: string;
+  owner_user_id: string | null;
+  updated_at: number;
+}
+
+interface SessionLinkWithSessionRow {
+  id: string;
+  agent_name: string;
+  adapter_type: string;
+  chat_id: string;
+  session_id: string;
+  owner_user_id: string | null;
+  first_seen_at: number;
+  last_seen_at: number;
+  created_at: number;
+  last_active_at: number;
+  provider: string;
+  provider_session_id: string | null;
+  last_adapter_type: string | null;
+  last_chat_id: string | null;
+}
+
 /**
  * Agent binding type.
  */
@@ -118,6 +158,40 @@ export interface AgentRun {
   error?: string;
 }
 
+export interface AgentSessionRecord {
+  id: string;
+  agentName: string;
+  provider: "claude" | "codex";
+  providerSessionId?: string;
+  createdAt: number;
+  lastActiveAt: number;
+  lastAdapterType?: string;
+  lastChatId?: string;
+}
+
+export interface ChannelSessionBinding {
+  id: string;
+  agentName: string;
+  adapterType: string;
+  chatId: string;
+  activeSessionId: string;
+  ownerUserId?: string;
+  updatedAt: number;
+}
+
+export type SessionListScope = "current-chat" | "my-chats" | "agent-all";
+
+export interface SessionListItem {
+  session: AgentSessionRecord;
+  link: {
+    adapterType: string;
+    chatId: string;
+    ownerUserId?: string;
+    firstSeenAt: number;
+    lastSeenAt: number;
+  };
+}
+
 /**
  * SQLite database wrapper for Hi-Boss.
  */
@@ -132,6 +206,7 @@ export class HiBossDatabase {
 
     this.db = new Database(dbPath);
     this.db.pragma("journal_mode = WAL");
+    this.db.pragma("foreign_keys = ON");
     this.initSchema();
   }
 
@@ -196,6 +271,35 @@ export class HiBossDatabase {
         "status",
         "error",
       ],
+      agent_sessions: [
+        "id",
+        "agent_name",
+        "provider",
+        "provider_session_id",
+        "created_at",
+        "last_active_at",
+        "last_adapter_type",
+        "last_chat_id",
+      ],
+      channel_session_bindings: [
+        "id",
+        "agent_name",
+        "adapter_type",
+        "chat_id",
+        "active_session_id",
+        "owner_user_id",
+        "updated_at",
+      ],
+      channel_session_links: [
+        "id",
+        "agent_name",
+        "adapter_type",
+        "chat_id",
+        "session_id",
+        "owner_user_id",
+        "first_seen_at",
+        "last_seen_at",
+      ],
     };
 
     const expectedIntegerColumns: Array<{ table: string; column: string }> = [
@@ -209,6 +313,11 @@ export class HiBossDatabase {
       { table: "cron_schedules", column: "updated_at" },
       { table: "agent_runs", column: "started_at" },
       { table: "agent_runs", column: "completed_at" },
+      { table: "agent_sessions", column: "created_at" },
+      { table: "agent_sessions", column: "last_active_at" },
+      { table: "channel_session_bindings", column: "updated_at" },
+      { table: "channel_session_links", column: "first_seen_at" },
+      { table: "channel_session_links", column: "last_seen_at" },
     ];
 
     for (const [table, requiredColumns] of Object.entries(requiredColumnsByTable)) {
@@ -289,6 +398,9 @@ export class HiBossDatabase {
    */
   clearSetupManagedState(): void {
     this.db.prepare("DELETE FROM cron_schedules").run();
+    this.db.prepare("DELETE FROM channel_session_links").run();
+    this.db.prepare("DELETE FROM channel_session_bindings").run();
+    this.db.prepare("DELETE FROM agent_sessions").run();
     this.db.prepare("DELETE FROM agent_bindings").run();
     this.db.prepare("DELETE FROM agent_runs").run();
     this.db.prepare("DELETE FROM agents").run();
@@ -307,6 +419,10 @@ export class HiBossDatabase {
       }
       this.setConfig("permission_policy", JSON.stringify(settings.permissionPolicy));
       this.setAdapterBossIds("telegram", settings.telegram.bossIds);
+      this.setRuntimeSessionConcurrency({
+        perAgent: settings.runtime?.sessionConcurrency?.perAgent ?? DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
+        global: settings.runtime?.sessionConcurrency?.global ?? DEFAULT_SESSION_CONCURRENCY_GLOBAL,
+      });
 
       const existingAgents = this.listAgents();
       const existingByName = new Map(existingAgents.map((agent) => [agent.name.toLowerCase(), agent]));
@@ -314,6 +430,9 @@ export class HiBossDatabase {
 
       for (const existing of existingAgents) {
         if (desiredByName.has(existing.name.toLowerCase())) continue;
+        this.db.prepare("DELETE FROM channel_session_links WHERE agent_name = ?").run(existing.name);
+        this.db.prepare("DELETE FROM channel_session_bindings WHERE agent_name = ?").run(existing.name);
+        this.db.prepare("DELETE FROM agent_sessions WHERE agent_name = ?").run(existing.name);
         this.db.prepare("DELETE FROM cron_schedules WHERE agent_name = ?").run(existing.name);
         this.db.prepare("DELETE FROM agent_bindings WHERE agent_name = ?").run(existing.name);
         this.db.prepare("DELETE FROM agents WHERE name = ?").run(existing.name);
@@ -1585,6 +1704,450 @@ export class HiBossDatabase {
     };
   }
 
+  private rowToAgentSession(row: AgentSessionRow): AgentSessionRecord {
+    return {
+      id: row.id,
+      agentName: row.agent_name,
+      provider: row.provider === "codex" ? "codex" : "claude",
+      providerSessionId: row.provider_session_id ?? undefined,
+      createdAt: row.created_at,
+      lastActiveAt: row.last_active_at,
+      lastAdapterType: row.last_adapter_type ?? undefined,
+      lastChatId: row.last_chat_id ?? undefined,
+    };
+  }
+
+  private rowToChannelSessionBinding(row: ChannelSessionBindingRow): ChannelSessionBinding {
+    return {
+      id: row.id,
+      agentName: row.agent_name,
+      adapterType: row.adapter_type,
+      chatId: row.chat_id,
+      activeSessionId: row.active_session_id,
+      ownerUserId: row.owner_user_id ?? undefined,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  createAgentSession(input: {
+    agentName: string;
+    provider: "claude" | "codex";
+    adapterType?: string;
+    chatId?: string;
+  }): AgentSessionRecord {
+    const id = generateUUID();
+    const now = Date.now();
+    const stmt = this.db.prepare(`
+      INSERT INTO agent_sessions
+        (id, agent_name, provider, provider_session_id, created_at, last_active_at, last_adapter_type, last_chat_id)
+      VALUES (?, ?, ?, NULL, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      id,
+      input.agentName,
+      input.provider,
+      now,
+      now,
+      input.adapterType ?? null,
+      input.chatId ?? null
+    );
+    const created = this.getAgentSessionById(id);
+    if (!created) {
+      throw new Error("Failed to create agent session");
+    }
+    return created;
+  }
+
+  getAgentSessionById(id: string): AgentSessionRecord | null {
+    const stmt = this.db.prepare("SELECT * FROM agent_sessions WHERE id = ?");
+    const row = stmt.get(id) as AgentSessionRow | undefined;
+    return row ? this.rowToAgentSession(row) : null;
+  }
+
+  findAgentSessionsByIdPrefix(agentName: string, compactPrefix: string, limit = 50): AgentSessionRecord[] {
+    const prefix = compactPrefix.trim().toLowerCase();
+    const n = Number.isFinite(limit) ? Math.max(1, Math.min(500, Math.trunc(limit))) : 50;
+    const stmt = this.db.prepare(`
+      SELECT * FROM agent_sessions
+      WHERE agent_name = ?
+        AND replace(lower(id), '-', '') LIKE ?
+      ORDER BY last_active_at DESC
+      LIMIT ?
+    `);
+    const rows = stmt.all(agentName, `${prefix}%`, n) as AgentSessionRow[];
+    return rows.map((row) => this.rowToAgentSession(row));
+  }
+
+  updateAgentSessionProviderSessionId(
+    sessionId: string,
+    providerSessionId: string | null,
+    options?: { provider?: "claude" | "codex" }
+  ): void {
+    if (options?.provider) {
+      const stmt = this.db.prepare(`
+        UPDATE agent_sessions
+        SET provider_session_id = ?, provider = ?
+        WHERE id = ?
+      `);
+      stmt.run(providerSessionId, options.provider, sessionId);
+      return;
+    }
+    const stmt = this.db.prepare(`
+      UPDATE agent_sessions
+      SET provider_session_id = ?
+      WHERE id = ?
+    `);
+    stmt.run(providerSessionId, sessionId);
+  }
+
+  touchAgentSession(
+    sessionId: string,
+    update?: { lastActiveAt?: number; adapterType?: string; chatId?: string }
+  ): void {
+    const lastActiveAt = update?.lastActiveAt ?? Date.now();
+    const stmt = this.db.prepare(`
+      UPDATE agent_sessions
+      SET last_active_at = ?,
+          last_adapter_type = COALESCE(?, last_adapter_type),
+          last_chat_id = COALESCE(?, last_chat_id)
+      WHERE id = ?
+    `);
+    stmt.run(lastActiveAt, update?.adapterType ?? null, update?.chatId ?? null, sessionId);
+  }
+
+  getChannelSessionBinding(
+    agentName: string,
+    adapterType: string,
+    chatId: string
+  ): ChannelSessionBinding | null {
+    const stmt = this.db.prepare(`
+      SELECT * FROM channel_session_bindings
+      WHERE agent_name = ? AND adapter_type = ? AND chat_id = ?
+    `);
+    const row = stmt.get(agentName, adapterType, chatId) as ChannelSessionBindingRow | undefined;
+    return row ? this.rowToChannelSessionBinding(row) : null;
+  }
+
+  private upsertChannelSessionLink(input: {
+    agentName: string;
+    adapterType: string;
+    chatId: string;
+    sessionId: string;
+    ownerUserId?: string;
+    nowMs: number;
+  }): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO channel_session_links
+        (id, agent_name, adapter_type, chat_id, session_id, owner_user_id, first_seen_at, last_seen_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(agent_name, adapter_type, chat_id, session_id)
+      DO UPDATE SET
+        owner_user_id = COALESCE(excluded.owner_user_id, channel_session_links.owner_user_id),
+        last_seen_at = excluded.last_seen_at
+    `);
+    stmt.run(
+      generateUUID(),
+      input.agentName,
+      input.adapterType,
+      input.chatId,
+      input.sessionId,
+      input.ownerUserId ?? null,
+      input.nowMs,
+      input.nowMs
+    );
+  }
+
+  private upsertChannelSessionBinding(input: {
+    agentName: string;
+    adapterType: string;
+    chatId: string;
+    sessionId: string;
+    ownerUserId?: string;
+    nowMs: number;
+  }): void {
+    const stmt = this.db.prepare(`
+      INSERT INTO channel_session_bindings
+        (id, agent_name, adapter_type, chat_id, active_session_id, owner_user_id, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(agent_name, adapter_type, chat_id)
+      DO UPDATE SET
+        active_session_id = excluded.active_session_id,
+        owner_user_id = COALESCE(excluded.owner_user_id, channel_session_bindings.owner_user_id),
+        updated_at = excluded.updated_at
+    `);
+    stmt.run(
+      generateUUID(),
+      input.agentName,
+      input.adapterType,
+      input.chatId,
+      input.sessionId,
+      input.ownerUserId ?? null,
+      input.nowMs
+    );
+  }
+
+  getOrCreateChannelActiveSession(input: {
+    agentName: string;
+    adapterType: string;
+    chatId: string;
+    ownerUserId?: string;
+    provider: "claude" | "codex";
+  }): { binding: ChannelSessionBinding; session: AgentSessionRecord; created: boolean } {
+    return this.runInTransaction(() => {
+      const nowMs = Date.now();
+      const currentBinding = this.getChannelSessionBinding(input.agentName, input.adapterType, input.chatId);
+      if (currentBinding) {
+        const existingSession = this.getAgentSessionById(currentBinding.activeSessionId);
+        if (existingSession && existingSession.agentName === input.agentName) {
+          this.upsertChannelSessionBinding({
+            agentName: input.agentName,
+            adapterType: input.adapterType,
+            chatId: input.chatId,
+            sessionId: existingSession.id,
+            ownerUserId: input.ownerUserId,
+            nowMs,
+          });
+          this.upsertChannelSessionLink({
+            agentName: input.agentName,
+            adapterType: input.adapterType,
+            chatId: input.chatId,
+            sessionId: existingSession.id,
+            ownerUserId: input.ownerUserId,
+            nowMs,
+          });
+          this.touchAgentSession(existingSession.id, {
+            lastActiveAt: nowMs,
+            adapterType: input.adapterType,
+            chatId: input.chatId,
+          });
+          const binding = this.getChannelSessionBinding(input.agentName, input.adapterType, input.chatId);
+          const session = this.getAgentSessionById(existingSession.id);
+          if (binding && session) {
+            return { binding, session, created: false };
+          }
+        }
+      }
+
+      const createdSession = this.createAgentSession({
+        agentName: input.agentName,
+        provider: input.provider,
+        adapterType: input.adapterType,
+        chatId: input.chatId,
+      });
+      this.upsertChannelSessionBinding({
+        agentName: input.agentName,
+        adapterType: input.adapterType,
+        chatId: input.chatId,
+        sessionId: createdSession.id,
+        ownerUserId: input.ownerUserId,
+        nowMs,
+      });
+      this.upsertChannelSessionLink({
+        agentName: input.agentName,
+        adapterType: input.adapterType,
+        chatId: input.chatId,
+        sessionId: createdSession.id,
+        ownerUserId: input.ownerUserId,
+        nowMs,
+      });
+      const binding = this.getChannelSessionBinding(input.agentName, input.adapterType, input.chatId);
+      if (!binding) {
+        throw new Error("Failed to create channel session binding");
+      }
+      return { binding, session: createdSession, created: true };
+    });
+  }
+
+  switchChannelActiveSession(input: {
+    agentName: string;
+    adapterType: string;
+    chatId: string;
+    targetSessionId: string;
+    ownerUserId?: string;
+  }): { oldSessionId?: string; newSessionId: string } {
+    return this.runInTransaction(() => {
+      const nowMs = Date.now();
+      const target = this.getAgentSessionById(input.targetSessionId);
+      if (!target || target.agentName !== input.agentName) {
+        throw new Error("Session not found");
+      }
+
+      const current = this.getChannelSessionBinding(input.agentName, input.adapterType, input.chatId);
+      this.upsertChannelSessionBinding({
+        agentName: input.agentName,
+        adapterType: input.adapterType,
+        chatId: input.chatId,
+        sessionId: target.id,
+        ownerUserId: input.ownerUserId,
+        nowMs,
+      });
+      this.upsertChannelSessionLink({
+        agentName: input.agentName,
+        adapterType: input.adapterType,
+        chatId: input.chatId,
+        sessionId: target.id,
+        ownerUserId: input.ownerUserId,
+        nowMs,
+      });
+      this.touchAgentSession(target.id, {
+        lastActiveAt: nowMs,
+        adapterType: input.adapterType,
+        chatId: input.chatId,
+      });
+      return { oldSessionId: current?.activeSessionId, newSessionId: target.id };
+    });
+  }
+
+  createFreshChannelSessionAndSwitch(input: {
+    agentName: string;
+    adapterType: string;
+    chatId: string;
+    ownerUserId?: string;
+    provider: "claude" | "codex";
+  }): { oldSessionId?: string; newSession: AgentSessionRecord } {
+    return this.runInTransaction(() => {
+      const nowMs = Date.now();
+      const current = this.getChannelSessionBinding(input.agentName, input.adapterType, input.chatId);
+      const fresh = this.createAgentSession({
+        agentName: input.agentName,
+        provider: input.provider,
+        adapterType: input.adapterType,
+        chatId: input.chatId,
+      });
+      this.upsertChannelSessionBinding({
+        agentName: input.agentName,
+        adapterType: input.adapterType,
+        chatId: input.chatId,
+        sessionId: fresh.id,
+        ownerUserId: input.ownerUserId,
+        nowMs,
+      });
+      this.upsertChannelSessionLink({
+        agentName: input.agentName,
+        adapterType: input.adapterType,
+        chatId: input.chatId,
+        sessionId: fresh.id,
+        ownerUserId: input.ownerUserId,
+        nowMs,
+      });
+      return { oldSessionId: current?.activeSessionId, newSession: fresh };
+    });
+  }
+
+  listSessionsForScope(input: {
+    agentName: string;
+    scope: SessionListScope;
+    adapterType: string;
+    chatId: string;
+    ownerUserId?: string;
+    limit?: number;
+    offset?: number;
+  }): SessionListItem[] {
+    const limit = Math.max(1, Math.min(100, Math.trunc(input.limit ?? 10)));
+    const offset = Math.max(0, Math.trunc(input.offset ?? 0));
+    const fetchLimit = Math.max(limit + offset, 20) * 4;
+    const params: Array<string | number> = [input.agentName];
+    const where: string[] = ["l.agent_name = ?"];
+
+    if (input.scope === "current-chat") {
+      where.push("l.adapter_type = ?");
+      where.push("l.chat_id = ?");
+      params.push(input.adapterType, input.chatId);
+    } else if (input.scope === "my-chats") {
+      if (!input.ownerUserId) return [];
+      where.push("l.owner_user_id = ?");
+      params.push(input.ownerUserId);
+    }
+
+    const stmt = this.db.prepare(`
+      SELECT
+        l.id,
+        l.agent_name,
+        l.adapter_type,
+        l.chat_id,
+        l.session_id,
+        l.owner_user_id,
+        l.first_seen_at,
+        l.last_seen_at,
+        s.created_at,
+        s.last_active_at,
+        s.provider,
+        s.provider_session_id,
+        s.last_adapter_type,
+        s.last_chat_id
+      FROM channel_session_links l
+      INNER JOIN agent_sessions s
+        ON s.id = l.session_id
+      WHERE ${where.join(" AND ")}
+      ORDER BY s.last_active_at DESC, l.last_seen_at DESC
+      LIMIT ?
+    `);
+    const rows = stmt.all(...params, fetchLimit) as SessionLinkWithSessionRow[];
+
+    const bySession = new Map<string, SessionListItem>();
+    for (const row of rows) {
+      if (bySession.has(row.session_id)) continue;
+      bySession.set(row.session_id, {
+        session: this.rowToAgentSession({
+          id: row.session_id,
+          agent_name: row.agent_name,
+          provider: row.provider,
+          provider_session_id: row.provider_session_id,
+          created_at: row.created_at,
+          last_active_at: row.last_active_at,
+          last_adapter_type: row.last_adapter_type,
+          last_chat_id: row.last_chat_id,
+        }),
+        link: {
+          adapterType: row.adapter_type,
+          chatId: row.chat_id,
+          ownerUserId: row.owner_user_id ?? undefined,
+          firstSeenAt: row.first_seen_at,
+          lastSeenAt: row.last_seen_at,
+        },
+      });
+    }
+
+    return [...bySession.values()].slice(offset, offset + limit);
+  }
+
+  countSessionsForScope(input: {
+    agentName: string;
+    scope: SessionListScope;
+    adapterType: string;
+    chatId: string;
+    ownerUserId?: string;
+  }): number {
+    const params: Array<string | number> = [input.agentName];
+    const where: string[] = ["l.agent_name = ?"];
+    if (input.scope === "current-chat") {
+      where.push("l.adapter_type = ?");
+      where.push("l.chat_id = ?");
+      params.push(input.adapterType, input.chatId);
+    } else if (input.scope === "my-chats") {
+      if (!input.ownerUserId) return 0;
+      where.push("l.owner_user_id = ?");
+      params.push(input.ownerUserId);
+    }
+
+    const stmt = this.db.prepare(`
+      SELECT COUNT(DISTINCT l.session_id) AS n
+      FROM channel_session_links l
+      WHERE ${where.join(" AND ")}
+    `);
+    const row = stmt.get(...params) as { n: number } | undefined;
+    return row?.n ?? 0;
+  }
+
+  clearAgentSessionProviderHandles(agentName: string): void {
+    const stmt = this.db.prepare(`
+      UPDATE agent_sessions
+      SET provider_session_id = NULL
+      WHERE agent_name = ?
+    `);
+    stmt.run(agentName);
+  }
+
   // ==================== Config Operations ====================
 
   /**
@@ -1707,5 +2270,29 @@ export class HiBossDatabase {
       .filter((id) => id.length > 0);
     this.setConfig(`adapter_boss_ids_${adapterType}`, normalized.join(","));
     this.setConfig(`adapter_boss_id_${adapterType}`, normalized[0] ?? "");
+  }
+
+  getRuntimeSessionConcurrency(): { perAgent: number; global: number } {
+    const perAgentRaw = (this.getConfig("runtime_session_concurrency_per_agent") ?? "").trim();
+    const globalRaw = (this.getConfig("runtime_session_concurrency_global") ?? "").trim();
+
+    const parsedPerAgent = Number(perAgentRaw);
+    const parsedGlobal = Number(globalRaw);
+
+    const perAgent = Number.isFinite(parsedPerAgent) && parsedPerAgent > 0
+      ? Math.max(1, Math.min(64, Math.trunc(parsedPerAgent)))
+      : DEFAULT_SESSION_CONCURRENCY_PER_AGENT;
+    const global = Number.isFinite(parsedGlobal) && parsedGlobal > 0
+      ? Math.max(1, Math.min(256, Math.trunc(parsedGlobal)))
+      : DEFAULT_SESSION_CONCURRENCY_GLOBAL;
+
+    return { perAgent, global: Math.max(perAgent, global) };
+  }
+
+  setRuntimeSessionConcurrency(input: { perAgent: number; global: number }): void {
+    const perAgent = Math.max(1, Math.min(64, Math.trunc(input.perAgent)));
+    const global = Math.max(perAgent, Math.min(256, Math.trunc(input.global)));
+    this.setConfig("runtime_session_concurrency_per_agent", String(perAgent));
+    this.setConfig("runtime_session_concurrency_global", String(global));
   }
 }

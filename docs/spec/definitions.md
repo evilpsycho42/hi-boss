@@ -31,6 +31,56 @@ Reserved agent addresses:
 
 ---
 
+## Session Registry
+
+Hi-Boss maintains channel-scoped session state in dedicated SQLite tables.
+
+### `agent_sessions`
+
+| Code (TypeScript) | SQLite column | Notes |
+|-------------------|-------------|-------|
+| `agentSession.id` | `id` | UUID |
+| `agentSession.agentName` | `agent_name` | Owner agent |
+| `agentSession.provider` | `provider` | `claude` or `codex` |
+| `agentSession.providerSessionId` | `provider_session_id` | Provider thread/session id (nullable) |
+| `agentSession.createdAt` | `created_at` | Unix epoch ms |
+| `agentSession.lastActiveAt` | `last_active_at` | Unix epoch ms |
+| `agentSession.lastAdapterType` | `last_adapter_type` | Last channel adapter (nullable) |
+| `agentSession.lastChatId` | `last_chat_id` | Last channel chat id (nullable) |
+
+### `channel_session_bindings`
+
+Active mapping per channel conversation:
+
+| Code (TypeScript) | SQLite column | Notes |
+|-------------------|-------------|-------|
+| `binding.agentName` | `agent_name` | Owner agent |
+| `binding.adapterType` | `adapter_type` | e.g. `telegram` |
+| `binding.chatId` | `chat_id` | Channel chat id |
+| `binding.activeSessionId` | `active_session_id` | FK -> `agent_sessions.id` |
+| `binding.ownerUserId` | `owner_user_id` | Boss user id (nullable; adapter-specific) |
+| `binding.updatedAt` | `updated_at` | Unix epoch ms |
+
+Unique key: `(agent_name, adapter_type, chat_id)`.
+
+### `channel_session_links`
+
+Visibility/history relation used by `/sessions` tab scopes:
+
+| Code (TypeScript) | SQLite column | Notes |
+|-------------------|-------------|-------|
+| `link.agentName` | `agent_name` | Owner agent |
+| `link.adapterType` | `adapter_type` | Channel adapter |
+| `link.chatId` | `chat_id` | Channel chat id |
+| `link.sessionId` | `session_id` | FK -> `agent_sessions.id` |
+| `link.ownerUserId` | `owner_user_id` | Boss user id (nullable) |
+| `link.firstSeenAt` | `first_seen_at` | Unix epoch ms |
+| `link.lastSeenAt` | `last_seen_at` | Unix epoch ms |
+
+Unique key: `(agent_name, adapter_type, chat_id, session_id)`.
+
+---
+
 ## Envelope
 
 An envelope is the internal message record stored in SQLite and routed by the daemon.

@@ -29,7 +29,7 @@ Supported values:
 - `zh-CN` (also accepts `zh` / `zh_cn`)
 
 Current scope:
-- Telegram slash-command descriptions (`/new`, `/status`, `/abort`, `/isolated`, `/clone`)
+- Telegram slash-command descriptions (`/new`, `/sessions`, `/session`, `/status`, `/abort`, `/isolated`, `/clone`)
 - Telegram fixed system messages (for example unbound-adapter guidance, `/new` ack, oneshot usage/errors)
 
 Notes:

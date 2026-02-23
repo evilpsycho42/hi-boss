@@ -47,12 +47,17 @@ Top-level required fields:
 - `permission-policy`
 - `agents[]`
 
+Top-level optional fields:
+- `runtime` (defaults are applied when omitted)
+
 Key fields:
 - `boss.name`
 - `boss.timezone`
 - `admin.token` (plaintext)
 - `telegram.boss-ids[]` (supports multiple boss usernames)
 - `permission-policy` (`version: 1`)
+- `runtime.session-concurrency.per-agent` (default `4`)
+- `runtime.session-concurrency.global` (default `16`, must be `>= per-agent`)
 - `agents[].token` (plaintext)
 - `agents[].bindings[]`
 
@@ -78,5 +83,7 @@ Core mappings:
 - `admin.token` → `config.admin_token_hash`
 - `telegram.boss-ids` → `config.adapter_boss_ids_telegram` (first value also mirrored to `config.adapter_boss_id_telegram` for compatibility)
 - `permission-policy` → `config.permission_policy`
+- `runtime.session-concurrency.per-agent` → `config.runtime_session_concurrency_per_agent`
+- `runtime.session-concurrency.global` → `config.runtime_session_concurrency_global`
 - `agents[]` → `agents`
 - `agents[].bindings[]` → `agent_bindings`

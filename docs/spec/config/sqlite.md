@@ -13,6 +13,9 @@ Tables (high level):
 - `envelopes` — durable message queue + audit
 - `cron_schedules` — durable cron definitions (materialize envelopes)
 - `agent_runs` — run audit records
+- `agent_sessions` — session registry (provider session/thread handles)
+- `channel_session_bindings` — active session mapping per channel chat
+- `channel_session_links` — historical/visibility links for session browser scopes
 
 ## `config` keys (selected)
 
@@ -23,6 +26,8 @@ Tables (high level):
 - `permission_policy`: JSON mapping operations → required permission level
 - `adapter_boss_id_<adapter-type>`: boss identity on an adapter (e.g., `adapter_boss_id_telegram`)
 - `adapter_boss_ids_<adapter-type>`: comma-separated boss identity list (e.g., `adapter_boss_ids_telegram`)
+- `runtime_session_concurrency_per_agent`: per-agent session concurrency limit
+- `runtime_session_concurrency_global`: global session concurrency limit
 
 ## Key invariants
 
