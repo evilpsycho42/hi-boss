@@ -160,6 +160,7 @@ export class TelegramAdapter implements ChatAdapter {
     const command: ChannelCommand = {
       command: commandName,
       args: TelegramAdapter.extractCommandArgs(rawText, commandName),
+      adapterType: this.platform,
       chatId,
       authorId,
       authorUsername: username,
@@ -206,6 +207,7 @@ export class TelegramAdapter implements ChatAdapter {
     const command: ChannelCommand = {
       command: "sessions",
       args: `tab=${parsed.tab} page=${parsed.page}`,
+      adapterType: this.platform,
       chatId,
       authorId: ctx.from?.id !== undefined && ctx.from?.id !== null ? String(ctx.from.id) : undefined,
       authorUsername: ctx.from?.username,

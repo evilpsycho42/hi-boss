@@ -128,6 +128,7 @@ export type ChannelMessageHandler = (message: ChannelMessage) => void | Promise<
 export interface ChannelCommand {
   command: string;           // Command name without slash (e.g., "new")
   args: string;              // Arguments after command
+  adapterType?: string;      // Adapter origin (e.g., "telegram")
   chatId: string;            // Chat ID where command was issued
   authorId?: string;         // Platform user ID of command issuer
   authorUsername?: string;   // Username of command issuer

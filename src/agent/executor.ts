@@ -92,6 +92,7 @@ export class AgentExecutor {
   private agentQueuedTaskCount: Map<string, number> = new Map();
   private globalRunSemaphore: AsyncSemaphore = new AsyncSemaphore(DEFAULT_SESSION_CONCURRENCY_GLOBAL);
   private perAgentRunSemaphores: Map<string, AsyncSemaphore> = new Map();
+  private abortGenerationByAgent: Map<string, number> = new Map();
   private concurrencyPerAgent: number = DEFAULT_SESSION_CONCURRENCY_PER_AGENT;
   private concurrencyGlobal: number = DEFAULT_SESSION_CONCURRENCY_GLOBAL;
   private pendingSessionRefresh: Map<string, SessionRefreshRequest> = new Map();
@@ -157,6 +158,20 @@ export class AgentExecutor {
     this.agentQueuedTaskCount.set(agentName, n - 1);
   }
 
+  private getAbortGeneration(agentName: string): number {
+    return this.abortGenerationByAgent.get(agentName) ?? 0;
+  }
+
+  private bumpAbortGeneration(agentName: string): number {
+    const next = this.getAbortGeneration(agentName) + 1;
+    this.abortGenerationByAgent.set(agentName, next);
+    return next;
+  }
+
+  private isAbortGenerationCurrent(agentName: string, expected: number): boolean {
+    return this.getAbortGeneration(agentName) === expected;
+  }
+
   private buildDefaultSessionKey(agentName: string): string {
     return `default:${agentName}`;
   }
@@ -189,8 +204,10 @@ export class AgentExecutor {
    * Cancel the current in-flight run for an agent (best-effort).
    */
   abortCurrentRun(agentName: string, reason: string): boolean {
+    this.bumpAbortGeneration(agentName);
     const set = this.inFlightRuns.get(agentName);
-    if (!set || set.size === 0) return false;
+    const hadQueuedTasks = (this.agentQueuedTaskCount.get(agentName) ?? 0) > 0;
+    if (!set || set.size === 0) return hadQueuedTasks;
 
     for (const inFlight of set) {
       if (!inFlight.abortReason) {
@@ -343,9 +360,26 @@ export class AgentExecutor {
       const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
       const md = envelope.metadata as Record<string, unknown> | undefined;
       const authorRaw = md && typeof md.author === "object" && md.author ? md.author as Record<string, unknown> : undefined;
-      const ownerUserId = typeof authorRaw?.id === "string" && authorRaw.id.trim()
+      const ownerUserId = envelope.fromBoss && typeof authorRaw?.id === "string" && authorRaw.id.trim()
         ? authorRaw.id.trim()
         : undefined;
+      const pinnedSessionId = typeof md?.channelSessionId === "string" && md.channelSessionId.trim().length > 0
+        ? md.channelSessionId.trim()
+        : undefined;
+
+      if (pinnedSessionId) {
+        const pinnedSession = db.getAgentSessionById(pinnedSessionId);
+        if (pinnedSession && pinnedSession.agentName === agent.name) {
+          return {
+            kind: "channel",
+            cacheKey: this.buildChannelSessionKey(agent.name, pinnedSession.id),
+            agentSessionId: pinnedSession.id,
+            adapterType: parsedFrom.adapter,
+            chatId: parsedFrom.chatId,
+            ownerUserId,
+          };
+        }
+      }
 
       const active = db.getOrCreateChannelActiveSession({
         agentName: agent.name,
@@ -381,14 +415,24 @@ export class AgentExecutor {
   }): void {
     const existingTail = this.sessionLocks.get(params.scope.cacheKey);
     const previous = (existingTail ?? Promise.resolve()).catch(() => undefined);
+    const expectedAbortGeneration = this.getAbortGeneration(params.agent.name);
     this.incrementAgentTaskCount(params.agent.name);
 
     const current = previous
       .then(async () => {
+        if (!this.isAbortGenerationCurrent(params.agent.name, expectedAbortGeneration)) {
+          return;
+        }
         const releaseGlobal = await this.globalRunSemaphore.acquire();
         const releaseAgent = await this.getAgentSemaphore(params.agent.name).acquire();
         try {
-          await this.runSessionExecution(params);
+          if (!this.isAbortGenerationCurrent(params.agent.name, expectedAbortGeneration)) {
+            return;
+          }
+          await this.runSessionExecution({
+            ...params,
+            abortGeneration: expectedAbortGeneration,
+          });
         } finally {
           releaseAgent();
           releaseGlobal();
@@ -411,11 +455,22 @@ export class AgentExecutor {
     envelopes: Envelope[];
     trigger?: AgentRunTrigger;
     refreshReasons: string[];
+    abortGeneration: number;
   }): Promise<void> {
     const envelopeIds = params.envelopes.map((e) => e.id);
     const pendingRemainingCount = countDuePendingEnvelopesForAgent(params.db, params.agent.name);
-    const run = params.db.createAgentRun(params.agent.name, envelopeIds);
     const triggerFields = getTriggerFields(params.trigger);
+    if (!this.isAbortGenerationCurrent(params.agent.name, params.abortGeneration)) {
+      logEvent("info", "agent-run-skip-aborted", {
+        "agent-name": params.agent.name,
+        "envelopes-read-count": envelopeIds.length,
+        "session-scope": params.scope.kind,
+        "session-key": params.scope.cacheKey,
+      });
+      return;
+    }
+
+    const run = params.db.createAgentRun(params.agent.name, envelopeIds);
     let runStartedAtMs: number | null = null;
     let runLifecycleStarted = false;
     let completionState: RunCompletionState | null = null;
@@ -805,6 +860,7 @@ export class AgentExecutor {
     this.sessionLocks.clear();
     this.agentQueuedTaskCount.clear();
     this.inFlightRuns.clear();
+    this.abortGenerationByAgent.clear();
   }
 }
 

@@ -98,3 +98,35 @@ test("/sessions returns keyboard with tabs and pager", async () => {
     assert.equal(response?.telegram?.inlineKeyboard?.length, 2);
   });
 });
+
+test("/new uses command adapter type instead of hardcoded telegram", async () => {
+  await withTempDb(async (db) => {
+    db.registerAgent({ name: "nex", provider: "codex", role: "speaker" });
+
+    const handler = createChannelCommandHandler({
+      db,
+      executor: {
+        isAgentBusy: () => false,
+        abortCurrentRun: () => false,
+        invalidateChannelSessionCache: () => undefined,
+      } as any,
+      router: { routeEnvelope: async () => undefined } as any,
+    });
+
+    const response = await handler({
+      command: "new",
+      args: "",
+      adapterType: "slack",
+      chatId: "channel-1",
+      authorId: "u-1",
+      authorUsername: "alice",
+      agentName: "nex",
+    } as any);
+
+    assert.ok(response?.text?.includes("session-new: ok"));
+    const slackBinding = db.getChannelSessionBinding("nex", "slack", "channel-1");
+    const telegramBinding = db.getChannelSessionBinding("nex", "telegram", "channel-1");
+    assert.ok(slackBinding);
+    assert.equal(telegramBinding, null);
+  });
+});

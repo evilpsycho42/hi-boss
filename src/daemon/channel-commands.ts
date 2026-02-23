@@ -263,11 +263,12 @@ async function handleSessionsCommand(params: {
   const c = params.command;
   const agentName = c.agentName!;
   const view = parseSessionsView(c.args);
+  const adapterType = c.adapterType ?? "telegram";
 
   const totalRaw = params.db.countSessionsForScope({
     agentName,
     scope: view.scope,
-    adapterType: "telegram",
+    adapterType,
     chatId: c.chatId,
     ownerUserId: c.authorId,
   });
@@ -280,14 +281,14 @@ async function handleSessionsCommand(params: {
   const items = params.db.listSessionsForScope({
     agentName,
     scope: view.scope,
-    adapterType: "telegram",
+    adapterType,
     chatId: c.chatId,
     ownerUserId: c.authorId,
     limit: SESSIONS_PAGE_SIZE,
     offset,
   });
 
-  const active = params.db.getChannelSessionBinding(agentName, "telegram", c.chatId);
+  const active = params.db.getChannelSessionBinding(agentName, adapterType, c.chatId);
   const tz = params.db.getBossTimezone();
 
   const lines: string[] = [];
@@ -311,15 +312,19 @@ async function handleSessionsCommand(params: {
 
   return {
     text: lines.join("\n"),
-    telegram: {
-      inlineKeyboard: buildSessionsKeyboard({
-        scope: view.scope,
-        page,
-        totalPages,
-        locale: params.locale,
-      }),
-      ...(c.isCallback && c.messageId ? { editMessageId: c.messageId } : {}),
-    },
+    ...(adapterType === "telegram"
+      ? {
+          telegram: {
+            inlineKeyboard: buildSessionsKeyboard({
+              scope: view.scope,
+              page,
+              totalPages,
+              locale: params.locale,
+            }),
+            ...(c.isCallback && c.messageId ? { editMessageId: c.messageId } : {}),
+          },
+        }
+      : {}),
   };
 }
 
@@ -330,6 +335,7 @@ async function handleSessionSwitchCommand(params: {
   ui: ReturnType<typeof getUiText>;
 }): Promise<ChannelCommandResponse> {
   const c = params.command;
+  const adapterType = c.adapterType ?? "telegram";
   const raw = c.args?.trim() ?? "";
   if (!raw) {
     return { text: params.ui.channel.sessionUsage };
@@ -354,7 +360,7 @@ async function handleSessionSwitchCommand(params: {
   const visible = collectVisibleSessionIds({
     db: params.db,
     agentName: c.agentName!,
-    adapterType: "telegram",
+    adapterType,
     chatId: c.chatId,
     ownerUserId: c.authorId,
   });
@@ -365,12 +371,12 @@ async function handleSessionSwitchCommand(params: {
 
   const switched = params.db.switchChannelActiveSession({
     agentName: c.agentName!,
-    adapterType: "telegram",
+    adapterType,
     chatId: c.chatId,
     targetSessionId: resolved.session.id,
     ownerUserId: c.authorId,
   });
-  params.executor.invalidateChannelSessionCache(c.agentName!, "telegram", c.chatId);
+  params.executor.invalidateChannelSessionCache(c.agentName!, adapterType, c.chatId);
 
   return {
     text: [
@@ -395,15 +401,16 @@ export function createChannelCommandHandler(params: {
     if (c.command === "new" && typeof c.agentName === "string" && c.agentName) {
       const agent = params.db.getAgentByNameCaseInsensitive(c.agentName);
       if (!agent) return { text: ui.channel.agentNotFound };
+      const adapterType = c.adapterType ?? "telegram";
 
       const switched = params.db.createFreshChannelSessionAndSwitch({
         agentName: c.agentName,
-        adapterType: "telegram",
+        adapterType,
         chatId: c.chatId,
         ownerUserId: c.authorId,
         provider: agent.provider ?? DEFAULT_AGENT_PROVIDER,
       });
-      params.executor.invalidateChannelSessionCache(c.agentName, "telegram", c.chatId);
+      params.executor.invalidateChannelSessionCache(c.agentName, adapterType, c.chatId);
 
       return {
         text: [
@@ -470,10 +477,11 @@ async function handleOneshotCommand(
     return { text: ui.channel.usage(mode) };
   }
 
-  const fromAddress = formatChannelAddress("telegram", command.chatId);
+  const fromAddress = formatChannelAddress(command.adapterType ?? "telegram", command.chatId);
   const toAddress = formatAgentAddress(agentName);
 
   try {
+    const adapterType = command.adapterType ?? "telegram";
     await params.router.routeEnvelope({
       from: fromAddress,
       to: toAddress,
@@ -481,7 +489,7 @@ async function handleOneshotCommand(
       content: { text },
       metadata: {
         oneshotType: mode,
-        platform: "telegram",
+        platform: adapterType,
         channelMessageId: command.messageId,
         author:
           command.authorId || command.authorUsername

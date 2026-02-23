@@ -12,6 +12,7 @@ import type { DaemonConfig } from "../daemon.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 import { resolveUiLocale } from "../../shared/ui-locale.js";
 import { getUiText } from "../../shared/ui-text.js";
+import { DEFAULT_AGENT_PROVIDER } from "../../shared/defaults.js";
 
 /**
  * Bridge between ChannelMessages and Envelopes.
@@ -86,6 +87,7 @@ export class ChannelBridge {
     // Enrich command with agent name
     const enrichedCommand: ChannelCommand & { agentName: string } = {
       ...command,
+      adapterType: command.adapterType ?? adapter.platform,
       agentName: binding.agentName,
     };
 
@@ -131,6 +133,17 @@ export class ChannelBridge {
 
     const fromAddress = formatChannelAddress(platform, message.chat.id);
     const toAddress = formatAgentAddress(binding.agentName);
+    const agent = this.db.getAgentByNameCaseInsensitive(binding.agentName);
+    const ownerUserId = fromBoss ? message.author.id : undefined;
+    const channelSession = agent
+      ? this.db.getOrCreateChannelActiveSession({
+          agentName: binding.agentName,
+          adapterType: platform,
+          chatId: message.chat.id,
+          ownerUserId,
+          provider: agent.provider ?? DEFAULT_AGENT_PROVIDER,
+        })
+      : null;
 
     await this.router.routeEnvelope({
       from: fromAddress,
@@ -147,6 +160,7 @@ export class ChannelBridge {
       metadata: {
         platform,
         channelMessageId: message.id,
+        ...(channelSession ? { channelSessionId: channelSession.session.id } : {}),
         author: message.author,
         chat: message.chat,
         ...(message.inReplyTo ? { inReplyTo: message.inReplyTo } : {}),
