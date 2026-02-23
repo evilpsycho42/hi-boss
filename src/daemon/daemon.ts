@@ -274,6 +274,7 @@ export class Daemon {
       }
 
       this.conversationHistory.setTimezone(this.db.getBossTimezone());
+      this.executor.setConcurrencyLimits(this.db.getRuntimeSessionConcurrency());
 
       // All displayed timestamps (including daemon logs) use the boss timezone.
       setDaemonLogTimeZone(this.db.getBossTimezone());

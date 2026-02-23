@@ -153,13 +153,22 @@ export class OneShotExecutor {
       });
 
       let finalText: string;
+      let executionSessionId: string | undefined = session.sessionId;
       try {
         const turn = await executeCliTurn(session, turnInput, {
           hibossDir: this.deps.hibossDir,
           agentName: agent.name,
         });
 
-        finalText = turn.finalText?.trim() ? turn.finalText.trim() : "(no response)";
+        executionSessionId = turn.sessionId ?? session.sessionId;
+        const body = turn.finalText?.trim() ? turn.finalText.trim() : "(no response)";
+        finalText = [
+          body,
+          "",
+          `oneshot-mode: ${effectiveMode}`,
+          `execution-session-id: ${executionSessionId ?? "(none)"}`,
+          "active-session-changed: false",
+        ].join("\n");
 
         logEvent("info", "oneshot-job-complete", {
           "envelope-id": envelope.id,
@@ -171,7 +180,12 @@ export class OneShotExecutor {
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        finalText = `One-shot (${effectiveMode}) execution failed. Check daemon logs for details.`;
+        finalText = [
+          `One-shot (${effectiveMode}) execution failed. Check daemon logs for details.`,
+          `oneshot-mode: ${effectiveMode}`,
+          `execution-session-id: ${executionSessionId ?? "(none)"}`,
+          "active-session-changed: false",
+        ].join("\n");
 
         logEvent("info", "oneshot-job-complete", {
           "envelope-id": envelope.id,

@@ -91,6 +91,42 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   error TEXT
 );
 
+CREATE TABLE IF NOT EXISTS agent_sessions (
+  id TEXT PRIMARY KEY,
+  agent_name TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  provider_session_id TEXT,
+  created_at INTEGER NOT NULL,
+  last_active_at INTEGER NOT NULL,
+  last_adapter_type TEXT,
+  last_chat_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS channel_session_bindings (
+  id TEXT PRIMARY KEY,
+  agent_name TEXT NOT NULL,
+  adapter_type TEXT NOT NULL,
+  chat_id TEXT NOT NULL,
+  active_session_id TEXT NOT NULL,
+  owner_user_id TEXT,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(agent_name, adapter_type, chat_id),
+  FOREIGN KEY (active_session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS channel_session_links (
+  id TEXT PRIMARY KEY,
+  agent_name TEXT NOT NULL,
+  adapter_type TEXT NOT NULL,
+  chat_id TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  owner_user_id TEXT,
+  first_seen_at INTEGER NOT NULL,
+  last_seen_at INTEGER NOT NULL,
+  UNIQUE(agent_name, adapter_type, chat_id, session_id),
+  FOREIGN KEY (session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_envelopes_to ON envelopes("to", status);
 CREATE INDEX IF NOT EXISTS idx_envelopes_from ON envelopes("from", created_at);
 CREATE INDEX IF NOT EXISTS idx_envelopes_status_deliver_at ON envelopes(status, deliver_at);
@@ -101,4 +137,8 @@ CREATE INDEX IF NOT EXISTS idx_agent_bindings_agent ON agent_bindings(agent_name
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_bindings_agent_adapter_unique ON agent_bindings(agent_name, adapter_type);
 CREATE INDEX IF NOT EXISTS idx_agent_bindings_adapter ON agent_bindings(adapter_type, adapter_token);
 CREATE INDEX IF NOT EXISTS idx_agent_runs_agent ON agent_runs(agent_name, started_at);
+CREATE INDEX IF NOT EXISTS idx_agent_sessions_agent_last_active ON agent_sessions(agent_name, last_active_at DESC);
+CREATE INDEX IF NOT EXISTS idx_channel_session_bindings_lookup ON channel_session_bindings(agent_name, adapter_type, chat_id);
+CREATE INDEX IF NOT EXISTS idx_channel_session_links_agent_owner_last_seen ON channel_session_links(agent_name, owner_user_id, last_seen_at DESC);
+CREATE INDEX IF NOT EXISTS idx_channel_session_links_agent_chat_last_seen ON channel_session_links(agent_name, adapter_type, chat_id, last_seen_at DESC);
 `;

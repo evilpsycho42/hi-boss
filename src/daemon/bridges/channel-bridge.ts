@@ -2,8 +2,8 @@ import type {
   ChatAdapter,
   ChannelMessage,
   ChannelCommand,
+  ChannelCommandResponse,
   ChannelCommandHandler,
-  MessageContent,
 } from "../../adapters/types.js";
 import { formatChannelAddress, formatAgentAddress } from "../../adapters/types.js";
 import type { MessageRouter } from "../router/message-router.js";
@@ -63,7 +63,7 @@ export class ChannelBridge {
     adapter: ChatAdapter,
     adapterToken: string,
     command: ChannelCommand
-  ): Promise<MessageContent | void> {
+  ): Promise<ChannelCommandResponse | void> {
     const fromBoss = this.isBoss(adapter.platform, command.authorUsername);
     if (!fromBoss) {
       // Boss-only commands: do not reply to non-boss users.

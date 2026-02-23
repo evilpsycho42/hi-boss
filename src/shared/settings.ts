@@ -1,6 +1,12 @@
 import * as path from "node:path";
 
-import { BACKGROUND_AGENT_NAME, DEFAULT_PERMISSION_POLICY, DEFAULT_SETUP_PERMISSION_LEVEL } from "./defaults.js";
+import {
+  BACKGROUND_AGENT_NAME,
+  DEFAULT_PERMISSION_POLICY,
+  DEFAULT_SESSION_CONCURRENCY_GLOBAL,
+  DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
+  DEFAULT_SETUP_PERMISSION_LEVEL,
+} from "./defaults.js";
 import { isPermissionLevel, parsePermissionPolicyV1FromObject } from "./permissions.js";
 import { parseDailyResetAt, parseDurationToMs } from "./session-policy.js";
 import { isValidIanaTimeZone } from "./timezone.js";
@@ -41,6 +47,13 @@ export interface SettingsAgentV4 {
   bindings: SettingsBindingV4[];
 }
 
+export interface SettingsRuntimeV4 {
+  sessionConcurrency?: {
+    perAgent?: number;
+    global?: number;
+  };
+}
+
 export interface SettingsV4 {
   version: 4;
   boss: {
@@ -57,6 +70,7 @@ export interface SettingsV4 {
     version: 1;
     operations: Record<string, "restricted" | "standard" | "privileged" | "admin">;
   };
+  runtime?: SettingsRuntimeV4;
   agents: SettingsAgentV4[];
 }
 
@@ -114,6 +128,63 @@ function parsePermissionPolicy(raw: unknown): SettingsV4["permissionPolicy"] {
   } catch (err) {
     fail("permission-policy", (err as Error).message);
   }
+}
+
+function parsePositiveInt(
+  value: unknown,
+  fieldPath: string,
+  defaultValue: number,
+  range: { min: number; max: number }
+): number {
+  if (value === undefined || value === null) return defaultValue;
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    fail(fieldPath, "must be a number");
+  }
+  const n = Math.trunc(value);
+  if (n < range.min || n > range.max) {
+    fail(fieldPath, `must be between ${range.min} and ${range.max}`);
+  }
+  return n;
+}
+
+function parseRuntime(raw: unknown): SettingsRuntimeV4 {
+  if (raw === undefined || raw === null) {
+    return {
+      sessionConcurrency: {
+        perAgent: DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
+        global: DEFAULT_SESSION_CONCURRENCY_GLOBAL,
+      },
+    };
+  }
+
+  if (!isObject(raw)) {
+    fail("runtime", "must be an object");
+  }
+
+  const concurrencyRaw = raw["session-concurrency"];
+  if (concurrencyRaw !== undefined && !isObject(concurrencyRaw)) {
+    fail("runtime.session-concurrency", "must be an object");
+  }
+
+  const perAgent = parsePositiveInt(
+    concurrencyRaw ? concurrencyRaw["per-agent"] : undefined,
+    "runtime.session-concurrency.per-agent",
+    DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
+    { min: 1, max: 64 }
+  );
+  const global = parsePositiveInt(
+    concurrencyRaw ? concurrencyRaw.global : undefined,
+    "runtime.session-concurrency.global",
+    DEFAULT_SESSION_CONCURRENCY_GLOBAL,
+    { min: 1, max: 256 }
+  );
+
+  return {
+    sessionConcurrency: {
+      perAgent,
+      global: Math.max(perAgent, global),
+    },
+  };
 }
 
 function parseSessionPolicy(raw: unknown, agentName: string): SettingsSessionPolicyV4 | undefined {
@@ -296,6 +367,17 @@ export function assertValidSettingsV4(settings: SettingsV4): void {
     fail("admin.token", `must be at least ${MIN_ADMIN_TOKEN_LENGTH} characters`);
   }
   validateBossIds(settings.telegram.bossIds);
+  const perAgent = settings.runtime?.sessionConcurrency?.perAgent ?? DEFAULT_SESSION_CONCURRENCY_PER_AGENT;
+  const global = settings.runtime?.sessionConcurrency?.global ?? DEFAULT_SESSION_CONCURRENCY_GLOBAL;
+  if (!Number.isFinite(perAgent) || Math.trunc(perAgent) < 1 || Math.trunc(perAgent) > 64) {
+    fail("runtime.session-concurrency.per-agent", "must be between 1 and 64");
+  }
+  if (!Number.isFinite(global) || Math.trunc(global) < 1 || Math.trunc(global) > 256) {
+    fail("runtime.session-concurrency.global", "must be between 1 and 256");
+  }
+  if (Math.trunc(global) < Math.trunc(perAgent)) {
+    fail("runtime.session-concurrency.global", "must be >= runtime.session-concurrency.per-agent");
+  }
 
   const byName = new Set<string>();
   const byToken = new Set<string>();
@@ -400,6 +482,7 @@ export function parseSettingsV4Json(json: string): SettingsV4 {
       bossIds: parseBossIds(telegramRaw["boss-ids"]),
     },
     permissionPolicy: parsePermissionPolicy(raw["permission-policy"] ?? DEFAULT_PERMISSION_POLICY),
+    runtime: parseRuntime(raw.runtime),
     agents: agentsRaw.map((agent, index) => parseAgent(agent, index)),
   };
 
@@ -422,6 +505,13 @@ export function stringifySettingsV4(settings: SettingsV4): string {
       "boss-ids": settings.telegram.bossIds,
     },
     "permission-policy": settings.permissionPolicy,
+    runtime: {
+      "session-concurrency": {
+        "per-agent":
+          settings.runtime?.sessionConcurrency?.perAgent ?? DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
+        global: settings.runtime?.sessionConcurrency?.global ?? DEFAULT_SESSION_CONCURRENCY_GLOBAL,
+      },
+    },
     agents: settings.agents.map((agent) => ({
       name: agent.name,
       token: agent.token,
