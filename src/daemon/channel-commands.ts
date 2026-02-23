@@ -403,13 +403,13 @@ export function createChannelCommandHandler(params: {
       const adapterType = c.adapterType ?? "telegram";
 
       const switched = params.db.createFreshChannelSessionAndSwitch({
-        agentName: c.agentName,
+        agentName: agent.name,
         adapterType,
         chatId: c.chatId,
         ownerUserId: c.authorId,
         provider: agent.provider ?? DEFAULT_AGENT_PROVIDER,
       });
-      params.executor.invalidateChannelSessionCache(c.agentName, adapterType, c.chatId);
+      params.executor.invalidateChannelSessionCache(agent.name, adapterType, c.chatId);
 
       return {
         text: [
