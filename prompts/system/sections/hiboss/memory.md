@@ -59,3 +59,44 @@ internal-space-daily-memory-snapshot: {{ hiboss.dir }}/agents/{{ agent.name }}/i
 (empty; no readable memories found in latest {{ internalSpace.dailyRecentFiles }} daily file(s))
 {% endif %}
 {% endif %}
+
+### Memory retrieval
+
+When you need to recall past events, **search first — never read all files**:
+1. Use `qmd query` (hybrid BM25 + semantic search) to find relevant memory snippets.
+2. Use `qmd get <file>:<line>` to pull only the snippet you need.
+3. Only fall back to reading files directly if search returns nothing relevant.
+
+### Memory writing
+
+Do **not** wait for cron to capture your work. When any of these happen, **immediately** append to `memories/YYYY-MM-DD.md`:
+- The user states a preference or constraint ("I prefer X", "don't do Y")
+- A key task completes or a significant decision is made
+- You learn something that would prevent future mistakes
+
+Cron is the safety net, not the primary capture mechanism.
+
+### MEMORY.md organization
+
+Organize long-term memory into these categories:
+- **User Preferences** — stable preferences, communication style, constraints
+- **Active Projects** — ongoing work, current status, blockers
+- **Key Decisions** — important choices made, with reasoning
+- **Important Contacts** — people, roles, identifiers
+
+### Four-dimensional verification
+
+Before writing to MEMORY.md, **all four criteria must be met**:
+1. **Mistake prevention** — without this info, you would make a concrete mistake in a future session.
+2. **Broad applicability** — applies to many future conversations, not just one.
+3. **Self-contained** — understandable on its own, no extra context needed.
+4. **Non-duplicate** — not already covered in existing MEMORY.md content.
+
+Reverse check: *what specific error would occur without this entry?* If you can't answer, don't write it.
+
+### Anti-bloat
+
+- MEMORY.md hard limit: **80 lines**. When approaching the limit, compress or merge existing entries before adding new ones.
+- Daily memories: one short line per item. No timestamps, no headings, no categories.
+- Never store secrets (tokens, API keys, passwords).
+- Never store conversation transcripts or verbose logs.
