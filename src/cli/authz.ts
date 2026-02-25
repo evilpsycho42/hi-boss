@@ -11,7 +11,7 @@ import {
 import { DEFAULT_AGENT_PERMISSION_LEVEL } from "../shared/defaults.js";
 
 export type Principal =
-  | { kind: "boss"; level: "boss" }
+  | { kind: "admin"; level: "admin" }
   | { kind: "agent"; level: PermissionLevel; agentName: string };
 
 export function authorizeCliOperation(operation: string, token: string): Principal {
@@ -22,13 +22,13 @@ export function authorizeCliOperation(operation: string, token: string): Princip
   try {
     if (!db.isSetupComplete()) {
       throw new Error(
-        "Setup not complete. Run `hiboss setup` (first-time) or `hiboss setup --config-file <path> --token <boss-token>`"
+        "Setup not complete. Run `hiboss setup` and ensure ~/hiboss/settings.json is valid."
       );
     }
 
     let principal: Principal | null = null;
-    if (db.verifyBossToken(token)) {
-      principal = { kind: "boss", level: "boss" };
+    if (db.verifyAdminToken(token)) {
+      principal = { kind: "admin", level: "admin" };
     } else {
       const agent = db.findAgentByToken(token);
       if (!agent) {

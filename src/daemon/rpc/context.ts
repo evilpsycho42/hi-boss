@@ -21,7 +21,7 @@ import type { DaemonConfig } from "../daemon.js";
  * Principal type representing the authenticated caller.
  */
 export type Principal =
-  | { kind: "boss"; level: "boss" }
+  | { kind: "admin"; level: "admin" }
   | { kind: "agent"; level: PermissionLevel; agent: Agent };
 
 /**

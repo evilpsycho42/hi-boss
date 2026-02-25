@@ -44,6 +44,8 @@ export const DEFAULT_AGENT_PERMISSION_LEVEL = "standard" as const;
 export const BACKGROUND_AGENT_NAME = "background" as const;
 export const DEFAULT_BACKGROUND_MAX_CONCURRENT = 4 as const;
 export const DEFAULT_ONESHOT_MAX_CONCURRENT = 4 as const;
+export const DEFAULT_SESSION_CONCURRENCY_PER_AGENT = 4 as const;
+export const DEFAULT_SESSION_CONCURRENCY_GLOBAL = 16 as const;
 
 // ==================== DB/Envelope Defaults ====================
 
@@ -100,21 +102,21 @@ export const DEFAULT_PERMISSION_POLICY: PermissionPolicyV1 = {
     "cron.delete": "restricted",
 
     // Daemon read-only
-    "daemon.status": "boss",
+    "daemon.status": "admin",
     "daemon.ping": "standard",
     "daemon.time": "restricted",
 
-    // Admin operations (boss-only by default; configurable via policy)
-    "daemon.start": "boss",
-    "daemon.stop": "boss",
-    "agent.register": "boss",
+    // Admin operations (admin-only by default; configurable via policy)
+    "daemon.start": "admin",
+    "daemon.stop": "admin",
+    "agent.register": "admin",
     "agent.list": "restricted",
     "agent.status": "restricted",
     "agent.bind": "privileged",
     "agent.unbind": "privileged",
-    "agent.refresh": "boss",
-    "agent.abort": "boss",
-    "agent.delete": "boss",
+    "agent.refresh": "admin",
+    "agent.abort": "admin",
+    "agent.delete": "admin",
     "agent.set": "privileged",
     "agent.session-policy.set": "privileged",
   },

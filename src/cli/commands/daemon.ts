@@ -9,6 +9,7 @@ import { resolveToken } from "../token.js";
 import { formatUnixMsAsTimeZoneOffset } from "../../shared/time.js";
 import { getDaemonTimeContext } from "../time-context.js";
 import { logEvent, errorMessage, setDaemonDebugEnabled } from "../../shared/daemon-log.js";
+import { runManagedDaemonAction } from "./managed-runtime.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -126,8 +127,6 @@ function readDaemonStartFailureMessage(logPath: string): string | null {
  * Start the daemon.
  */
 export async function startDaemon(options: StartDaemonOptions = {}): Promise<void> {
-  const config = getDefaultConfig();
-
   try {
     const token = resolveToken(options.token);
     authorizeCliOperation("daemon.start", token);
@@ -135,6 +134,23 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<voi
     console.error("error:", (err as Error).message);
     process.exit(1);
   }
+
+  try {
+    const managed = runManagedDaemonAction("start");
+    if (managed.handled) {
+      if (options.debug) {
+        console.error(
+          "warning: --debug is ignored when settings.runtime.deployment.mode is configured."
+        );
+      }
+      return;
+    }
+  } catch (err) {
+    console.error("error:", (err as Error).message);
+    process.exit(1);
+  }
+
+  const config = getDefaultConfig();
 
   // Ensure data directory exists
   if (!fs.existsSync(config.dataDir)) {
@@ -286,9 +302,6 @@ export async function startDaemonForeground(options: StartDaemonOptions = {}): P
  * Stop the daemon.
  */
 export async function stopDaemon(options: StopDaemonOptions = {}): Promise<void> {
-  const config = getDefaultConfig();
-  const pidPath = path.join(config.daemonDir, "daemon.pid");
-
   try {
     const token = resolveToken(options.token);
     authorizeCliOperation("daemon.stop", token);
@@ -296,6 +309,19 @@ export async function stopDaemon(options: StopDaemonOptions = {}): Promise<void>
     console.error("error:", (err as Error).message);
     process.exit(1);
   }
+
+  try {
+    const managed = runManagedDaemonAction("stop");
+    if (managed.handled) {
+      return;
+    }
+  } catch (err) {
+    console.error("error:", (err as Error).message);
+    process.exit(1);
+  }
+
+  const config = getDefaultConfig();
+  const pidPath = path.join(config.daemonDir, "daemon.pid");
 
   if (!fs.existsSync(pidPath)) {
     console.log("Daemon is not running");
@@ -338,8 +364,6 @@ export async function stopDaemon(options: StopDaemonOptions = {}): Promise<void>
  * Get daemon status.
  */
 export async function daemonStatus(options: DaemonStatusOptions = {}): Promise<void> {
-  const config = getDefaultConfig();
-
   let token: string;
   try {
     token = resolveToken(options.token);
@@ -348,6 +372,18 @@ export async function daemonStatus(options: DaemonStatusOptions = {}): Promise<v
     console.error("error:", (err as Error).message);
     process.exit(1);
   }
+
+  try {
+    const managed = runManagedDaemonAction("status");
+    if (managed.handled) {
+      return;
+    }
+  } catch (err) {
+    console.error("error:", (err as Error).message);
+    process.exit(1);
+  }
+
+  const config = getDefaultConfig();
 
   if (!(await isDaemonRunning(config))) {
     console.log("running: false");

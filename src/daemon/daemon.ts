@@ -2,6 +2,7 @@
  * Hi-Boss daemon - manages agents, messages, and platform integrations.
  */
 
+import * as fs from "node:fs";
 import * as path from "path";
 import { HiBossDatabase } from "./db/database.js";
 import { IpcServer } from "./ipc/server.js";
@@ -18,6 +19,7 @@ import type { RpcMethodRegistry } from "./ipc/types.js";
 import { RPC_ERRORS } from "./ipc/types.js";
 import type { ChatAdapter } from "../adapters/types.js";
 import { TelegramAdapter } from "../adapters/telegram.adapter.js";
+import { WeChatPadProAdapter } from "../adapters/wechatpadpro.adapter.js";
 import { BACKGROUND_AGENT_NAME, DEFAULT_AGENT_PERMISSION_LEVEL } from "../shared/defaults.js";
 import { getHiBossPaths } from "../shared/hiboss-paths.js";
 import {
@@ -51,6 +53,10 @@ import {
   hasSpeakerBindingIntegrityViolations,
   toSpeakerBindingIntegrityView,
 } from "../shared/speaker-binding-invariant.js";
+import { TelegramTypingManager } from "./telegram-typing.js";
+import { resolveUiLocale } from "../shared/ui-locale.js";
+import { getSettingsPath } from "../shared/settings-io.js";
+import { loadSettingsOrThrow, syncSettingsToDb } from "./settings-sync.js";
 
 // Re-export for CLI and external use
 export { isDaemonRunning, isSocketAcceptingConnections };
@@ -109,6 +115,7 @@ export class Daemon {
   private cronScheduler: CronScheduler | null = null;
   private conversationHistory: ConversationHistory;
   private adapters: Map<string, ChatAdapter> = new Map(); // token -> adapter
+  private telegramTypingManager: TelegramTypingManager;
   private running = false;
   private startTimeMs: number | null = null;
   private pidLock: PidLock;
@@ -132,12 +139,19 @@ export class Daemon {
       onEnvelopeDone: (envelope) => this.cronScheduler?.onEnvelopeDone(envelope),
     });
     this.bridge = new ChannelBridge(this.router, this.db, config);
+    this.telegramTypingManager = new TelegramTypingManager(this.db, this.adapters);
     this.executor = createAgentExecutor({
       db: this.db,
       hibossDir: config.dataDir,
       conversationHistory: this.conversationHistory,
       onEnvelopesDone: (envelopeIds) => {
         this.cronScheduler?.onEnvelopesDone(envelopeIds);
+      },
+      onRunStarted: ({ runId, agentName, envelopes }) => {
+        return this.telegramTypingManager.onRunStarted({ runId, agentName, envelopes });
+      },
+      onRunFinished: ({ runId }) => {
+        return this.telegramTypingManager.onRunFinished({ runId });
       },
     });
     this.backgroundExecutor = createBackgroundExecutor({ db: this.db, router: this.router });
@@ -165,8 +179,8 @@ export class Daemon {
   }
 
   private resolvePrincipal(token: string): Principal {
-    if (this.db.verifyBossToken(token)) {
-      return { kind: "boss", level: "boss" };
+    if (this.db.verifyAdminToken(token) || this.db.verifyLegacyBossToken(token)) {
+      return { kind: "admin", level: "admin" };
     }
 
     const agent = this.db.findAgentByToken(token);
@@ -233,9 +247,6 @@ export class Daemon {
       this.running = true;
       this.startTimeMs = Date.now();
 
-      // All displayed timestamps (including daemon logs) use the boss timezone.
-      setDaemonLogTimeZone(this.db.getBossTimezone());
-
       const daemonMode = (process.env.HIBOSS_DAEMON_MODE ?? "").trim().toLowerCase();
       const examplesMode = daemonMode === "examples";
       if (examplesMode) {
@@ -243,6 +254,31 @@ export class Daemon {
         logEvent("info", "daemon-started", { "data-dir": this.config.dataDir, "adapters-count": 0, mode: "examples" });
         return;
       }
+
+      // Canonical startup path: load settings.json and mirror into DB runtime cache.
+      // Compatibility path: pre-v3 installs may have DB state without settings.json.
+      const settingsPath = getSettingsPath(this.config.dataDir);
+      if (fs.existsSync(settingsPath)) {
+        const settings = loadSettingsOrThrow(this.config.dataDir);
+        syncSettingsToDb(this.db, settings);
+      } else if (!this.db.isSetupComplete()) {
+        throw new Error(
+          [
+            `Failed to load settings.json: Settings file not found: ${settingsPath}`,
+            "Run `hiboss setup` to generate settings, then restart the daemon.",
+          ].join("\n")
+        );
+      } else {
+        logEvent("warn", "daemon-settings-file-missing-legacy-cache", {
+          "settings-path": settingsPath,
+        });
+      }
+
+      this.conversationHistory.setTimezone(this.db.getBossTimezone());
+      this.executor.setConcurrencyLimits(this.db.getRuntimeSessionConcurrency());
+
+      // All displayed timestamps (including daemon logs) use the boss timezone.
+      setDaemonLogTimeZone(this.db.getBossTimezone());
 
       const roleBackfill = this.db.backfillLegacyAgentRolesFromBindings();
       if (roleBackfill.updated > 0) {
@@ -432,7 +468,10 @@ export class Daemon {
 
     switch (adapterType) {
       case "telegram":
-        adapter = new TelegramAdapter(adapterToken);
+        adapter = new TelegramAdapter(adapterToken, resolveUiLocale(this.db.getConfig("ui_locale")));
+        break;
+      case "wechatpadpro":
+        adapter = new WeChatPadProAdapter(adapterToken);
         break;
       default:
         logEvent("error", "adapter-unknown-type", { "adapter-type": adapterType });
