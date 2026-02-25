@@ -1,4 +1,5 @@
 import type { AgentRole } from "../../../shared/agent-role.js";
+import type { KnownAdapterType } from "../../../shared/adapter-types.js";
 
 export type SetupProvider = "claude" | "codex";
 export type SetupReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
@@ -24,7 +25,7 @@ export interface SetupAgentConfig {
 }
 
 export interface SetupBindingConfig {
-  adapterType: string;
+  adapterType: KnownAdapterType;
   adapterToken: string;
 }
 
@@ -37,7 +38,7 @@ export interface SetupConfig {
   speakerAgent: Omit<SetupAgentConfig, "role">;
   leaderAgent: Omit<SetupAgentConfig, "role">;
   adapter: {
-    adapterType: string;
+    adapterType: KnownAdapterType;
     adapterToken: string;
     adapterBossIds: string[];
   };

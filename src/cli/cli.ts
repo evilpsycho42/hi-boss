@@ -60,7 +60,7 @@ const daemon = program
 
 daemon
   .command("start")
-  .description("Start the daemon")
+  .description("Start daemon runtime (managed via deployment mode when configured)")
   .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .option("--debug", "Include debug fields in daemon.log")
   .action((options) => {
@@ -78,7 +78,7 @@ daemon
 
 daemon
   .command("stop")
-  .description("Stop the daemon")
+  .description("Stop daemon runtime (managed via deployment mode when configured)")
   .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .action((options) => {
     stopDaemon({ token: options.token });
@@ -86,7 +86,7 @@ daemon
 
 daemon
   .command("status")
-  .description("Show daemon status")
+  .description("Show daemon runtime status (managed via deployment mode when configured)")
   .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .action((options) => {
     daemonStatus({ token: options.token });

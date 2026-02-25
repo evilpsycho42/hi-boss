@@ -280,9 +280,10 @@ Note: `agent_runs` audit history is retained across normal configuration sync fr
 
 ### Cancellation
 
-An agent run can be cancelled by the boss (for example via Telegram `/abort` or `hiboss agent abort`).
+An agent run can be cancelled by the boss (for example via Telegram `/abort`, or CLI `hiboss agent abort`).
 
 Semantics:
+- `abort`: cancel current run and clear due pending non-cron inbox.
 - A cancelled run is terminal and is recorded as `status = cancelled`.
 - Already-read envelopes remain `done` (at-most-once); cancelled runs do not retry.
 

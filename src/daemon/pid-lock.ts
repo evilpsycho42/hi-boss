@@ -119,29 +119,26 @@ export async function isDaemonRunning(
   const pidPath = path.join(config.daemonDir, "daemon.pid");
   const socketPath = path.join(config.daemonDir, "daemon.sock");
 
-  // Prefer checking the socket directly; PID files can be stale or missing.
+  // Canonical check: socket liveness.
+  //
+  // We intentionally do NOT use PID existence as a fallback signal.
+  // In containerized runtimes (e.g. Docker on Windows), stale host PID values
+  // can alias live but unrelated process IDs inside a new container namespace,
+  // causing false "already running" detections and restart loops.
   if (await isSocketAcceptingConnections(socketPath)) {
     return true;
   }
 
-  if (!fs.existsSync(pidPath)) {
-    return false;
-  }
-
-  try {
-    const pid = parseInt(fs.readFileSync(pidPath, "utf-8"), 10);
-    // Check if process exists
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    // Process doesn't exist, clean up stale PID file
+  // Socket is not live, so any PID file is stale for runtime checks.
+  if (fs.existsSync(pidPath)) {
     try {
       fs.unlinkSync(pidPath);
     } catch {
       // ignore
     }
-    return false;
   }
+
+  return false;
 }
 
 /**

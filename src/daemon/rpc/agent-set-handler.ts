@@ -24,6 +24,7 @@ import {
 } from "../../shared/agent-role-mutation.js";
 import { mutateSettingsAndSync } from "../settings-sync.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
+import { isKnownAdapterType } from "../../shared/adapter-types.js";
 
 /**
  * Create agent.set RPC handler.
@@ -96,9 +97,16 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         }
       }
 
-      const bindAdapterType = wantsBind ? (p.bindAdapterType as string).trim() : undefined;
+      const bindAdapterType = wantsBind ? (p.bindAdapterType as string).trim().toLowerCase() : undefined;
       const bindAdapterToken = wantsBind ? (p.bindAdapterToken as string).trim() : undefined;
-      const unbindAdapterType = wantsUnbind ? (p.unbindAdapterType as string).trim() : undefined;
+      const unbindAdapterType = wantsUnbind ? (p.unbindAdapterType as string).trim().toLowerCase() : undefined;
+
+      if (bindAdapterType && !isKnownAdapterType(bindAdapterType)) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, `Unknown adapter type: ${bindAdapterType}`);
+      }
+      if (unbindAdapterType && !isKnownAdapterType(unbindAdapterType)) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, `Unknown adapter type: ${unbindAdapterType}`);
+      }
 
       const allAgents = ctx.db.listAgents();
       const allBindings = ctx.db.listBindings();

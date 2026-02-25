@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Session file cloning for one-shot /clone execution.
  *
  * Clones the current provider session file on disk so a one-shot run can
@@ -24,7 +24,7 @@ export interface ClonedSession {
 }
 
 function generateCloneId(): string {
-  return `oneshot-${crypto.randomUUID()}`;
+  return crypto.randomUUID();
 }
 
 /**
@@ -77,7 +77,7 @@ async function trimTruncatedLastLine(filePath: string): Promise<void> {
   try {
     JSON.parse(lastLine);
   } catch {
-    // Last line is truncated — remove it
+    // Last line is truncated 鈥?remove it
     lines.pop();
     logEvent("info", "oneshot-clone-trim-truncated", {
       "file-path": filePath,
@@ -178,3 +178,4 @@ export async function cleanupClonedSession(clone: ClonedSession): Promise<void> 
     });
   }
 }
+
