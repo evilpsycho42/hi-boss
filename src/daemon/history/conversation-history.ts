@@ -45,6 +45,10 @@ export class ConversationHistory {
     this.timezone = options.timezone ?? "UTC";
   }
 
+  setTimezone(timezone: string): void {
+    this.timezone = timezone;
+  }
+
   /**
    * Append an envelope to the relevant agent's session file.
    */

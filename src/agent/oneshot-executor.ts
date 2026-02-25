@@ -19,7 +19,7 @@ import { buildTurnInput } from "./turn-input.js";
 import { executeCliTurn } from "./executor-turn.js";
 import { readPersistedAgentSession } from "./persisted-session.js";
 import { cloneSessionFile, cleanupClonedSession, type ClonedSession } from "./session-clone.js";
-import { formatAgentAddress } from "../adapters/types.js";
+import { formatAgentAddress, parseAddress } from "../adapters/types.js";
 import {
   DEFAULT_AGENT_PROVIDER,
   DEFAULT_ONESHOT_MAX_CONCURRENT,
@@ -27,6 +27,8 @@ import {
 } from "../shared/defaults.js";
 import { errorMessage, logEvent } from "../shared/daemon-log.js";
 import { getHiBossDir } from "./home-setup.js";
+import { resolveUiLocale } from "../shared/ui-locale.js";
+import { getUiText } from "../shared/ui-text.js";
 
 interface OneShotJob {
   envelope: Envelope;
@@ -111,6 +113,7 @@ export class OneShotExecutor {
   private async runOne(job: OneShotJob): Promise<void> {
     const { envelope, agent, mode } = job;
     const startedAtMs = Date.now();
+    const ui = getUiText(resolveUiLocale(this.deps.db.getConfig("ui_locale")));
     let clone: ClonedSession | null = null;
     let effectiveMode = mode;
 
@@ -126,7 +129,7 @@ export class OneShotExecutor {
       // For clone mode: attempt to clone the session file.
       let cloneSessionId: string | undefined;
       if (mode === "clone") {
-        clone = await this.tryCloneSession(agent);
+        clone = await this.tryCloneSession(agent, envelope);
         if (clone) {
           cloneSessionId = clone.clonedSessionId;
         } else {
@@ -159,7 +162,7 @@ export class OneShotExecutor {
           agentName: agent.name,
         });
 
-        finalText = turn.finalText?.trim() ? turn.finalText.trim() : "(no response)";
+        finalText = turn.finalText?.trim() ? turn.finalText.trim() : ui.channel.emptyAssistantReply;
 
         logEvent("info", "oneshot-job-complete", {
           "envelope-id": envelope.id,
@@ -171,16 +174,60 @@ export class OneShotExecutor {
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
-        finalText = `One-shot (${effectiveMode}) execution failed. Check daemon logs for details.`;
 
-        logEvent("info", "oneshot-job-complete", {
-          "envelope-id": envelope.id,
-          "agent-name": agent.name,
-          mode: effectiveMode,
-          state: "failed",
-          "duration-ms": Date.now() - startedAtMs,
-          error: msg,
-        });
+        if (effectiveMode === "clone" && this.shouldFallbackToIsolatedOnCloneError(msg)) {
+          logEvent("warn", "oneshot-clone-runtime-fallback-isolated", {
+            "envelope-id": envelope.id,
+            "agent-name": agent.name,
+            error: msg,
+          });
+
+          try {
+            effectiveMode = "isolated";
+            const isolatedSession = this.buildEphemeralSession(agent);
+            const turn = await executeCliTurn(isolatedSession, turnInput, {
+              hibossDir: this.deps.hibossDir,
+              agentName: agent.name,
+            });
+
+            finalText = turn.finalText?.trim() ? turn.finalText.trim() : ui.channel.emptyAssistantReply;
+
+            logEvent("info", "oneshot-job-complete", {
+              "envelope-id": envelope.id,
+              "agent-name": agent.name,
+              mode: effectiveMode,
+              state: "success",
+              "duration-ms": Date.now() - startedAtMs,
+              "context-length": turn.usage.contextLength,
+              "fallback-from": "clone",
+            });
+          } catch (fallbackErr) {
+            const fallbackMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+            finalText = ui.channel.oneShotExecutionFailed(effectiveMode);
+
+            logEvent("info", "oneshot-job-complete", {
+              "envelope-id": envelope.id,
+              "agent-name": agent.name,
+              mode: effectiveMode,
+              state: "failed",
+              "duration-ms": Date.now() - startedAtMs,
+              error: fallbackMsg,
+              "fallback-from": "clone",
+              "original-error": msg,
+            });
+          }
+        } else {
+          finalText = ui.channel.oneShotExecutionFailed(effectiveMode);
+
+          logEvent("info", "oneshot-job-complete", {
+            "envelope-id": envelope.id,
+            "agent-name": agent.name,
+            mode: effectiveMode,
+            state: "failed",
+            "duration-ms": Date.now() - startedAtMs,
+            error: msg,
+          });
+        }
       }
 
       // NOTE: Do NOT persist session handle — one-shot sessions are ephemeral.
@@ -211,28 +258,80 @@ export class OneShotExecutor {
     }
   }
 
+  private shouldFallbackToIsolatedOnCloneError(message: string): boolean {
+    const lower = message.toLowerCase();
+    return (
+      lower.includes("requires a valid session id") ||
+      lower.includes("no conversation found with session id") ||
+      lower.includes("invalid session id")
+    );
+  }
+
   /**
    * Attempt to clone the current session for an agent.
    *
    * Returns the cloned session info, or null if no session exists to clone.
    */
-  private async tryCloneSession(agent: Agent): Promise<ClonedSession | null> {
-    const agentRecord = this.deps.db.getAgentByName(agent.name);
-    if (!agentRecord) return null;
-
-    const persisted = readPersistedAgentSession(agentRecord);
-    if (!persisted?.handle.sessionId) return null;
-
-    const provider = persisted.provider;
-    const sessionId = persisted.handle.sessionId;
+  private resolveCloneSource(agent: Agent, envelope: Envelope): { provider: "claude" | "codex"; sessionId: string } | null {
+    const md = (envelope.metadata ?? {}) as Record<string, unknown>;
+    const sourceSessionId = typeof md.oneshotSourceSessionId === "string" ? md.oneshotSourceSessionId.trim() : "";
+    if (sourceSessionId) {
+      const sourceSession = this.deps.db.getAgentSessionById(sourceSessionId);
+      if (
+        sourceSession &&
+        sourceSession.agentName === agent.name &&
+        sourceSession.providerSessionId
+      ) {
+        return {
+          provider: sourceSession.provider,
+          sessionId: sourceSession.providerSessionId,
+        };
+      }
+    }
 
     try {
-      return await cloneSessionFile({ provider, sessionId });
+      const from = parseAddress(envelope.from);
+      if (from.type === "channel") {
+        const activeBinding = this.deps.db.getChannelSessionBinding(agent.name, from.adapter, from.chatId);
+        if (activeBinding) {
+          const activeSession = this.deps.db.getAgentSessionById(activeBinding.activeSessionId);
+          if (
+            activeSession &&
+            activeSession.agentName === agent.name &&
+            activeSession.providerSessionId
+          ) {
+            return {
+              provider: activeSession.provider,
+              sessionId: activeSession.providerSessionId,
+            };
+          }
+        }
+      }
+    } catch {
+      // Best-effort fallback to persisted default session handle.
+    }
+
+    const agentRecord = this.deps.db.getAgentByName(agent.name);
+    if (!agentRecord) return null;
+    const persisted = readPersistedAgentSession(agentRecord);
+    if (!persisted?.handle.sessionId) return null;
+    return {
+      provider: persisted.provider,
+      sessionId: persisted.handle.sessionId,
+    };
+  }
+
+  private async tryCloneSession(agent: Agent, envelope: Envelope): Promise<ClonedSession | null> {
+    const source = this.resolveCloneSource(agent, envelope);
+    if (!source) return null;
+
+    try {
+      return await cloneSessionFile({ provider: source.provider, sessionId: source.sessionId });
     } catch (err) {
       logEvent("warn", "oneshot-clone-failed", {
         "agent-name": agent.name,
-        provider,
-        "session-id": sessionId,
+        provider: source.provider,
+        "session-id": source.sessionId,
         error: errorMessage(err),
       });
       return null;

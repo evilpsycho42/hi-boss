@@ -4,13 +4,22 @@
 import type { ChildProcess } from "node:child_process";
 import type { Agent } from "./types.js";
 import type { HiBossDatabase } from "../daemon/db/database.js";
+import type { Envelope } from "../envelope/types.js";
+import { parseAddress } from "../adapters/types.js";
 import { getHiBossDir } from "./home-setup.js";
 import { buildTurnInput } from "./turn-input.js";
 import {
   parseSessionPolicyConfig,
 } from "../shared/session-policy.js";
+import { AsyncSemaphore } from "../shared/async-semaphore.js";
+import {
+  DEFAULT_AGENT_PROVIDER,
+  DEFAULT_SESSION_CONCURRENCY_GLOBAL,
+  DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
+} from "../shared/defaults.js";
 import { errorMessage, logEvent } from "../shared/daemon-log.js";
 import {
+  getRefreshReasonForPolicy,
   queueAgentTask,
   type AgentSession,
   type SessionRefreshRequest,
@@ -23,7 +32,6 @@ import { executeCliTurn } from "./executor-turn.js";
 import { getOrCreateAgentSession } from "./executor-session.js";
 import type { ConversationHistory } from "../daemon/history/conversation-history.js";
 import {
-  summarizeAndCloseSession,
   summarizeAndCloseSessionByPath,
   summarizeAllActiveSessions,
 } from "../daemon/history/session-summary.js";
@@ -40,18 +48,60 @@ type InFlightAgentRun = {
   abortReason?: string;
 };
 
+type RunCompletionState = "success" | "failed" | "cancelled";
+
+type SessionExecutionScope =
+  | {
+      kind: "default";
+      cacheKey: string;
+    }
+  | {
+      kind: "channel";
+      cacheKey: string;
+      agentSessionId: string;
+      adapterType: string;
+      chatId: string;
+      ownerUserId?: string;
+    };
+
+type AgentRunStartedHook = (params: {
+  agentName: string;
+  runId: string;
+  envelopes: Envelope[];
+  db: HiBossDatabase;
+}) => void | Promise<void>;
+
+type AgentRunFinishedHook = (params: {
+  agentName: string;
+  runId: string;
+  envelopes: Envelope[];
+  db: HiBossDatabase;
+  state: RunCompletionState;
+  error?: string;
+}) => void | Promise<void>;
+
 /**
  * Agent executor manages agent sessions and runs.
  */
 export class AgentExecutor {
-  private sessions: Map<string, AgentSession> = new Map();
-  private agentLocks: Map<string, Promise<void>> = new Map();
-  private inFlightRuns: Map<string, InFlightAgentRun> = new Map();
+  private sessions: Map<string, AgentSession> = new Map(); // default:<agent>
+  private channelSessions: Map<string, AgentSession> = new Map(); // channel-session:<agent>:<session-id>
+  private agentDispatchLocks: Map<string, Promise<void>> = new Map();
+  private sessionLocks: Map<string, Promise<void>> = new Map();
+  private inFlightRuns: Map<string, Set<InFlightAgentRun>> = new Map();
+  private agentQueuedTaskCount: Map<string, number> = new Map();
+  private globalRunSemaphore: AsyncSemaphore = new AsyncSemaphore(DEFAULT_SESSION_CONCURRENCY_GLOBAL);
+  private perAgentRunSemaphores: Map<string, AsyncSemaphore> = new Map();
+  private abortGenerationByAgent: Map<string, number> = new Map();
+  private concurrencyPerAgent: number = DEFAULT_SESSION_CONCURRENCY_PER_AGENT;
+  private concurrencyGlobal: number = DEFAULT_SESSION_CONCURRENCY_GLOBAL;
   private pendingSessionRefresh: Map<string, SessionRefreshRequest> = new Map();
   private db: HiBossDatabase | null;
   private hibossDir: string;
   private conversationHistory: ConversationHistory | null;
   private onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
+  private onRunStarted?: AgentRunStartedHook;
+  private onRunFinished?: AgentRunFinishedHook;
 
   constructor(
     options: {
@@ -59,43 +109,140 @@ export class AgentExecutor {
       hibossDir?: string;
       conversationHistory?: ConversationHistory;
       onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
+      onRunStarted?: AgentRunStartedHook;
+      onRunFinished?: AgentRunFinishedHook;
+      sessionConcurrencyPerAgent?: number;
+      sessionConcurrencyGlobal?: number;
     } = {}
   ) {
     this.db = options.db ?? null;
     this.hibossDir = options.hibossDir ?? getHiBossDir();
     this.conversationHistory = options.conversationHistory ?? null;
     this.onEnvelopesDone = options.onEnvelopesDone;
+    this.onRunStarted = options.onRunStarted;
+    this.onRunFinished = options.onRunFinished;
+    this.setConcurrencyLimits({
+      perAgent: options.sessionConcurrencyPerAgent ?? DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
+      global: options.sessionConcurrencyGlobal ?? DEFAULT_SESSION_CONCURRENCY_GLOBAL,
+    });
+  }
+
+  setConcurrencyLimits(input: { perAgent: number; global: number }): void {
+    const perAgent = Math.max(1, Math.min(64, Math.trunc(input.perAgent)));
+    const global = Math.max(perAgent, Math.min(256, Math.trunc(input.global)));
+    this.concurrencyPerAgent = perAgent;
+    this.concurrencyGlobal = global;
+    this.globalRunSemaphore.setCapacity(global);
+    for (const semaphore of this.perAgentRunSemaphores.values()) {
+      semaphore.setCapacity(perAgent);
+    }
+  }
+
+  private getAgentSemaphore(agentName: string): AsyncSemaphore {
+    const existing = this.perAgentRunSemaphores.get(agentName);
+    if (existing) return existing;
+    const semaphore = new AsyncSemaphore(this.concurrencyPerAgent);
+    this.perAgentRunSemaphores.set(agentName, semaphore);
+    return semaphore;
+  }
+
+  private incrementAgentTaskCount(agentName: string): void {
+    const n = this.agentQueuedTaskCount.get(agentName) ?? 0;
+    this.agentQueuedTaskCount.set(agentName, n + 1);
+  }
+
+  private decrementAgentTaskCount(agentName: string): void {
+    const n = this.agentQueuedTaskCount.get(agentName) ?? 0;
+    if (n <= 1) {
+      this.agentQueuedTaskCount.delete(agentName);
+      return;
+    }
+    this.agentQueuedTaskCount.set(agentName, n - 1);
+  }
+
+  private getAbortGeneration(agentName: string): number {
+    return this.abortGenerationByAgent.get(agentName) ?? 0;
+  }
+
+  private bumpAbortGeneration(agentName: string): number {
+    const next = this.getAbortGeneration(agentName) + 1;
+    this.abortGenerationByAgent.set(agentName, next);
+    return next;
+  }
+
+  private isAbortGenerationCurrent(agentName: string, expected: number): boolean {
+    return this.getAbortGeneration(agentName) === expected;
+  }
+
+  private buildDefaultSessionKey(agentName: string): string {
+    return `default:${agentName}`;
+  }
+
+  private buildChannelSessionKey(agentName: string, sessionId: string): string {
+    return `channel-session:${agentName}:${sessionId}`;
+  }
+
+  invalidateChannelSessionCache(agentName: string, adapterType: string, chatId: string): void {
+    void adapterType;
+    void chatId;
+    for (const key of [...this.channelSessions.keys()]) {
+      if (key.startsWith(`channel-session:${agentName}:`)) {
+        this.channelSessions.delete(key);
+      }
+    }
   }
 
   /**
    * True if the daemon currently has a queued or in-flight task for this agent.
    */
   isAgentBusy(agentName: string): boolean {
-    return this.agentLocks.has(agentName);
+    if (this.agentDispatchLocks.has(agentName)) return true;
+    if ((this.agentQueuedTaskCount.get(agentName) ?? 0) > 0) return true;
+    const inFlight = this.inFlightRuns.get(agentName);
+    return Boolean(inFlight && inFlight.size > 0);
   }
 
   /**
-   * Cancel the current in-flight run for an agent (best-effort).
+   * Abort the current in-flight run and invalidate queued tasks for an agent (best-effort).
    */
   abortCurrentRun(agentName: string, reason: string): boolean {
-    const inFlight = this.inFlightRuns.get(agentName);
-    if (!inFlight) return false;
+    return this.cancelInFlightRuns(agentName, reason, { bumpGeneration: true, includeQueuedTasks: true });
+  }
 
-    if (!inFlight.abortReason) {
-      inFlight.abortReason = reason;
+  private cancelInFlightRuns(
+    agentName: string,
+    reason: string,
+    options: { bumpGeneration: boolean; includeQueuedTasks: boolean }
+  ): boolean {
+    if (options.bumpGeneration) {
+      this.bumpAbortGeneration(agentName);
+    }
+    const set = this.inFlightRuns.get(agentName);
+    const hadQueuedTasks = (this.agentQueuedTaskCount.get(agentName) ?? 0) > 0;
+    if (!set || set.size === 0) {
+      return options.includeQueuedTasks ? hadQueuedTasks : false;
     }
 
-    inFlight.abortController.abort();
+    for (const inFlight of set) {
+      if (!inFlight.abortReason) {
+        inFlight.abortReason = reason;
+      }
+      inFlight.abortController.abort();
 
-    if (inFlight.childProcess) {
-      try {
-        if (inFlight.childProcess.pid) {
-          process.kill(-inFlight.childProcess.pid, "SIGTERM");
-        } else {
-          inFlight.childProcess.kill("SIGTERM");
+      if (inFlight.childProcess) {
+        try {
+          if (inFlight.childProcess.pid) {
+            process.kill(-inFlight.childProcess.pid, "SIGTERM");
+          } else {
+            inFlight.childProcess.kill("SIGTERM");
+          }
+        } catch {
+          try {
+            inFlight.childProcess.kill("SIGTERM");
+          } catch {
+            // best-effort
+          }
         }
-      } catch {
-        try { inFlight.childProcess.kill("SIGTERM"); } catch { /* best-effort */ }
       }
     }
 
@@ -117,7 +264,7 @@ export class AgentExecutor {
     }
 
     queueAgentTask({
-      agentLocks: this.agentLocks,
+      agentLocks: this.agentDispatchLocks,
       agentName,
       log: () => undefined,
       task: async () => {
@@ -150,121 +297,267 @@ export class AgentExecutor {
   }
 
   /**
-   * Check and run agent if pending envelopes exist.
+   * Check and dispatch pending envelopes for session-scoped execution.
    */
   async checkAndRun(agent: Agent, db: HiBossDatabase, trigger?: AgentRunTrigger): Promise<void> {
-    const agentName = agent.name;
-
     await queueAgentTask({
-      agentLocks: this.agentLocks,
-      agentName,
+      agentLocks: this.agentDispatchLocks,
+      agentName: agent.name,
       log: () => undefined,
       task: async () => {
-        const acknowledged = await this.runAgent(agent, db, trigger);
-
-        // Self-reschedule if more pending work exists
-        if (acknowledged > 0) {
-          const pending = db.getPendingEnvelopesForAgent(agent.name, 1);
-          if (pending.length > 0) {
-            setImmediate(() => {
-              this.checkAndRun(agent, db, { kind: "reschedule" }).catch((err) => {
-                logEvent("error", "agent-check-and-run-failed", {
-                  "agent-name": agent.name,
-                  ...getTriggerFields({ kind: "reschedule" }),
-                  error: errorMessage(err),
-                });
-              });
-            });
-          }
-        }
+        await this.dispatchPendingEnvelopes(agent, db, trigger);
       },
     });
   }
 
-  /**
-   * Run the agent with pending envelopes.
-   */
-  private async runAgent(agent: Agent, db: HiBossDatabase, trigger?: AgentRunTrigger): Promise<number> {
-    // Get pending envelopes
-    const envelopes = db.getPendingEnvelopesForAgent(
-      agent.name,
-      MAX_ENVELOPES_PER_TURN
-    );
+  private async dispatchPendingEnvelopes(agent: Agent, db: HiBossDatabase, trigger?: AgentRunTrigger): Promise<void> {
+    const DISPATCH_LIMIT = Math.max(MAX_ENVELOPES_PER_TURN, 50);
+    const pendingRefreshReasons = await this.applyPendingSessionRefresh(agent.name);
 
-    if (envelopes.length === 0) {
-      return 0;
-    }
+    while (true) {
+      const envelopes = db.getPendingEnvelopesForAgent(agent.name, DISPATCH_LIMIT);
+      if (envelopes.length === 0) return;
 
-    // Mark envelopes done immediately after read (at-most-once).
-    const envelopeIds = envelopes.map((e) => e.id);
-    db.markEnvelopesDone(envelopeIds);
+      const envelopeIds = envelopes.map((item) => item.id);
+      db.markEnvelopesDone(envelopeIds);
+      if (this.onEnvelopesDone) {
+        try {
+          await this.onEnvelopesDone(envelopeIds, db);
+        } catch (err) {
+          logEvent("error", "agent-on-envelopes-done-failed", {
+            "agent-name": agent.name,
+            error: errorMessage(err),
+          });
+        }
+      }
 
-    if (this.onEnvelopesDone) {
-      try {
-        await this.onEnvelopesDone(envelopeIds, db);
-      } catch (err) {
-        logEvent("error", "agent-on-envelopes-done-failed", {
-          "agent-name": agent.name,
-          error: errorMessage(err),
-        });
+      const grouped = new Map<string, { scope: SessionExecutionScope; envelopes: Envelope[] }>();
+      for (const env of envelopes) {
+        const scope = this.resolveExecutionScope(agent, db, env);
+        const existing = grouped.get(scope.cacheKey);
+        if (existing) {
+          existing.envelopes.push(env);
+        } else {
+          grouped.set(scope.cacheKey, { scope, envelopes: [env] });
+        }
+      }
+
+      for (const { scope, envelopes: group } of grouped.values()) {
+        for (let i = 0; i < group.length; i += MAX_ENVELOPES_PER_TURN) {
+          this.queueSessionExecution({
+            agent,
+            db,
+            scope,
+            envelopes: group.slice(i, i + MAX_ENVELOPES_PER_TURN),
+            trigger,
+            refreshReasons: pendingRefreshReasons,
+          });
+        }
+      }
+
+      if (envelopes.length < DISPATCH_LIMIT) {
+        return;
       }
     }
+  }
 
-    const pendingRemainingCount = countDuePendingEnvelopesForAgent(db, agent.name);
+  private resolveExecutionScope(agent: Agent, db: HiBossDatabase, envelope: Envelope): SessionExecutionScope {
+    const parsedFrom = (() => {
+      try {
+        return parseAddress(envelope.from);
+      } catch {
+        return null;
+      }
+    })();
 
-    // Create run record for auditing
-    const run = db.createAgentRun(agent.name, envelopeIds);
-    const triggerFields = getTriggerFields(trigger);
+    if (parsedFrom && parsedFrom.type === "channel") {
+      const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
+      const md = envelope.metadata as Record<string, unknown> | undefined;
+      const authorRaw = md && typeof md.author === "object" && md.author ? md.author as Record<string, unknown> : undefined;
+      const ownerUserId = envelope.fromBoss && typeof authorRaw?.id === "string" && authorRaw.id.trim()
+        ? authorRaw.id.trim()
+        : undefined;
+      const pinnedSessionId = typeof md?.channelSessionId === "string" && md.channelSessionId.trim().length > 0
+        ? md.channelSessionId.trim()
+        : undefined;
+
+      if (pinnedSessionId) {
+        const pinnedSession = db.getAgentSessionById(pinnedSessionId);
+        if (pinnedSession && pinnedSession.agentName === agent.name) {
+          return {
+            kind: "channel",
+            cacheKey: this.buildChannelSessionKey(agent.name, pinnedSession.id),
+            agentSessionId: pinnedSession.id,
+            adapterType: parsedFrom.adapter,
+            chatId: parsedFrom.chatId,
+            ownerUserId,
+          };
+        }
+      }
+
+      const active = db.getOrCreateChannelActiveSession({
+        agentName: agent.name,
+        adapterType: parsedFrom.adapter,
+        chatId: parsedFrom.chatId,
+        ownerUserId,
+        provider,
+      });
+
+      return {
+        kind: "channel",
+        cacheKey: this.buildChannelSessionKey(agent.name, active.session.id),
+        agentSessionId: active.session.id,
+        adapterType: parsedFrom.adapter,
+        chatId: parsedFrom.chatId,
+        ownerUserId,
+      };
+    }
+
+    return {
+      kind: "default",
+      cacheKey: this.buildDefaultSessionKey(agent.name),
+    };
+  }
+
+  private queueSessionExecution(params: {
+    agent: Agent;
+    db: HiBossDatabase;
+    scope: SessionExecutionScope;
+    envelopes: Envelope[];
+    trigger?: AgentRunTrigger;
+    refreshReasons: string[];
+  }): void {
+    const existingTail = this.sessionLocks.get(params.scope.cacheKey);
+    const previous = (existingTail ?? Promise.resolve()).catch(() => undefined);
+    const expectedAbortGeneration = this.getAbortGeneration(params.agent.name);
+    this.incrementAgentTaskCount(params.agent.name);
+
+    const current = previous
+      .then(async () => {
+        if (!this.isAbortGenerationCurrent(params.agent.name, expectedAbortGeneration)) {
+          return;
+        }
+        const releaseGlobal = await this.globalRunSemaphore.acquire();
+        const releaseAgent = await this.getAgentSemaphore(params.agent.name).acquire();
+        try {
+          if (!this.isAbortGenerationCurrent(params.agent.name, expectedAbortGeneration)) {
+            return;
+          }
+          await this.runSessionExecution({
+            ...params,
+            abortGeneration: expectedAbortGeneration,
+          });
+        } finally {
+          releaseAgent();
+          releaseGlobal();
+        }
+      })
+      .finally(() => {
+        if (this.sessionLocks.get(params.scope.cacheKey) === current) {
+          this.sessionLocks.delete(params.scope.cacheKey);
+        }
+        this.decrementAgentTaskCount(params.agent.name);
+      });
+
+    this.sessionLocks.set(params.scope.cacheKey, current);
+  }
+
+  private async runSessionExecution(params: {
+    agent: Agent;
+    db: HiBossDatabase;
+    scope: SessionExecutionScope;
+    envelopes: Envelope[];
+    trigger?: AgentRunTrigger;
+    refreshReasons: string[];
+    abortGeneration: number;
+  }): Promise<void> {
+    const envelopeIds = params.envelopes.map((e) => e.id);
+    const pendingRemainingCount = countDuePendingEnvelopesForAgent(params.db, params.agent.name);
+    const triggerFields = getTriggerFields(params.trigger);
+    if (!this.isAbortGenerationCurrent(params.agent.name, params.abortGeneration)) {
+      logEvent("info", "agent-run-skip-aborted", {
+        "agent-name": params.agent.name,
+        "envelopes-read-count": envelopeIds.length,
+        "session-scope": params.scope.kind,
+        "session-key": params.scope.cacheKey,
+      });
+      return;
+    }
+
+    const run = params.db.createAgentRun(params.agent.name, envelopeIds);
     let runStartedAtMs: number | null = null;
+    let runLifecycleStarted = false;
+    let completionState: RunCompletionState | null = null;
+    let completionError: string | undefined;
 
     const inFlight: InFlightAgentRun = {
       runRecordId: run.id,
       abortController: new AbortController(),
       childProcess: null,
     };
-    this.inFlightRuns.set(agent.name, inFlight);
+    const inFlightSet = this.inFlightRuns.get(params.agent.name) ?? new Set<InFlightAgentRun>();
+    inFlightSet.add(inFlight);
+    this.inFlightRuns.set(params.agent.name, inFlightSet);
 
     try {
       if (inFlight.abortController.signal.aborted) {
         const reason = inFlight.abortReason ?? "abort-requested";
-        db.cancelAgentRun(run.id, reason);
+        params.db.cancelAgentRun(run.id, reason);
         logEvent("info", "agent-run-complete", {
-          "agent-name": agent.name,
+          "agent-name": params.agent.name,
           "agent-run-id": run.id,
           state: "cancelled",
           "duration-ms": 0,
           "context-length": null,
           reason,
         });
-        return envelopeIds.length;
+        return;
       }
 
-      // Get or create session
-      const session = await this.getOrCreateSession(agent, db, trigger);
+      const session = await this.getOrCreateScopedSession(params.agent, params.db, params.scope, params.trigger);
 
-      // Build turn input
       const turnInput = buildTurnInput({
         context: {
           datetimeMs: Date.now(),
-          agentName: agent.name,
-          bossTimezone: db.getBossTimezone(),
+          agentName: params.agent.name,
+          bossTimezone: params.db.getBossTimezone(),
         },
-        envelopes,
+        envelopes: params.envelopes,
       });
 
       logEvent("info", "agent-run-start", {
-        "agent-name": agent.name,
+        "agent-name": params.agent.name,
         "agent-run-id": run.id,
         "envelopes-read-count": envelopeIds.length,
         "pending-remaining-count": pendingRemainingCount,
         ...triggerFields,
+        "session-scope": params.scope.kind,
+        "session-key": params.scope.cacheKey,
+        "refresh-reasons": params.refreshReasons.length > 0 ? params.refreshReasons.join(",") : undefined,
       });
       runStartedAtMs = Date.now();
+      runLifecycleStarted = true;
 
-      // Execute the turn via CLI
+      if (this.onRunStarted) {
+        try {
+          await this.onRunStarted({
+            agentName: params.agent.name,
+            runId: run.id,
+            envelopes: params.envelopes,
+            db: params.db,
+          });
+        } catch (err) {
+          logEvent("warn", "agent-run-start-hook-failed", {
+            "agent-name": params.agent.name,
+            "agent-run-id": run.id,
+            error: errorMessage(err),
+          });
+        }
+      }
+
       const turn = await executeCliTurn(session, turnInput, {
         hibossDir: this.hibossDir,
-        agentName: agent.name,
+        agentName: params.agent.name,
         signal: inFlight.abortController.signal,
         onChildProcess: (proc) => {
           inFlight.childProcess = proc;
@@ -273,56 +566,77 @@ export class AgentExecutor {
 
       if (turn.status === "cancelled") {
         const reason = inFlight.abortReason ?? "run-cancelled";
-        db.cancelAgentRun(run.id, reason);
+        params.db.cancelAgentRun(run.id, reason);
         logEvent("info", "agent-run-complete", {
-          "agent-name": agent.name,
+          "agent-name": params.agent.name,
           "agent-run-id": run.id,
           state: "cancelled",
           "duration-ms": runStartedAtMs ? Date.now() - runStartedAtMs : 0,
           "context-length": null,
           reason,
         });
-        return envelopeIds.length;
+        completionState = "cancelled";
+        completionError = reason;
+        return;
       }
 
       const response = turn.finalText;
       session.lastRunCompletedAtMs = Date.now();
 
-      // Update session ID from CLI output (for resume on next turn).
       if (turn.sessionId) {
         session.sessionId = turn.sessionId;
       }
 
-      // Persist session handle for best-effort resume after daemon restart.
-      if (session.sessionId) {
-        try {
-          writePersistedAgentSession(db, agent.name, {
-            version: 1,
-            provider: session.provider,
-            handle: {
+      if (params.scope.kind === "default") {
+        if (session.sessionId) {
+          try {
+            writePersistedAgentSession(params.db, params.agent.name, {
+              version: 1,
               provider: session.provider,
-              sessionId: session.sessionId,
-              ...(session.provider === "codex" && session.codexCumulativeUsageTotals
-                ? { metadata: { codexCumulativeUsage: session.codexCumulativeUsageTotals } }
-                : {}),
-            },
-            createdAtMs: session.createdAtMs,
-            lastRunCompletedAtMs: session.lastRunCompletedAtMs,
-            updatedAtMs: Date.now(),
+              handle: {
+                provider: session.provider,
+                sessionId: session.sessionId,
+                ...(session.provider === "codex" && session.codexCumulativeUsageTotals
+                  ? { metadata: { codexCumulativeUsage: session.codexCumulativeUsageTotals } }
+                  : {}),
+              },
+              createdAtMs: session.createdAtMs,
+              lastRunCompletedAtMs: session.lastRunCompletedAtMs,
+              updatedAtMs: Date.now(),
+            });
+          } catch (err) {
+            logEvent("warn", "agent-session-snapshot-failed", {
+              "agent-name": params.agent.name,
+              error: errorMessage(err),
+            });
+          }
+        }
+      } else {
+        try {
+          params.db.updateAgentSessionProviderSessionId(
+            params.scope.agentSessionId,
+            session.sessionId ?? null,
+            { provider: session.provider }
+          );
+          params.db.touchAgentSession(params.scope.agentSessionId, {
+            lastActiveAt: Date.now(),
+            adapterType: params.scope.adapterType,
+            chatId: params.scope.chatId,
           });
         } catch (err) {
-          logEvent("warn", "agent-session-snapshot-failed", {
-            "agent-name": agent.name,
+          logEvent("warn", "agent-session-channel-persist-failed", {
+            "agent-name": params.agent.name,
+            "agent-session-id": params.scope.agentSessionId,
+            provider: session.provider,
             error: errorMessage(err),
           });
         }
       }
 
-      // Complete the run record
-      db.completeAgentRun(run.id, response, turn.usage.contextLength);
+      params.db.completeAgentRun(run.id, response, turn.usage.contextLength);
 
       logEvent("info", "agent-run-complete", {
-        "agent-name": agent.name,
+        "agent-name": params.agent.name,
         "agent-run-id": run.id,
         state: "success",
         "duration-ms": runStartedAtMs ? Date.now() - runStartedAtMs : 0,
@@ -334,43 +648,81 @@ export class AgentExecutor {
         "total-tokens": turn.usage.totalTokens,
       });
 
-      // Context-length refresh: if a run grew the context too large, reset the session for the next run.
-      const policy = this.getSessionPolicy(agent);
+      const policy = this.getSessionPolicy(params.agent);
       if (
         typeof policy.maxContextLength === "number" &&
         turn.usage.contextLength !== null &&
         turn.usage.contextLength > policy.maxContextLength
       ) {
-        await this.refreshSession(
-          agent.name,
-          `max-context-length:${turn.usage.contextLength}>${policy.maxContextLength}`
-        );
+        if (params.scope.kind === "default") {
+          await this.refreshSession(
+            params.agent.name,
+            `max-context-length:${turn.usage.contextLength}>${policy.maxContextLength}`
+          );
+        } else {
+          this.channelSessions.delete(params.scope.cacheKey);
+          params.db.updateAgentSessionProviderSessionId(params.scope.agentSessionId, null, {
+            provider: session.provider,
+          });
+        }
       }
-      return envelopeIds.length;
+      completionState = "success";
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
-      db.failAgentRun(run.id, errMsg);
+      params.db.failAgentRun(run.id, errMsg);
       logEvent("info", "agent-run-complete", {
-        "agent-name": agent.name,
+        "agent-name": params.agent.name,
         "agent-run-id": run.id,
         state: "failed",
         "duration-ms": runStartedAtMs ? Date.now() - runStartedAtMs : 0,
         "context-length": null,
         error: errMsg,
       });
-      throw error;
+      completionState = "failed";
+      completionError = errMsg;
     } finally {
-      const existing = this.inFlightRuns.get(agent.name);
-      if (existing && existing.runRecordId === run.id) {
-        this.inFlightRuns.delete(agent.name);
+      const set = this.inFlightRuns.get(params.agent.name);
+      if (set) {
+        set.delete(inFlight);
+        if (set.size === 0) {
+          this.inFlightRuns.delete(params.agent.name);
+        }
+      }
+
+      if (runLifecycleStarted && completionState && this.onRunFinished) {
+        try {
+          await this.onRunFinished({
+            agentName: params.agent.name,
+            runId: run.id,
+            envelopes: params.envelopes,
+            db: params.db,
+            state: completionState,
+            ...(completionError ? { error: completionError } : {}),
+          });
+        } catch (err) {
+          logEvent("warn", "agent-run-finish-hook-failed", {
+            "agent-name": params.agent.name,
+            "agent-run-id": run.id,
+            error: errorMessage(err),
+          });
+        }
       }
     }
   }
 
-  /**
-   * Get or create a session for an agent.
-   */
-  private async getOrCreateSession(
+  private async getOrCreateScopedSession(
+    agent: Agent,
+    db: HiBossDatabase,
+    scope: SessionExecutionScope,
+    trigger?: AgentRunTrigger
+  ): Promise<AgentSession> {
+    if (scope.kind === "default") {
+      return this.getOrCreateDefaultSession(agent, db, trigger);
+    }
+    return this.getOrCreateChannelSession(agent, db, scope);
+  }
+
+  private async getOrCreateDefaultSession(
     agent: Agent,
     db: HiBossDatabase,
     trigger?: AgentRunTrigger
@@ -380,15 +732,48 @@ export class AgentExecutor {
       db,
       hibossDir: this.hibossDir,
       sessions: this.sessions,
-      applyPendingSessionRefresh: (name) => this.applyPendingSessionRefresh(name),
+      applyPendingSessionRefresh: async () => [],
       refreshSession: (name, reason) => this.refreshSession(name, reason),
       getSessionPolicy: (a) => this.getSessionPolicy(a),
       trigger,
     });
-
-    // Ensure ConversationHistory tracks a session (recover from disk or create new).
     this.conversationHistory?.ensureActiveSession(agent.name);
+    return session;
+  }
 
+  private async getOrCreateChannelSession(
+    agent: Agent,
+    db: HiBossDatabase,
+    scope: Extract<SessionExecutionScope, { kind: "channel" }>
+  ): Promise<AgentSession> {
+    const cached = this.channelSessions.get(scope.cacheKey);
+    const policy = this.getSessionPolicy(agent);
+    if (cached) {
+      const reason = getRefreshReasonForPolicy(cached, policy, new Date());
+      if (!reason) return cached;
+      this.channelSessions.delete(scope.cacheKey);
+      db.updateAgentSessionProviderSessionId(scope.agentSessionId, null, {
+        provider: cached.provider,
+      });
+    }
+
+    const persistedRow = db.getAgentSessionById(scope.agentSessionId);
+    const provider = persistedRow?.provider ?? (agent.provider ?? DEFAULT_AGENT_PROVIDER);
+
+    const baseSession = await this.getOrCreateDefaultSession(agent, db);
+    const session: AgentSession = {
+      provider,
+      agentToken: baseSession.agentToken,
+      systemInstructions: baseSession.systemInstructions,
+      workspace: agent.workspace ?? baseSession.workspace,
+      model: agent.model,
+      reasoningEffort: agent.reasoningEffort,
+      sessionId: persistedRow?.providerSessionId ?? undefined,
+      createdAtMs: persistedRow?.createdAt ?? Date.now(),
+      ...(persistedRow ? { lastRunCompletedAtMs: persistedRow.lastActiveAt } : {}),
+    };
+    this.channelSessions.set(scope.cacheKey, session);
+    this.conversationHistory?.ensureActiveSession(agent.name);
     return session;
   }
 
@@ -429,6 +814,7 @@ export class AgentExecutor {
     if (this.db) {
       try {
         writePersistedAgentSession(this.db, agentName, null);
+        this.db.clearAgentSessionProviderHandles(agentName);
       } catch (err) {
         logEvent("warn", "agent-session-handle-clear-failed", {
           "agent-name": agentName,
@@ -439,6 +825,11 @@ export class AgentExecutor {
     }
 
     this.sessions.delete(agentName);
+    for (const key of [...this.channelSessions.keys()]) {
+      if (key.startsWith(`channel-session:${agentName}:`)) {
+        this.channelSessions.delete(key);
+      }
+    }
 
     logEvent("info", "agent-session-remove", {
       "agent-name": agentName,
@@ -454,9 +845,12 @@ export class AgentExecutor {
     // Best-effort: summarize all active sessions before shutdown.
     if (this.conversationHistory) {
       try {
-        const sessionAgents = [...this.sessions.keys()];
+        const defaultSessionAgents = [...this.sessions.keys()];
+        const channelSessionAgents = [...this.channelSessions.keys()]
+          .map((key) => key.split(":")[1] ?? "")
+          .filter((value) => value.length > 0);
         const historyAgents = this.conversationHistory.getActiveAgentNames();
-        const agentNames = [...new Set([...sessionAgents, ...historyAgents])];
+        const agentNames = [...new Set([...defaultSessionAgents, ...channelSessionAgents, ...historyAgents])];
         await summarizeAllActiveSessions({
           history: this.conversationHistory,
           agentNames,
@@ -469,18 +863,24 @@ export class AgentExecutor {
     }
 
     // Kill any in-flight CLI processes
-    for (const [agentName, inFlight] of this.inFlightRuns) {
-      if (inFlight.childProcess) {
-        try {
-          inFlight.childProcess.kill("SIGTERM");
-        } catch {
-          // best-effort
+    for (const [, set] of this.inFlightRuns) {
+      for (const inFlight of set) {
+        if (inFlight.childProcess) {
+          try {
+            inFlight.childProcess.kill("SIGTERM");
+          } catch {
+            // best-effort
+          }
         }
       }
     }
     this.sessions.clear();
-    this.agentLocks.clear();
+    this.channelSessions.clear();
+    this.agentDispatchLocks.clear();
+    this.sessionLocks.clear();
+    this.agentQueuedTaskCount.clear();
     this.inFlightRuns.clear();
+    this.abortGenerationByAgent.clear();
   }
 }
 
@@ -489,6 +889,10 @@ export function createAgentExecutor(options?: {
   hibossDir?: string;
   conversationHistory?: ConversationHistory;
   onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
+  onRunStarted?: AgentRunStartedHook;
+  onRunFinished?: AgentRunFinishedHook;
+  sessionConcurrencyPerAgent?: number;
+  sessionConcurrencyGlobal?: number;
 }): AgentExecutor {
   return new AgentExecutor(options);
 }

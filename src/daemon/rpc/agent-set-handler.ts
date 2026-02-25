@@ -22,7 +22,9 @@ import {
   predictRoleAfterExplicitMutation,
   buildMutationInvariantViolationMessage,
 } from "../../shared/agent-role-mutation.js";
+import { mutateSettingsAndSync } from "../settings-sync.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
+import { isKnownAdapterType } from "../../shared/adapter-types.js";
 
 /**
  * Create agent.set RPC handler.
@@ -95,9 +97,16 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         }
       }
 
-      const bindAdapterType = wantsBind ? (p.bindAdapterType as string).trim() : undefined;
+      const bindAdapterType = wantsBind ? (p.bindAdapterType as string).trim().toLowerCase() : undefined;
       const bindAdapterToken = wantsBind ? (p.bindAdapterToken as string).trim() : undefined;
-      const unbindAdapterType = wantsUnbind ? (p.unbindAdapterType as string).trim() : undefined;
+      const unbindAdapterType = wantsUnbind ? (p.unbindAdapterType as string).trim().toLowerCase() : undefined;
+
+      if (bindAdapterType && !isKnownAdapterType(bindAdapterType)) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, `Unknown adapter type: ${bindAdapterType}`);
+      }
+      if (unbindAdapterType && !isKnownAdapterType(unbindAdapterType)) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, `Unknown adapter type: ${unbindAdapterType}`);
+      }
 
       const allAgents = ctx.db.listAgents();
       const allBindings = ctx.db.listBindings();
@@ -242,13 +251,13 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
 
       let permissionLevel: Agent["permissionLevel"] | undefined;
       if (p.permissionLevel !== undefined) {
-        if (principal.level !== "boss") {
+        if (principal.level !== "admin") {
           rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
         }
         if (!isPermissionLevel(p.permissionLevel)) {
           rpcError(
             RPC_ERRORS.INVALID_PARAMS,
-            "Invalid permission-level (expected restricted, standard, privileged, boss)"
+            "Invalid permission-level (expected restricted, standard, privileged, admin)"
           );
         }
         permissionLevel = p.permissionLevel;
@@ -341,6 +350,7 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
       );
 
       let createdAdapterForSet = false;
+      let createdAdapterTokenForSet: string | null = null;
       if (bindAdapterType && bindAdapterToken && bindWouldCreateOrReplace && ctx.running) {
         const hadAdapterAlready = ctx.adapters.has(bindAdapterToken);
         try {
@@ -349,42 +359,13 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
             rpcError(RPC_ERRORS.INVALID_PARAMS, `Unknown adapter type: ${bindAdapterType}`);
           }
           createdAdapterForSet = !hadAdapterAlready;
+          createdAdapterTokenForSet = createdAdapterForSet ? bindAdapterToken : null;
         } catch (err) {
           if (!hadAdapterAlready) {
             await ctx.removeAdapter(bindAdapterToken).catch(() => undefined);
           }
           throw err;
         }
-      }
-
-      try {
-        if (wantsUnbind || wantsBind) {
-          ctx.db.runInTransaction(() => {
-            if (wantsUnbind && unbindAdapterType) {
-              ctx.db.deleteBinding(agentName, unbindAdapterType);
-            }
-
-            if (bindAdapterType && bindAdapterToken) {
-              if (!existingBindingByType) {
-                ctx.db.createBinding(agentName, bindAdapterType, bindAdapterToken);
-              } else if (existingBindingByType.adapterToken === bindAdapterToken) {
-                if (unbindSameType) {
-                  ctx.db.createBinding(agentName, bindAdapterType, bindAdapterToken);
-                }
-              } else {
-                if (!unbindSameType) {
-                  ctx.db.deleteBinding(agentName, bindAdapterType);
-                }
-                ctx.db.createBinding(agentName, bindAdapterType, bindAdapterToken);
-              }
-            }
-          });
-        }
-      } catch (err) {
-        if (createdAdapterForSet && bindAdapterToken) {
-          await ctx.removeAdapter(bindAdapterToken).catch(() => undefined);
-        }
-        throw err;
       }
 
       const adapterTokensToRemove = new Set<string>();
@@ -398,9 +379,6 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         existingBindingByType.adapterToken !== bindAdapterToken
       ) {
         adapterTokensToRemove.add(existingBindingByType.adapterToken);
-      }
-      for (const adapterToken of adapterTokensToRemove) {
-        await ctx.removeAdapter(adapterToken);
       }
 
       const updates: {
@@ -462,30 +440,89 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         updates.reasoningEffort = reasoningEffort;
       }
 
-      ctx.db.runInTransaction(() => {
-        if (Object.keys(updates).length > 0) {
-          ctx.db.updateAgentFields(agentName, updates);
-        }
+      try {
+        await mutateSettingsAndSync({
+          hibossDir: ctx.config.dataDir,
+          db: ctx.db,
+          mutate: (settings) => {
+            const target = settings.agents.find((item) => item.name.toLowerCase() === agentName.toLowerCase());
+            if (!target) {
+              rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
+            }
 
-        if (permissionLevel !== undefined) {
-          ctx.db.setAgentPermissionLevel(agentName, permissionLevel);
-        }
+            if (wantsUnbind && unbindAdapterType) {
+              target.bindings = target.bindings.filter((binding) => binding.adapterType !== unbindAdapterType);
+            }
 
-        if (sessionPolicyUpdate !== undefined) {
-          if ("clear" in sessionPolicyUpdate) {
-            ctx.db.updateAgentSessionPolicy(agentName, { clear: true });
-          } else {
-            ctx.db.updateAgentSessionPolicy(agentName, sessionPolicyUpdate);
-          }
-        }
+            if (bindAdapterType && bindAdapterToken) {
+              target.bindings = target.bindings.filter((binding) => binding.adapterType !== bindAdapterType);
+              target.bindings.push({
+                adapterType: bindAdapterType,
+                adapterToken: bindAdapterToken,
+              });
+            }
 
-        if (metadata !== undefined) {
-          ctx.db.replaceAgentMetadataPreservingSessionHandle(agentName, metadata);
+            if (updates.role !== undefined) {
+              target.role = updates.role;
+            }
+            if (updates.description !== undefined) {
+              target.description = updates.description ?? "";
+            }
+            if (updates.workspace !== undefined) {
+              target.workspace = updates.workspace ?? null;
+            }
+            if (updates.provider !== undefined) {
+              target.provider = updates.provider ?? DEFAULT_AGENT_PROVIDER;
+            }
+            if (updates.model !== undefined) {
+              target.model = updates.model;
+            }
+            if (updates.reasoningEffort !== undefined) {
+              target.reasoningEffort = updates.reasoningEffort ?? null;
+            }
+            if (permissionLevel !== undefined) {
+              target.permissionLevel = permissionLevel;
+            }
+            if (sessionPolicyUpdate !== undefined) {
+              if ("clear" in sessionPolicyUpdate) {
+                delete target.sessionPolicy;
+              } else {
+                target.sessionPolicy = {
+                  ...(target.sessionPolicy ?? {}),
+                  ...(sessionPolicyUpdate.dailyResetAt !== undefined
+                    ? { dailyResetAt: sessionPolicyUpdate.dailyResetAt }
+                    : {}),
+                  ...(sessionPolicyUpdate.idleTimeout !== undefined
+                    ? { idleTimeout: sessionPolicyUpdate.idleTimeout }
+                    : {}),
+                  ...(sessionPolicyUpdate.maxContextLength !== undefined
+                    ? { maxContextLength: sessionPolicyUpdate.maxContextLength }
+                    : {}),
+                };
+              }
+            }
+            if (metadata !== undefined) {
+              if (metadata === null) {
+                delete target.metadata;
+              } else {
+                target.metadata = metadata;
+              }
+            }
+          },
+        });
+      } catch (err) {
+        if (createdAdapterForSet && createdAdapterTokenForSet) {
+          await ctx.removeAdapter(createdAdapterTokenForSet).catch(() => undefined);
         }
-      });
+        throw err;
+      }
 
       const updated = ctx.db.getAgentByName(agentName)!;
       const bindings = ctx.db.getBindingsByAgentName(agentName).map((b) => b.adapterType);
+
+      for (const adapterToken of adapterTokensToRemove) {
+        await ctx.removeAdapter(adapterToken).catch(() => undefined);
+      }
 
       const needsRefresh =
         (p.workspace !== undefined && before.workspace !== updated.workspace);

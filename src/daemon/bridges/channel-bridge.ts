@@ -2,14 +2,17 @@ import type {
   ChatAdapter,
   ChannelMessage,
   ChannelCommand,
+  ChannelCommandResponse,
   ChannelCommandHandler,
-  MessageContent,
 } from "../../adapters/types.js";
 import { formatChannelAddress, formatAgentAddress } from "../../adapters/types.js";
 import type { MessageRouter } from "../router/message-router.js";
 import type { HiBossDatabase } from "../db/database.js";
 import type { DaemonConfig } from "../daemon.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
+import { resolveUiLocale } from "../../shared/ui-locale.js";
+import { getUiText } from "../../shared/ui-text.js";
+import { DEFAULT_AGENT_PROVIDER } from "../../shared/defaults.js";
 
 /**
  * Bridge between ChannelMessages and Envelopes.
@@ -19,11 +22,9 @@ export class ChannelBridge {
   private adapterTokens: Map<ChatAdapter, string> = new Map();
   private commandHandler: ChannelCommandHandler | null = null;
 
-  private static getUnboundAdapterText(platform: string): string {
-    return [
-      `not-configured: no agent is bound to this ${platform} bot`,
-      `fix: hiboss agent set --token <boss-token> --name <agent-name> --bind-adapter-type ${platform} --bind-adapter-token <adapter-token>`,
-    ].join("\n");
+  private getUnboundAdapterText(platform: string): string {
+    const ui = getUiText(resolveUiLocale(this.db.getConfig("ui_locale")));
+    return ui.bridge.unboundAdapter(platform);
   }
 
   constructor(
@@ -63,8 +64,11 @@ export class ChannelBridge {
     adapter: ChatAdapter,
     adapterToken: string,
     command: ChannelCommand
-  ): Promise<MessageContent | void> {
-    const fromBoss = this.isBoss(adapter.platform, command.authorUsername);
+  ): Promise<ChannelCommandResponse | void> {
+    const fromBoss = this.isBoss(adapter.platform, {
+      id: command.authorId,
+      username: command.authorUsername,
+    });
     if (!fromBoss) {
       // Boss-only commands: do not reply to non-boss users.
       return;
@@ -80,12 +84,13 @@ export class ChannelBridge {
         "from-boss": fromBoss,
       });
 
-      return { text: ChannelBridge.getUnboundAdapterText(adapter.platform) };
+      return { text: this.getUnboundAdapterText(adapter.platform) };
     }
 
     // Enrich command with agent name
     const enrichedCommand: ChannelCommand & { agentName: string } = {
       ...command,
+      adapterType: command.adapterType ?? adapter.platform,
       agentName: binding.agentName,
     };
 
@@ -100,7 +105,10 @@ export class ChannelBridge {
     message: ChannelMessage
   ): Promise<void> {
     const platform = adapter.platform;
-    const fromBoss = this.isBoss(platform, message.author.username);
+    const fromBoss = this.isBoss(platform, {
+      id: message.author.id,
+      username: message.author.username,
+    });
 
     // Find the agent bound to this adapter
     const binding = this.db.getBindingByAdapter(platform, adapterToken);
@@ -115,7 +123,7 @@ export class ChannelBridge {
       if (fromBoss) {
         try {
           await adapter.sendMessage(message.chat.id, {
-            text: ChannelBridge.getUnboundAdapterText(platform),
+            text: this.getUnboundAdapterText(platform),
           });
         } catch (err) {
           logEvent("warn", "channel-send-failed", {
@@ -131,6 +139,17 @@ export class ChannelBridge {
 
     const fromAddress = formatChannelAddress(platform, message.chat.id);
     const toAddress = formatAgentAddress(binding.agentName);
+    const agent = this.db.getAgentByNameCaseInsensitive(binding.agentName);
+    const ownerUserId = fromBoss ? message.author.id : undefined;
+    const channelSession = agent
+      ? this.db.getOrCreateChannelActiveSession({
+          agentName: binding.agentName,
+          adapterType: platform,
+          chatId: message.chat.id,
+          ownerUserId,
+          provider: agent.provider ?? DEFAULT_AGENT_PROVIDER,
+        })
+      : null;
 
     await this.router.routeEnvelope({
       from: fromAddress,
@@ -147,6 +166,7 @@ export class ChannelBridge {
       metadata: {
         platform,
         channelMessageId: message.id,
+        ...(channelSession ? { channelSessionId: channelSession.session.id } : {}),
         author: message.author,
         chat: message.chat,
         ...(message.inReplyTo ? { inReplyTo: message.inReplyTo } : {}),
@@ -154,17 +174,14 @@ export class ChannelBridge {
     });
   }
 
-  private isBoss(platform: string, username?: string): boolean {
-    if (!username) return false;
-
-    const adapterBossId = this.db.getAdapterBossId(platform);
-    if (!adapterBossId) return false;
-
-    const normalizedUser = username.replace(/^@/, '').toLowerCase();
-
-    // Support comma-separated list of boss usernames
-    return adapterBossId
-      .split(',')
-      .some((id) => id.trim().replace(/^@/, '').toLowerCase() === normalizedUser);
+  private isBoss(platform: string, author: { id?: string; username?: string }): boolean {
+    const adapterBossIds = this.db.getAdapterBossIds(platform);
+    if (adapterBossIds.length < 1) return false;
+    const authorIds = [author.username, author.id]
+      .filter((value): value is string => typeof value === "string" && value.trim().length > 0)
+      .map((value) => value.trim().replace(/^@/, "").toLowerCase());
+    if (authorIds.length < 1) return false;
+    const allowed = new Set(adapterBossIds.map((id) => id.replace(/^@/, "").toLowerCase()));
+    return authorIds.some((id) => allowed.has(id));
   }
 }

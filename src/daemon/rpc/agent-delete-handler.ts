@@ -8,16 +8,7 @@ import type { DaemonContext } from "./context.js";
 import { requireToken, rpcError } from "./context.js";
 import { removeAgentHome } from "../../agent/home-setup.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
-
-function deleteAgentRow(ctx: DaemonContext, agentName: string): boolean {
-  const rawDb = (ctx.db as any).db as { prepare: (sql: string) => { run: (...args: any[]) => { changes: number } } };
-  if (!rawDb || typeof rawDb.prepare !== "function") {
-    rpcError(RPC_ERRORS.INTERNAL_ERROR, "Database handle unavailable");
-  }
-
-  const info = rawDb.prepare("DELETE FROM agents WHERE name = ?").run(agentName);
-  return info.changes > 0;
-}
+import { mutateSettingsAndSync } from "../settings-sync.js";
 
 export function createAgentDeleteHandler(ctx: DaemonContext): RpcMethodRegistry {
   return {
@@ -40,35 +31,24 @@ export function createAgentDeleteHandler(ctx: DaemonContext): RpcMethodRegistry 
           rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
         }
 
-        // Best-effort: stop routing and close the runtime session before deleting on disk.
-        ctx.router.unregisterAgentHandler(agent.name);
+        // Best-effort: close the runtime session before deleting on disk.
         await ctx.executor.refreshSession(agent.name, "agent-delete").catch(() => undefined);
 
         // Capture bindings for cleanup (adapter removal) before deleting.
         const bindings = ctx.db.getBindingsByAgentName(agent.name);
 
-        const deleted = ctx.db.runInTransaction(() => {
-          // Delete cron schedules (cancel pending envelopes to avoid scheduler retry loops).
-          const schedules = ctx.db.listCronSchedulesByAgent(agent.name);
-          for (const schedule of schedules) {
-            if (schedule.pendingEnvelopeId) {
-              ctx.db.updateEnvelopeStatus(schedule.pendingEnvelopeId, "done");
-            }
-            ctx.db.deleteCronSchedule(schedule.id);
-          }
-
-          // Delete bindings.
-          for (const binding of bindings) {
-            ctx.db.deleteBinding(agent.name, binding.adapterType);
-          }
-
-          // Finally, delete the agent row.
-          return deleteAgentRow(ctx, agent.name);
+        await mutateSettingsAndSync({
+          hibossDir: ctx.config.dataDir,
+          db: ctx.db,
+          mutate: (settings) => {
+            settings.agents = settings.agents.filter(
+              (item) => item.name.toLowerCase() !== agent.name.toLowerCase()
+            );
+          },
         });
 
-        if (!deleted) {
-          rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
-        }
+        // Stop routing after deletion is committed.
+        ctx.router.unregisterAgentHandler(agent.name);
 
         // Best-effort: remove loaded adapters for any deleted bindings.
         for (const binding of bindings) {

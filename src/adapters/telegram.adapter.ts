@@ -6,7 +6,9 @@ import type {
   MessageContent,
   ChannelCommandHandler,
   ChannelCommand,
+  ChannelCommandResponse,
   SendMessageOptions,
+  TelegramInlineKeyboardButton,
 } from "./types.js";
 import { getHiBossPaths } from "../shared/hiboss-paths.js";
 import { parseTelegramMessageId } from "../shared/telegram-message-id.js";
@@ -15,15 +17,22 @@ import { sendTelegramMessage } from "./telegram/outgoing.js";
 import {
   computeBackoff,
   isGetUpdatesConflict,
+  isReplyToMessageNotFound,
   isTransientNetworkError,
   sleep,
   splitTextForTelegram,
   TELEGRAM_MAX_TEXT_CHARS,
 } from "./telegram/shared.js";
+import type { UiLocale } from "../shared/ui-locale.js";
+import { getUiText } from "../shared/ui-text.js";
+import { SESSIONS_CALLBACK_PREFIX } from "../shared/session-callbacks.js";
 
 /** Milliseconds to wait for additional album parts before flushing. */
 const MEDIA_GROUP_DEBOUNCE_MS = 500;
-
+/** Telegram typing status expires quickly; refresh every few seconds while active. */
+const TELEGRAM_TYPING_HEARTBEAT_MS = 4500;
+/** Prevent noisy logs if chat action repeatedly fails (e.g., chat blocked). */
+const TELEGRAM_TYPING_ERROR_THROTTLE_MS = 60_000;
 /**
  * Telegram adapter for the chat bot.
  *
@@ -45,11 +54,19 @@ export class TelegramAdapter implements ChatAdapter {
   private mediaGroupBuffer = new Map<string, ChannelMessage[]>();
   /** Debounce timers keyed by media_group_id. */
   private mediaGroupTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Active typing heartbeat timers keyed by chat id. */
+  private typingTimers = new Map<string, ReturnType<typeof setInterval>>();
+  /** Guards against overlapping chat-action calls per chat id. */
+  private typingInFlight = new Set<string>();
+  /** Last warning timestamp for chat-action failures per chat id. */
+  private typingLastErrorAtMs = new Map<string, number>();
+  private readonly uiLocale: UiLocale;
 
-  constructor(token: string) {
+  constructor(token: string, uiLocale: UiLocale = "en") {
     const apiRoot = process.env.TELEGRAM_API_ROOT;
     this.bot = new Telegraf(token, apiRoot ? { telegram: { apiRoot } } : {});
     this.mediaDir = getHiBossPaths().mediaDir;
+    this.uiLocale = uiLocale;
     this.setupListeners();
   }
 
@@ -58,22 +75,130 @@ export class TelegramAdapter implements ChatAdapter {
     return text.replace(re, "");
   }
 
+  private parseSessionsCallback(data: string): { tab: string; page: number } | null {
+    if (!data.startsWith(SESSIONS_CALLBACK_PREFIX)) return null;
+    const parts = data.split(":");
+    if (parts.length !== 4) return null;
+    const tab = parts[2]?.trim();
+    const pageRaw = Number(parts[3]);
+    if (!tab || !Number.isFinite(pageRaw)) return null;
+    return { tab, page: Math.max(1, Math.trunc(pageRaw)) };
+  }
+
+  private toInlineKeyboard(
+    keyboard: TelegramInlineKeyboardButton[][]
+  ): { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> } {
+    return {
+      inline_keyboard: keyboard.map((row) =>
+        row.map((item) => ({
+          text: item.text,
+          callback_data: item.callbackData,
+        }))
+      ),
+    };
+  }
+
+  private async safeAnswerCallback(callbackQueryId?: string): Promise<void> {
+    if (!callbackQueryId) return;
+    try {
+      await this.bot.telegram.answerCbQuery(callbackQueryId);
+    } catch {
+      // best-effort
+    }
+  }
+
+  private async sendCommandResponse(command: ChannelCommand, response: ChannelCommandResponse): Promise<void> {
+    const chatId = command.chatId;
+    const text = response.text?.trim();
+    if (!text) {
+      await this.safeAnswerCallback(command.callbackQueryId);
+      return;
+    }
+
+    const inlineKeyboard = response.telegram?.inlineKeyboard;
+    const replyMarkup = inlineKeyboard ? this.toInlineKeyboard(inlineKeyboard) : undefined;
+    const replyParameters =
+      !command.isCallback && command.messageId?.trim()
+        ? {
+            message_id: parseTelegramMessageId(command.messageId, "command-message-id"),
+          }
+        : undefined;
+    const safeText = text.length <= TELEGRAM_MAX_TEXT_CHARS
+      ? text
+      : `${text.slice(0, TELEGRAM_MAX_TEXT_CHARS - 3)}...`;
+
+    if (command.isCallback && response.telegram?.editMessageId) {
+      try {
+        const messageId = parseTelegramMessageId(response.telegram.editMessageId, "callback-message-id");
+        await this.bot.telegram.editMessageText(chatId, messageId, undefined, safeText, {
+          ...(replyMarkup ? { reply_markup: replyMarkup as never } : {}),
+        } as never);
+        await this.safeAnswerCallback(command.callbackQueryId);
+        return;
+      } catch {
+        // Fallback to sending a new message if edit fails (e.g., message too old).
+      }
+    }
+
+    if (replyMarkup) {
+      const sendOptions = {
+        reply_markup: replyMarkup as never,
+        ...(replyParameters ? { reply_parameters: replyParameters } : {}),
+      } as never;
+      try {
+        await this.bot.telegram.sendMessage(chatId, safeText, sendOptions);
+      } catch (err) {
+        if (!(replyParameters && isReplyToMessageNotFound(err))) {
+          throw err;
+        }
+        await this.bot.telegram.sendMessage(chatId, safeText, {
+          reply_markup: replyMarkup as never,
+        } as never);
+      }
+      await this.safeAnswerCallback(command.callbackQueryId);
+      return;
+    }
+
+    const chunks = splitTextForTelegram(text, TELEGRAM_MAX_TEXT_CHARS);
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const sendOptions = i === 0 && replyParameters
+        ? { reply_parameters: replyParameters } as never
+        : undefined;
+      try {
+        await this.bot.telegram.sendMessage(chatId, chunk, sendOptions);
+      } catch (err) {
+        if (!(i === 0 && replyParameters && isReplyToMessageNotFound(err))) {
+          throw err;
+        }
+        await this.bot.telegram.sendMessage(chatId, chunk);
+      }
+    }
+    await this.safeAnswerCallback(command.callbackQueryId);
+  }
+
   private async dispatchCommand(ctx: any, commandName: string): Promise<void> {
     const chatId = String(ctx.chat?.id ?? "");
     if (!chatId) return;
 
     const username = ctx.from?.username;
+    const authorId =
+      ctx.from?.id !== undefined && ctx.from?.id !== null
+        ? String(ctx.from.id)
+        : undefined;
     const rawText = typeof ctx.message?.text === "string" ? ctx.message.text : `/${commandName}`;
 
     const command: ChannelCommand = {
       command: commandName,
       args: TelegramAdapter.extractCommandArgs(rawText, commandName),
+      adapterType: this.platform,
       chatId,
+      authorId,
       authorUsername: username,
       messageId: ctx.message?.message_id != null ? String(ctx.message.message_id) : undefined,
     };
 
-    let response: MessageContent | undefined;
+    let response: ChannelCommandResponse | undefined;
 
     for (const handler of this.commandHandlers) {
       try {
@@ -92,10 +217,57 @@ export class TelegramAdapter implements ChatAdapter {
       return;
     }
 
-    const chunks = splitTextForTelegram(response.text, TELEGRAM_MAX_TEXT_CHARS);
-    for (const chunk of chunks) {
-      await ctx.reply(chunk);
+    await this.sendCommandResponse(command, response);
+  }
+
+  private async dispatchCallback(ctx: any): Promise<void> {
+    const callback = ctx.callbackQuery as { id?: string; data?: string; message?: { message_id?: number } } | undefined;
+    const data = typeof callback?.data === "string" ? callback.data : "";
+    const parsed = this.parseSessionsCallback(data);
+    if (!parsed) {
+      await this.safeAnswerCallback(callback?.id);
+      return;
     }
+
+    const chatId = String(ctx.chat?.id ?? "");
+    if (!chatId) {
+      await this.safeAnswerCallback(callback?.id);
+      return;
+    }
+
+    const command: ChannelCommand = {
+      command: "sessions",
+      args: `tab=${parsed.tab} page=${parsed.page}`,
+      adapterType: this.platform,
+      chatId,
+      authorId: ctx.from?.id !== undefined && ctx.from?.id !== null ? String(ctx.from.id) : undefined,
+      authorUsername: ctx.from?.username,
+      messageId:
+        callback?.message?.message_id !== undefined && callback?.message?.message_id !== null
+          ? String(callback.message.message_id)
+          : undefined,
+      callbackQueryId: callback?.id,
+      isCallback: true,
+    };
+
+    let response: ChannelCommandResponse | undefined;
+    for (const handler of this.commandHandlers) {
+      try {
+        const result = await handler(command);
+        if (result && (typeof result.text === "string" || (result.attachments?.length ?? 0) > 0)) {
+          response = result;
+          break;
+        }
+      } catch (err) {
+        console.error(`[${this.platform}] command handler error:`, err);
+      }
+    }
+
+    if (!response?.text) {
+      await this.safeAnswerCallback(command.callbackQueryId);
+      return;
+    }
+    await this.sendCommandResponse(command, response);
   }
 
   private setupListeners(): void {
@@ -117,6 +289,15 @@ export class TelegramAdapter implements ChatAdapter {
 
     this.bot.command("clone", async (ctx) => {
       await this.dispatchCommand(ctx, "clone");
+    });
+    this.bot.command("sessions", async (ctx) => {
+      await this.dispatchCommand(ctx, "sessions");
+    });
+    this.bot.command("session", async (ctx) => {
+      await this.dispatchCommand(ctx, "session");
+    });
+    this.bot.on("callback_query", async (ctx) => {
+      await this.dispatchCallback(ctx);
     });
 
     this.bot.on("text", (ctx) => this.handleMessage(ctx as unknown as MessageContext));
@@ -219,14 +400,51 @@ export class TelegramAdapter implements ChatAdapter {
     });
   }
 
+  async setTyping(chatId: string, active: boolean): Promise<void> {
+    if (!chatId.trim()) return;
+
+    if (!active) {
+      const timer = this.typingTimers.get(chatId);
+      if (timer) clearInterval(timer);
+      this.typingTimers.delete(chatId);
+      this.typingInFlight.delete(chatId);
+      return;
+    }
+
+    if (this.typingTimers.has(chatId)) {
+      return;
+    }
+
+    await this.sendTypingHeartbeat(chatId);
+
+    const timer = setInterval(() => {
+      void this.sendTypingHeartbeat(chatId);
+    }, TELEGRAM_TYPING_HEARTBEAT_MS);
+
+    this.typingTimers.set(chatId, timer);
+  }
+
+  private async sendTypingHeartbeat(chatId: string): Promise<void> {
+    if (this.stopped || !this.started) return;
+    if (this.typingInFlight.has(chatId)) return;
+
+    this.typingInFlight.add(chatId);
+    try {
+      await this.bot.telegram.sendChatAction(chatId, "typing");
+    } catch (err) {
+      const nowMs = Date.now();
+      const lastMs = this.typingLastErrorAtMs.get(chatId) ?? 0;
+      if (nowMs - lastMs >= TELEGRAM_TYPING_ERROR_THROTTLE_MS) {
+        this.typingLastErrorAtMs.set(chatId, nowMs);
+        console.warn(`[${this.platform}] Failed to send typing action for chat ${chatId}:`, err);
+      }
+    } finally {
+      this.typingInFlight.delete(chatId);
+    }
+  }
+
   private async registerCommands(): Promise<void> {
-    const commands = [
-      { command: "new", description: "Start a new session" },
-      { command: "status", description: "Show agent status" },
-      { command: "abort", description: "Abort current run and clear message queue" },
-      { command: "isolated", description: "One-shot with clean context" },
-      { command: "clone", description: "One-shot with current session context" },
-    ];
+    const commands = getUiText(this.uiLocale).telegram.commandDescriptions;
     try {
       await this.bot.telegram.setMyCommands(commands);
       console.log(`[${this.platform}] Commands registered (${commands.length})`);
@@ -284,6 +502,10 @@ export class TelegramAdapter implements ChatAdapter {
     for (const timer of this.mediaGroupTimers.values()) clearTimeout(timer);
     this.mediaGroupTimers.clear();
     this.mediaGroupBuffer.clear();
+    for (const timer of this.typingTimers.values()) clearInterval(timer);
+    this.typingTimers.clear();
+    this.typingInFlight.clear();
+    this.typingLastErrorAtMs.clear();
     this.bot.stop();
     console.log(`[${this.platform}] Bot stopped`);
   }

@@ -47,10 +47,10 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
     const principal = ctx.resolvePrincipal(token);
     ctx.assertOperationAllowed(operation, principal);
 
-    if (principal.kind === "boss") {
+    if (principal.kind === "admin") {
       rpcError(
         RPC_ERRORS.UNAUTHORIZED,
-        "Boss tokens cannot send envelopes (use an agent token or send via a channel adapter)"
+        "Admin tokens cannot send envelopes (use an agent token or send via a channel adapter)"
       );
     }
 
@@ -197,7 +197,7 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
     if (principal.kind !== "agent") {
       rpcError(
         RPC_ERRORS.UNAUTHORIZED,
-        "Boss tokens cannot list envelopes (use an agent token)"
+        "Admin tokens cannot list envelopes (use an agent token)"
       );
     }
 
