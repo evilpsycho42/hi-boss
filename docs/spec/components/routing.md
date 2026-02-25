@@ -1,117 +1,66 @@
 # Routing & Envelope Flow
 
-Hi-Boss routes all messages as **envelopes** through the daemon. The daemon owns persistence and delivery guarantees via SQLite (`~/hiboss/.daemon/hiboss.db`).
+Hi-Boss routes all messages as envelopes through the daemon and persists them in SQLite.
 
-Key implementation files:
+Key files:
 
-- `src/daemon/daemon.ts` — wires everything together (IPC, DB, adapters, scheduler, agent execution)
-- `src/daemon/bridges/channel-bridge.ts` — converts adapter messages → envelopes
-- `src/daemon/router/message-router.ts` — creates and delivers envelopes
-- `src/daemon/scheduler/envelope-scheduler.ts` — wakes scheduled envelopes and triggers agent runs
-- `src/agent/executor.ts` — runs agents and acknowledges envelopes (marks `done` on read)
+- `src/daemon/daemon.ts`
+- `src/daemon/bridges/channel-bridge.ts`
+- `src/daemon/router/message-router.ts`
+- `src/daemon/scheduler/envelope-scheduler.ts`
+- `src/agent/executor.ts`
 
----
+## Inbound Flow (Channel -> Agent)
 
-## Components
+1. Channel adapter update (for example Telegram or WeChatPadPro) -> adapter emits `ChannelMessage`.
+2. `ChannelBridge` resolves bound agent and creates envelope:
+   - `from: channel:<adapter>:<chat-id>`
+   - `to: agent:<agent-name>`
+3. Envelope is persisted as `pending`.
+4. Agent handler triggers `executor.checkAndRun(...)`.
+5. Executor reads due envelopes, groups by session scope, marks read envelopes `done`, and schedules per-session execution.
 
-### Daemon (the orchestrator)
+## Session-aware Agent Routing
 
-The daemon owns:
+Session scope resolution:
 
-- **DB**: agents, bindings, envelopes, agent run audit
-- **IPC**: local JSON-RPC over `~/hiboss/.daemon/daemon.sock` (used by `hiboss` CLI)
-- **Adapters**: e.g. Telegram bots
-- **Routing**: `MessageRouter`
-- **Channel bridge**: `ChannelBridge`
-- **Scheduling**: `EnvelopeScheduler`
-- **Agent runtime**: `AgentExecutor`
+- Channel source (`from = channel:<adapter>:<chat-id>`): resolve active session via `channel_session_bindings`.
+- Non-channel source: use default per-agent scope.
 
-### Adapters
+Execution semantics:
 
-Adapters provide two main streams into the daemon:
+- same session id => serial execution
+- different session ids => can run in parallel (subject to configured limits)
 
-- `ChannelMessage` (chat messages)
-- `ChannelCommand` (e.g. Telegram `/new`)
+## Outbound Flow (Agent -> Channel)
 
-See `docs/spec/adapters/telegram.md`.
+1. Agent sends envelope to `channel:<adapter>:<chat-id>`.
+2. Router validates binding and resolves adapter.
+3. For Telegram, optional quote/reply resolution uses `replyToEnvelopeId` when same adapter+chat route exists.
+4. Adapter sends platform message; envelope is marked `done` on success.
 
----
+## Channel Command Routing
 
-## Envelope Flow (Inbound)
+Boss-only command flow:
 
-### Telegram → Agent
-
-1. User sends a message in Telegram.
-2. `TelegramAdapter` creates a `ChannelMessage` (text + optional attachments).
-3. `ChannelBridge.handleChannelMessage()`:
-   - Finds which agent is bound to that bot token (`agent_bindings`)
-   - Computes `from-boss` by comparing the sender username with `config.adapter_boss_id_telegram`
-   - Creates an envelope:
-     - `from = channel:telegram:<chat-id>`
-     - `to = agent:<bound-agent-name>`
-     - `metadata = { platform, channelMessageId, author, chat }`
-4. `MessageRouter.routeEnvelope()` persists the envelope in SQLite (`status = pending`).
-5. If the envelope is due now (no `deliver-at`, or `deliver-at <= now`), the router calls `deliverEnvelope()`.
-6. For agent destinations, `deliverToAgent()` triggers the registered handler, which calls `AgentExecutor.checkAndRun(...)`.
-7. `AgentExecutor` loads pending envelopes from SQLite, marks them `done` immediately, and runs the agent (at-most-once).
-
-If no binding exists:
-
-- The message is dropped.
-- If `from-boss: true`, the adapter receives a “not-configured” message telling you how to bind an agent.
-
----
-
-## Envelope Flow (Outbound)
-
-### Agent → Telegram
-
-1. Agent sends an envelope using `hiboss envelope send --to channel:telegram:<chat-id> ...`
-2. Daemon validates permissions:
-   - The sender is the agent identified by the token
-   - That agent has a binding for `adapter-type = telegram`
-3. `MessageRouter.routeEnvelope()` persists the envelope.
-4. If due now, the router calls `deliverToChannel()`:
-   - Looks up the adapter by binding token
-   - Resolves optional reply quoting from `metadata.replyToEnvelopeId` only (same adapter + same chat + referenced `channelMessageId` required)
-   - Ignores legacy direct reply-id metadata (`metadata.replyToMessageId`) when present
-   - Calls `adapter.sendMessage(chatId, { text, attachments }, { replyToMessageId? })`
-   - On success, sets `status = done`
-
----
+1. Adapter command event -> adapter emits `ChannelCommand`.
+2. `ChannelBridge` enforces boss identity and binds `agentName`.
+3. `createChannelCommandHandler(...)` handles command:
+   - `/status`
+   - `/abort`
+   - `/new` (current chat -> fresh session)
+   - `/sessions` (tabbed, paged session list)
+   - `/session <id>` (switch current chat mapping)
+   - `/isolated`, `/clone` (one-shot; active mapping unchanged)
+4. Adapter replies in parseable text format.
+   - Telegram includes inline keyboard for tabs/pager.
+   - WeChatPadPro uses text-only args (`tab=... page=...` or `--tab ... --page ...`).
 
 ## Scheduled Delivery
 
-Scheduled delivery uses the same envelope record, but delays actual delivery until `deliver-at` is due.
+Scheduled envelopes use the same routing path:
 
-- When an envelope is created with a future `deliver-at`, the router stores it as `pending` and does not deliver it immediately.
-- `EnvelopeScheduler` wakes up at the next scheduled time and:
-  - delivers due channel envelopes (via `router.deliverEnvelope(...)`)
-  - triggers agent runs for agents with due envelopes (via `executor.checkAndRun(...)`)
+- due channel envelopes are delivered by scheduler
+- due agent envelopes trigger executor scheduling
 
-See `docs/spec/components/scheduler.md` for the exact wake-up algorithm.
-
----
-
-## `/new` Session Refresh (Telegram)
-
-1. Boss sends `/new` to the Telegram bot.
-2. `TelegramAdapter` emits a `ChannelCommand { command: "new", ... }`.
-3. `ChannelBridge` enforces boss-only behavior and resolves which agent is bound to that bot token:
-   - if unbound: returns a `not-configured:` + `fix:` message
-   - if bound: enriches the command with `agentName`
-4. `Daemon` receives the bound command, calls `AgentExecutor.requestSessionRefresh(agentName, "telegram:/new")`, and returns `Session refresh requested.`
-5. `TelegramAdapter` replies with the returned message.
-6. The refresh is applied at the next safe point (before the next run, or after the current queue drains).
-
----
-
-## `/status` (Telegram)
-
-1. Boss sends `/status` to the Telegram bot.
-2. `TelegramAdapter` emits a `ChannelCommand { command: "status", ... }`.
-3. `ChannelBridge` enforces boss-only behavior and resolves which agent is bound to that bot token:
-   - if unbound: returns a `not-configured:` + `fix:` message
-   - if bound: enriches the command with `agentName`
-4. `Daemon` computes the status for the bound agent and returns the same key/value output as `hiboss agent status --name <agent-name>`.
-5. `TelegramAdapter` replies with the returned status text.
+See `docs/spec/components/scheduler.md` for wake-up details.

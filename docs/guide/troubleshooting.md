@@ -4,17 +4,17 @@
 
 | Symptom | Likely cause | Fix |
 |--------|--------------|-----|
-| `error: ... connect ... daemon.sock` | Daemon not running | `hiboss daemon start --token <boss-token>` |
+| `error: ... connect ... daemon.sock` | Daemon not running | `hiboss daemon start --token <admin-token>` |
 | You lost the agent token | Tokens are printed once | Reset local state and run `hiboss setup` again |
-| Cannot send to `channel:telegram:...` | Agent not bound to Telegram | `hiboss agent set --token <boss-token> --name <agent> --bind-adapter-type telegram --bind-adapter-token <bot-token>` |
+| Cannot send to `channel:telegram:...` | Agent not bound to Telegram | `hiboss agent set --token <admin-token> --name <agent> --bind-adapter-type telegram --bind-adapter-token <bot-token>` |
 | Telegram bot doesn’t respond | Bot not bound or daemon not running | Bind the bot + ensure daemon is running |
 | Messages seem “stuck” | Daemon not running, or scheduled for the future | Check daemon status/logs; verify `--deliver-at` |
 
 ## Useful commands
 
 ```bash
-hiboss daemon status --token <boss-token>
-hiboss agent list --token <boss-token>
+hiboss daemon status --token <admin-token>
+hiboss agent list --token <admin-token>
 ```
 
 ## Logs and reset
@@ -33,8 +33,8 @@ New versions use `~/hiboss/` with internal files under `~/hiboss/.daemon/`.
 Migration (preserve state):
 
 ```bash
-# Stop the daemon first (use the boss token you saved)
-hiboss daemon stop --token <boss-token>
+# Stop the daemon first (use the admin token you saved)
+hiboss daemon stop --token <admin-token>
 
 # Move the old root into the new root location
 mv ~/.hiboss ~/hiboss
@@ -46,13 +46,13 @@ mv ~/hiboss/daemon.* ~/hiboss/.daemon/
 mv ~/hiboss/log_history ~/hiboss/.daemon/ || true
 
 # Start again
-hiboss daemon start --token <boss-token>
+hiboss daemon start --token <admin-token>
 ```
 
 Full reset (wipes local state):
 
 ```bash
-hiboss daemon stop --token <boss-token>
+hiboss daemon stop --token <admin-token>
 rm -rf ~/hiboss
 hiboss setup
 ```

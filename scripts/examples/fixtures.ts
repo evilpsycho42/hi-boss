@@ -18,7 +18,7 @@ const REPO_ROOT = path.resolve(__dirname, "../..");
 export interface ExampleFixture {
   homeDir: string;
   hibossDir: string;
-  bossToken: string;
+  adminToken: string;
   agentToken: string;
   cleanup(): void;
 }
@@ -110,7 +110,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
   const daemonDir = path.join(hibossDir, ".daemon");
   fs.mkdirSync(daemonDir, { recursive: true });
 
-  const bossToken = "boss_example_token_for_docs";
+  const adminToken = "admin_example_token_for_docs";
   const agentToken = "agt_example_token_for_docs";
 
   // Customization file placeholders (created empty by setup; not rendered in the minimal system prompt).
@@ -165,7 +165,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
   );
   const cfgTime = Date.parse("2026-01-01T00:00:00.000Z");
   upsertConfig.run("setup_completed", "true", cfgTime);
-  upsertConfig.run("boss_token_hash", hashToken(bossToken), cfgTime);
+  upsertConfig.run("admin_token_hash", hashToken(adminToken), cfgTime);
   upsertConfig.run("boss_name", "Kevin", cfgTime);
   upsertConfig.run("boss_timezone", "Asia/Shanghai", cfgTime);
   upsertConfig.run("adapter_boss_id_telegram", "@kky1024", cfgTime);
@@ -454,7 +454,7 @@ export async function createExampleFixture(): Promise<ExampleFixture> {
   return {
     homeDir,
     hibossDir,
-    bossToken,
+    adminToken,
     agentToken,
     cleanup() {
       fs.rmSync(homeDir, { recursive: true, force: true });

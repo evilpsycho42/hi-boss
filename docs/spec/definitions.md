@@ -12,6 +12,7 @@ Canonical mapping (selected):
 - `envelope.createdAt` → SQLite `created_at` → `created-at:`
 - `envelope.fromBoss` → SQLite `from_boss` → `[boss]` suffix in rendered sender lines
 - `config.bossTimezone` → SQLite `config.boss_timezone` → setup `boss-timezone` → `boss-timezone:`
+- `config.uiLocale` → SQLite `config.ui_locale` → env override `HIBOSS_UI_LOCALE` (fixed system-message locale)
 
 Derived (not stored):
 - `daemon-timezone:` is computed from the daemon host (`Intl.DateTimeFormat().resolvedOptions().timeZone`) and printed by setup for operator clarity.
@@ -23,10 +24,60 @@ Derived (not stored):
 | Type | Format | Example |
 |------|--------|---------|
 | Agent | `agent:<name>` | `agent:nex` |
-| Channel | `channel:<adapter>:<chat-id>` | `channel:telegram:123456` |
+| Channel | `channel:<adapter>:<chat-id>` | `channel:telegram:123456`, `channel:wechatpadpro:wxid_xxx` |
 
 Reserved agent addresses:
 - `agent:background` — one-shot daemon-executed background job (see `docs/spec/components/agent.md`).
+
+---
+
+## Session Registry
+
+Hi-Boss maintains channel-scoped session state in dedicated SQLite tables.
+
+### `agent_sessions`
+
+| Code (TypeScript) | SQLite column | Notes |
+|-------------------|-------------|-------|
+| `agentSession.id` | `id` | UUID |
+| `agentSession.agentName` | `agent_name` | Owner agent |
+| `agentSession.provider` | `provider` | `claude` or `codex` |
+| `agentSession.providerSessionId` | `provider_session_id` | Provider thread/session id (nullable) |
+| `agentSession.createdAt` | `created_at` | Unix epoch ms |
+| `agentSession.lastActiveAt` | `last_active_at` | Unix epoch ms |
+| `agentSession.lastAdapterType` | `last_adapter_type` | Last channel adapter (nullable) |
+| `agentSession.lastChatId` | `last_chat_id` | Last channel chat id (nullable) |
+
+### `channel_session_bindings`
+
+Active mapping per channel conversation:
+
+| Code (TypeScript) | SQLite column | Notes |
+|-------------------|-------------|-------|
+| `binding.agentName` | `agent_name` | Owner agent |
+| `binding.adapterType` | `adapter_type` | e.g. `telegram`, `wechatpadpro` |
+| `binding.chatId` | `chat_id` | Channel chat id |
+| `binding.activeSessionId` | `active_session_id` | FK -> `agent_sessions.id` |
+| `binding.ownerUserId` | `owner_user_id` | Boss user id (nullable; adapter-specific) |
+| `binding.updatedAt` | `updated_at` | Unix epoch ms |
+
+Unique key: `(agent_name, adapter_type, chat_id)`.
+
+### `channel_session_links`
+
+Visibility/history relation used by `/sessions` tab scopes:
+
+| Code (TypeScript) | SQLite column | Notes |
+|-------------------|-------------|-------|
+| `link.agentName` | `agent_name` | Owner agent |
+| `link.adapterType` | `adapter_type` | Channel adapter |
+| `link.chatId` | `chat_id` | Channel chat id |
+| `link.sessionId` | `session_id` | FK -> `agent_sessions.id` |
+| `link.ownerUserId` | `owner_user_id` | Boss user id (nullable) |
+| `link.firstSeenAt` | `first_seen_at` | Unix epoch ms |
+| `link.lastSeenAt` | `last_seen_at` | Unix epoch ms |
+
+Unique key: `(agent_name, adapter_type, chat_id, session_id)`.
 
 ---
 
@@ -155,7 +206,7 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 | `agent.provider` | `provider` | `claude` or `codex` |
 | `agent.model` | `model` | Nullable; `NULL` means “use provider default model” |
 | `agent.reasoningEffort` | `reasoning_effort` | See `src/agent/types.ts` for allowed values; `NULL` means “use provider default reasoning effort” |
-| `agent.permissionLevel` | `permission_level` | `restricted`, `standard`, `privileged`, `boss` |
+| `agent.permissionLevel` | `permission_level` | `restricted`, `standard`, `privileged`, `admin` |
 | `agent.sessionPolicy` | `session_policy` | JSON (nullable) |
 | `agent.role` | `metadata.role` | `speaker` or `leader` (stored in metadata JSON) |
 | `agent.createdAt` | `created_at` | Unix epoch ms (UTC) |
@@ -212,22 +263,8 @@ Clearing nullable overrides:
   - `boss-timezone: <iana>`
   - `speaker-agent-token:`
   - `leader-agent-token:`
-  - `boss-token:`
-- `hiboss setup --config-file ... --dry-run` prints parseable diff keys including:
-  - `dry-run: true`
-  - `first-apply:`
-  - `current-agent-count:`
-  - `desired-agent-count:`
-  - `removed-agents:`
-  - `recreated-agents:`
-  - `new-agents:`
-  - `current-binding-count:`
-  - `desired-binding-count:`
-- `hiboss setup --config-file ...` (apply) prints the same summary keys with `dry-run: false`, plus per-agent token lines:
-  - `agent-name:`
-  - `agent-role:`
-  - `agent-token:` (printed once)
-- `hiboss setup export` never writes `boss-token` or `agent-token` into exported files.
+  - `admin-token:`
+- Setup writes canonical config to `{{HIBOSS_DIR}}/settings.json` (`version: 4`) and mirrors to SQLite runtime cache.
 - `hiboss agent delete` prints:
   - `success: true|false`
   - `agent-name:`
@@ -263,7 +300,7 @@ Table: `agent_bindings` (see `src/daemon/db/schema.ts`)
 |-------------------|-------------|-------|
 | `binding.id` | `id` | UUID |
 | `binding.agentName` | `agent_name` | Agent name |
-| `binding.adapterType` | `adapter_type` | e.g. `telegram` |
+| `binding.adapterType` | `adapter_type` | e.g. `telegram`, `wechatpadpro` |
 | `binding.adapterToken` | `adapter_token` | Adapter credential |
 | `binding.createdAt` | `created_at` | Unix epoch ms (UTC) |
 
@@ -317,11 +354,13 @@ Command flags:
 
 ### CLI Output Keys
 
-`hiboss daemon status` prints:
-- `running:`
-- `start-time:` (boss timezone offset or `(none)`)
-- `adapters:`
-- `data-dir:`
+`hiboss daemon status` output depends on runtime mode:
+- Managed mode (`settings.runtime.deployment.mode` is configured): runtime-manager status output (`docker compose ps` or `pm2 describe`)
+- Direct mode (no managed deployment configured):
+  - `running:`
+  - `start-time:` (boss timezone offset or `(none)`)
+  - `adapters:`
+  - `data-dir:`
 
 `hiboss daemon start` (startup failure path) may print:
 - `error:` (human-readable startup failure details; can include remediation guidance)

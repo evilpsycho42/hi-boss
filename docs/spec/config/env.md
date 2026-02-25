@@ -2,7 +2,7 @@
 
 ## `HIBOSS_TOKEN`
 
-Default token for CLI commands when `--token` is omitted (agent or boss token).
+Default token for CLI commands when `--token` is omitted (agent or admin token).
 
 Used by most commands that talk to the daemon, including:
 - `hiboss envelope send`
@@ -17,6 +17,39 @@ Overrides the Hi-Boss root directory (default: `~/hiboss`).
 Notes:
 - Must be an absolute path, or start with `~`.
 - The daemon stores internal state under `{{HIBOSS_DIR}}/.daemon/`.
+
+---
+
+## `HIBOSS_UI_LOCALE`
+
+UI/system-message locale for fixed non-AI text.
+
+Supported values:
+- `en` (default)
+- `zh-CN` (also accepts `zh` / `zh_cn`)
+
+Current scope:
+- Telegram slash-command descriptions (`/new`, `/sessions`, `/session`, `/status`, `/abort`, `/isolated`, `/clone`)
+- Channel fixed system messages (for example unbound-adapter guidance, `/new` ack, oneshot usage/errors)
+
+Notes:
+- If set, this environment variable overrides `config.ui_locale` when present.
+- Parseable CLI output keys remain stable English `kebab-case` (see `docs/spec/cli/conventions.md`).
+
+---
+
+## WeChatPadPro adapter env
+
+Used by `wechatpadpro` bindings when adapter token JSON omits these fields:
+
+- `HIBOSS_WECHATPADPRO_BASE_URL`
+- `HIBOSS_WECHATPADPRO_WEBHOOK_LISTEN_HOST`
+- `HIBOSS_WECHATPADPRO_WEBHOOK_LISTEN_PORT`
+- `HIBOSS_WECHATPADPRO_WEBHOOK_PUBLIC_BASE_URL`
+- `HIBOSS_WECHATPADPRO_WEBHOOK_SECRET`
+- `HIBOSS_WECHATPADPRO_WEBHOOK_INCLUDE_SELF`
+
+Ingress mode is webhook-only.
 
 ---
 

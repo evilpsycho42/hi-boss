@@ -156,3 +156,17 @@ prompts/examples/*
 # Generated CLI examples
 examples/cli/*
 !examples/cli/.gitkeep
+
+# Brainstorm & plan documents (personal workflow artifacts)
+docs/brainstorms/
+docs/plans/
+
+# Serena IDE config
+.serena/
+
+# Local agent instruction files should remain local-only
+AGENTS.md
+CLAUDE.md
+
+# Local prompt backup snapshots
+prompts.bak.*/

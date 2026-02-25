@@ -68,7 +68,7 @@ async function main(): Promise<void> {
     // System prompt examples
     // =============================================================================
 
-    const permissionLevels = ["restricted", "standard", "privileged", "boss"] as const;
+    const permissionLevels = ["restricted", "standard", "privileged", "admin"] as const;
     const adapterConfigs = [
       { name: "none", bindings: [] as typeof bindings },
       { name: "telegram", bindings },

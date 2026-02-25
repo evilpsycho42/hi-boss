@@ -4,158 +4,112 @@ This document describes how Hi-Boss manages agent sessions.
 
 ## Overview
 
-Hi-Boss caches sessions **in-memory** for performance, and also persists a **minimal session handle** (thread/session id + metadata) to enable **best-effort resume across daemon restarts** (when the provider supports it).
+Hi-Boss now supports **channel-scoped active sessions**:
 
-Envelope delivery remains the priority: if session resume fails (missing/expired session id, provider error, etc), Hi-Boss falls back to starting a fresh session so envelopes still get processed.
+- `channel:*` envelopes use a per-chat active mapping (`agent + adapter + chat-id -> active session`)
+- multiple chats can intentionally point to the same session
+- non-channel sources (for example agent↔agent / cron inline) use a default per-agent session bucket
+
+Session IDs are UUID-backed internally and shown as short IDs in operator-facing surfaces.
 
 ## Session Lifecycle
 
 ### Creation
 
-Sessions are created on-demand when an agent needs to process envelopes:
+Sessions are created on-demand when an agent processes due envelopes:
 
-1. `AgentExecutor.getOrCreateSession()` checks if a session exists in memory
-2. If not (or if refresh is needed), generates system instructions as an inline string (including an injected `internal_space/MEMORY.md` snapshot)
-3. If the agent has a persisted `sessionHandle` and session policy allows it, sets `sessionId` so the next turn will run the provider CLI in resume mode (`claude -r` / `codex exec resume`)
-4. Otherwise, starts fresh (no `sessionId`)
-5. Caches the session in memory by agent name
-6. On each turn, spawns a CLI process with system instructions injected via flags, captures the resulting session/thread ID from output, and persists it for best-effort resume:
-   - Claude: `--append-system-prompt`
-   - Codex: `-c developer_instructions=...`
+1. The executor reads due envelopes for an agent.
+2. Envelopes are grouped by target session scope.
+3. For `channel:*` envelopes, Hi-Boss resolves/creates active session via `channel_session_bindings`.
+4. For non-channel envelopes, Hi-Boss uses the default per-agent session bucket.
+5. A runtime session object is loaded or created and reused for that scope.
+6. Provider session/thread id is updated from CLI output after each successful run.
 
 ### Reuse
 
-Existing sessions are reused for subsequent envelope processing, subject to refresh policies.
+- Reuse is scope-local: same scope reuses the same runtime session object.
+- Different scopes can run concurrently.
+- If two chats are mapped to the same session id, they share context and execute serially.
 
 ### Refresh
 
-Sessions are refreshed (disposed and recreated) when:
+Sessions are refreshed when:
 
 | Trigger | Description |
 |---------|-------------|
-| `dailyResetAt` | Configured time of day (e.g., `"09:00"`) |
-| `idleTimeout` | No activity for configured duration (e.g., `"2h"`) |
-| `maxContextLength` | Context length exceeds threshold (evaluated after a successful run; uses `agent_runs.context_length` when available; skipped when missing) |
-| Manual `/new` | Boss sends `/new` command via Telegram |
-| Daemon restart | In-memory sessions are lost; Hi-Boss attempts to resume from persisted `sessionHandle` when possible |
-
-### Disposal
-
-Sessions are disposed when:
-- Refresh is triggered
-- Daemon shuts down
+| `dailyResetAt` | Configured time of day |
+| `idleTimeout` | No activity for configured duration |
+| `maxContextLength` | Context-length threshold exceeded |
+| Manual `/new` | Creates and switches current chat to a fresh active session |
+| Manual `/session <id>` | Switches current chat to a selected visible session |
+| Daemon restart | Runtime cache is rebuilt from DB state |
 
 ## Storage
 
-### In-Memory (Ephemeral)
+### In-memory (runtime)
 
-Located in `src/agent/executor.ts`:
+`src/agent/executor.ts` keeps:
 
-```typescript
-private sessions: Map<string, AgentSession> = new Map();
-private agentLocks: Map<string, Promise<void>> = new Map();
-private pendingSessionRefresh: Map<string, SessionRefreshRequest> = new Map();
-```
+- default session cache (non-channel)
+- channel session cache (session-id keyed)
+- per-session serialization locks
+- global/per-agent concurrency semaphores
 
-Session structure:
+### SQLite (durable)
 
-```typescript
-interface AgentSession {
-  provider: "claude" | "codex";
-  agentToken: string;
-  systemInstructions: string;
-  workspace: string;
-  model?: string;
-  reasoningEffort?: string;
-  childProcess?: ChildProcess;
-  sessionId?: string;
-  createdAtMs: number;
-  lastRunCompletedAtMs?: number;
-}
-```
+Core session tables:
 
-### Persistent (Survives Restart)
+- `agent_sessions`
+  - session registry (`provider`, `provider_session_id`, `last_active_at`)
+- `channel_session_bindings`
+  - current active mapping per `(agent_name, adapter_type, chat_id)`
+- `channel_session_links`
+  - visibility/history links for listing/filtering session scopes
 
-- **Database** (`~/hiboss/.daemon/hiboss.db`): Agent metadata, envelope queue, bindings, session policies
-- **Agent directories**: Persona and memory files (see [Agents](agent.md#home-directories))
+Legacy best-effort default resume handle remains in `agents.metadata.sessionHandle` for default per-agent scope.
 
-Session resume uses a small record stored in `agents.metadata.sessionHandle`:
+## Session Listing / Switching (Channel Commands)
 
-```json
-{
-  "version": 1,
-  "provider": "codex",
-  "handle": {
-    "provider": "codex",
-    "sessionId": "<thread id>",
-    "metadata": {
-      "codexCumulativeUsage": {
-        "inputTokens": 12105,
-        "cachedInputTokens": 2816,
-        "outputTokens": 79
-      }
-    }
-  },
-  "createdAtMs": 0,
-  "lastRunCompletedAtMs": 0,
-  "updatedAtMs": 0
-}
-```
+Boss-only commands:
 
-Notes:
-- The record is updated after successful runs (best-effort).
-- `handle.metadata` is provider-specific; for Codex it can include `codexCumulativeUsage` to compute per-turn token usage deltas from cumulative `turn.completed.usage` totals.
-- A manual refresh (`/new`) or policy refresh clears the persisted handle so the next run starts fresh.
-- If the agent’s configured provider changes while a persisted handle exists, Hi-Boss may still resume the legacy provider session (best-effort) until the session is refreshed.
-
-## Daemon Restart Recovery
-
-When the daemon starts, `processPendingEnvelopes()` handles recovery:
-
-1. Iterates through all registered agents
-2. Queries database for pending envelopes
-3. Triggers agent runs for any agent with pending work
-4. New sessions are created automatically as needed
-
-This ensures no envelopes are lost during daemon downtime.
-
-## Session Policy Evaluation
-
-Session policies are configured per-agent (see [Agents](agent.md#session-policy)).
-
-Before starting a run, `getRefreshReasonForPolicy()` in `src/agent/executor-support.ts` checks (called from `src/agent/executor-session.ts`):
-
-1. **Daily reset**: Has the configured reset time passed since session creation?
-2. **Idle timeout**: Has the session been inactive longer than the threshold?
-
-If any condition is met, the session is marked for refresh.
-
-After a successful run completes, the daemon may also refresh the session based on `maxContextLength` (context length threshold), so the *next* run starts fresh.
+- `/sessions`
+  - 3 tabs: `current-chat`, `my-chats`, `agent-all`
+  - pagination: 10 per page, up to 100 sessions
+  - sorted by `last-active-at` desc
+  - accepts both syntaxes:
+    - `tab=current-chat page=2`
+    - `--tab current-chat --page 2`
+  - Telegram supports inline keyboard callbacks; other adapters use text-only interaction
+- `/session <session-id>`
+  - accepts short id / prefix / full UUID
+  - switches current chat binding to target session if visible
+- `/new`
+  - switches current chat to a new fresh session and returns old/new ids
 
 ## Concurrency
 
-- Per-agent queue locks ensure no concurrent runs for the same agent
-- Multiple agents can run concurrently
-- Refresh requests are queued and processed after the current run completes
+Execution model:
+
+- **Across sessions:** parallel (bounded)
+- **Within one session:** strictly serial (ordering preserved)
+
+Default limits (configurable via settings runtime block):
+
+- per-agent: `4`
+- global: `16`
+
+Config keys mirrored into SQLite config cache:
+
+- `runtime_session_concurrency_per_agent`
+- `runtime_session_concurrency_global`
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `src/agent/executor.ts` | Session creation, caching, refresh, disposal |
-| `src/shared/session-policy.ts` | Policy definitions and parsing |
-| `src/daemon/daemon.ts` | Restart recovery via `processPendingEnvelopes()` |
-
-## Design Rationale
-
-**Why ephemeral sessions?**
-
-1. **Simplicity**: No complex session serialization/deserialization
-2. **Reliability**: Fresh sessions avoid accumulated state corruption
-3. **Envelope guarantee**: Database-backed envelope queue ensures delivery regardless of session state
-4. **Policy flexibility**: Easy to implement refresh policies without migration concerns
-
-**Trade-offs:**
-
-- Conversation context is still lost on session refresh, and daemon restart resume is best-effort (may fall back to fresh session)
-- Agents must rely on envelope history (via CLI) for continuity, not session memory
+| `src/agent/executor.ts` | Session scope resolution, execution scheduling, concurrency limits |
+| `src/daemon/db/database.ts` | Session registry/binding/link persistence |
+| `src/daemon/channel-commands.ts` | `/new`, `/sessions`, `/session` behavior |
+| `src/adapters/telegram.adapter.ts` | Telegram command + callback wiring |
+| `src/adapters/wechatpadpro.adapter.ts` | WeChatPadPro command + message wiring (webhook-only) |
+| `src/shared/settings.ts` | runtime session concurrency parsing/validation |

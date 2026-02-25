@@ -1,5 +1,19 @@
 # Hi-Boss: Developer / Agent Guide
 
+> Runtime topology (current)
+  - Primary runtime host: Windows (Tailscale `100.72.210.95`)
+  - Public ingress host: Rainyun HK (Tailscale `100.79.90.57`, public `38.175.194.51`)
+  - Public entry: `https://hiboss.ethanelift.com` -> Rainyun Caddy -> Windows `:1201` (via Tailscale)
+
+> Companion services topology (migration target)
+  - `hiboss-daemon` (Docker Compose; service/container: `hiboss-daemon`) runs on Windows host.
+  - `outlook-rss` (PM2, port `1201`) runs on Windows WSL2 host.
+  - `wechatpadpro` + `mysql` + `redis` (Docker Compose) run on Windows Docker.
+  - `telegram-bot-api` (Docker) runs on Windows Docker.
+  - `rsshub` + `redis` (Docker Compose) run on Windows Docker.
+  - `xiaohongshu-mcp` (Docker Compose) runs on Windows Docker.
+  - Rainyun remains ingress-only (Caddy TLS + reverse proxy over Tailscale).
+
 Hi-Boss is a local daemon + `hiboss` CLI for routing durable messages (“envelopes”) between agents and chat channels (e.g., Telegram).
 
 ## Global rules (source of truth)
@@ -88,6 +102,91 @@ hiboss daemon start --token <boss-token>
 hiboss agent register --token <boss-token> --name nex --description "AI assistant" --workspace "$PWD"
 ```
 
+## Windows access & runtime operations
+
+Use this as the authoritative runbook for the current Windows-primary runtime.
+
+Access Windows (Termius/SSH):
+- Connect to Windows host via Tailscale: `ssh administrator@100.72.210.95`
+- Runtime base dir on Windows: `C:\hiboss`
+- Repo on Windows: `C:\hiboss\agents\Shieru\workspace\hi-boss-dev`
+
+`hiboss` command model (important):
+- Use only daemon subcommands: `hiboss daemon start|stop|status --token <boss-token>`.
+- Do not use `hiboss start`.
+- On this host, `hiboss daemon start/stop/status` is the canonical entrypoint and manages Docker-backed daemon lifecycle.
+
+Apply code changes on Windows (after Syncthing has synced code):
+```powershell
+cd C:\hiboss\agents\Shieru\workspace\hi-boss-dev
+npx tsc
+npm link
+hiboss daemon stop --token <boss-token>
+hiboss daemon start --token <boss-token>
+hiboss daemon status --token <boss-token>
+docker logs hiboss-daemon --tail 80
+```
+
+Windows build note:
+- Do **not** run `npm run build` directly in Windows cmd/PowerShell for runtime apply.
+- This repo has `postbuild: chmod +x dist/bin/hiboss.js`, and `chmod` is unavailable in native Windows shells.
+- Use `npx tsc` (or run `npm run build` only inside a Unix-like shell where `chmod` exists).
+
+If `hiboss` CLI points to a broken link/module on Windows:
+```powershell
+cd C:\hiboss\agents\Shieru\workspace\hi-boss-dev
+npm i
+npx tsc
+npm link
+hiboss --version
+```
+
+Quick recovery for daemon issues:
+```powershell
+hiboss daemon stop --token <boss-token>
+hiboss daemon start --token <boss-token>
+hiboss daemon status --token <boss-token>
+docker logs hiboss-daemon --tail 200
+```
+
+Syncthing current setup (Mac <-> Windows bidirectional):
+- Windows runs native Syncthing binary via Task Scheduler task `Syncthing` (not Docker).
+- Windows Syncthing paths:
+  - binary: `C:\hiboss\services\syncthing-native\bin\syncthing.exe`
+  - home/config: `C:\hiboss\services\syncthing-native\home`
+  - log: `C:\hiboss\services\syncthing-native\syncthing.log`
+- Folder mode: `hiboss` folder on `C:\hiboss`, type `sendreceive`, with versioning enabled (`staggered`).
+
+Check Syncthing service health on Windows:
+```powershell
+Get-ScheduledTask -TaskName Syncthing | Select-Object TaskName,State
+Get-Process syncthing
+Get-Content C:\hiboss\services\syncthing-native\syncthing.log -Tail 80
+```
+
+Check Syncthing sync status on Windows (queue should converge to 0):
+```powershell
+[xml]$cfg = Get-Content C:\hiboss\services\syncthing-native\home\config.xml
+$apiKey = $cfg.configuration.gui.apikey
+Invoke-RestMethod -Headers @{ "X-API-Key" = $apiKey } -Uri "http://127.0.0.1:8384/rest/db/status?folder=hiboss"
+```
+
+`rest/db/status` healthy expectation:
+- `state` eventually becomes `idle`
+- `needFiles/needDirectories/needDeletes/needBytes` become `0`
+
+`.stignore` policy reminders:
+- Keep `.stignore` identical on both ends (Mac and Windows).
+- `credentials.md` is intentionally **not** ignored.
+- Ignore cross-platform problematic entries (`._*`, `__MACOSX`, `nul/NUL`, etc.) to avoid Windows sync stalls.
+
+Ingress note:
+- Rainyun host is ingress-only (Caddy/TLS + reverse proxy). Do not treat Rainyun as canonical runtime state.
+
+Credentials policy:
+- Read server credentials from local private knowledge files (for Shieru: `agents/Shieru/internal_space/knowledge/credentials.md`).
+- Never copy passwords/tokens/keys into repo files, specs, plans, commits, or PR comments.
+
 Useful checks (run when relevant):
 - `npm run typecheck`
 - `npm run prompts:check`
@@ -145,19 +244,29 @@ Suggestion helper:
 
 ## State & debugging
 
-Default data dir: `~/hiboss/` (override via `HIBOSS_DIR`; no `--data-dir` flag today)
+Default data dir:
+- Windows runtime: `C:\\hiboss` (recommended)
+- Linux/macOS runtime: `~/hiboss`
+- Override via `HIBOSS_DIR` (no `--data-dir` flag today)
 
 | Item | Path |
 |------|------|
-| DB | `~/hiboss/.daemon/hiboss.db` |
-| IPC socket | `~/hiboss/.daemon/daemon.sock` |
-| Daemon PID | `~/hiboss/.daemon/daemon.pid` |
-| Daemon log | `~/hiboss/.daemon/daemon.log` |
-| Media downloads | `~/hiboss/media/` |
-| Boss profile (optional) | `~/hiboss/BOSS.md` |
-| Per-agent homes | `~/hiboss/agents/<agent-name>/` |
+| DB | `<HIBOSS_DIR>/.daemon/hiboss.db` |
+| IPC socket | `<HIBOSS_DIR>/.daemon/daemon.sock` |
+| Daemon PID | `<HIBOSS_DIR>/.daemon/daemon.pid` |
+| Daemon log | `<HIBOSS_DIR>/.daemon/daemon.log` |
+| Media downloads | `<HIBOSS_DIR>/media/` |
+| Boss profile (optional) | `<HIBOSS_DIR>/BOSS.md` |
+| Per-agent homes | `<HIBOSS_DIR>/agents/<agent-name>/` |
 
 Reset:
 ```bash
-hiboss daemon stop --token <boss-token> && rm -rf ~/hiboss && hiboss setup
+hiboss daemon stop --token <boss-token> && rm -rf "<HIBOSS_DIR>" && hiboss setup
+```
+Windows PowerShell reset:
+```powershell
+hiboss daemon stop --token <boss-token>
+$dir = if ($env:HIBOSS_DIR) { $env:HIBOSS_DIR } else { "C:\hiboss" }
+Remove-Item -Recurse -Force $dir
+hiboss setup
 ```

@@ -21,7 +21,7 @@ Flags:
 
 Notes:
 - Sender identity is derived from the authenticated **agent token**.
-- Boss tokens cannot send envelopes via `hiboss envelope send`; to message an agent as a human/boss, send via a channel adapter (e.g., Telegram).
+- Admin tokens cannot send envelopes via `hiboss envelope send`; to message an agent as a human/boss, send via a channel adapter (e.g., Telegram).
 - Sending to `agent:<name>` fails fast if the agent does not exist (`NOT_FOUND`) or the address is invalid (`INVALID_PARAMS`).
 
 Output (parseable):
@@ -74,7 +74,7 @@ Notes:
 - `hiboss envelope list` only lists envelopes where the authenticated agent is either the sender (`from: agent:<name>`) or the recipient (`to: agent:<name>`).
 - Listing with `--from <address> --status pending` is treated as a work-queue read: the daemon returns **due** pending envelopes and immediately acknowledges what it returns (marks them `done`, at-most-once) so they won’t be reprocessed.
 - Envelope instructions do not include a `status:` field; agents should rely on the `--status` flag they requested.
-- Boss tokens cannot list envelopes (use an agent token).
+- Admin tokens cannot list envelopes (use an agent token).
 
 Flags:
 - Exactly one of:

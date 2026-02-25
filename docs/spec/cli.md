@@ -24,11 +24,9 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | Command | Purpose | Token required? | Default permission |
 |--------|---------|-----------------|--------------------|
 | `hiboss setup` | Initialize Hi-Boss (interactive first-time bootstrap) | No (bootstrap) | n/a |
-| `hiboss setup export` | Export current setup config (`version: 2`) | No | n/a |
-| `hiboss setup --config-file <path> --token <boss-token> [--dry-run]` | Validate/apply declarative setup config (`version: 2`) | Yes (`--token` or `HIBOSS_TOKEN`) | n/a |
-| `hiboss daemon start` | Start the daemon | Yes (boss-privileged token) | boss |
-| `hiboss daemon stop` | Stop the daemon | Yes (boss-privileged token) | boss |
-| `hiboss daemon status` | Show daemon status | Yes (boss-privileged token) | boss |
+| `hiboss daemon start` | Start daemon runtime (managed via `runtime.deployment.mode` when configured; otherwise local daemon process) | Yes (admin-privileged token) | admin |
+| `hiboss daemon stop` | Stop daemon runtime (managed via `runtime.deployment.mode` when configured; otherwise local daemon process) | Yes (admin-privileged token) | admin |
+| `hiboss daemon status` | Show daemon runtime status (managed via `runtime.deployment.mode` when configured; otherwise local daemon status keys) | Yes (admin-privileged token) | admin |
 | `hiboss envelope send` | Send an envelope | Yes (agent token) | restricted |
 | `hiboss envelope list` | List envelopes | Yes (agent token) | restricted |
 | `hiboss envelope thread` | Show envelope thread | Yes (agent token) | restricted |
@@ -39,14 +37,16 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | `hiboss cron disable` | Disable a cron schedule | Yes (agent token) | restricted |
 | `hiboss cron delete` | Delete a cron schedule | Yes (agent token) | restricted |
 | `hiboss reaction set` | Set a reaction on a channel message | Yes (agent token) | restricted |
-| `hiboss agent register` | Register a new agent | Yes (boss-privileged token) | boss |
-| `hiboss agent set` | Update agent settings and bindings | Yes (agent/boss token) | privileged |
-| `hiboss agent list` | List agents | Yes (agent/boss token) | restricted |
-| `hiboss agent status` | Show agent state/health | Yes (agent/boss token) | restricted |
-| `hiboss agent abort` | Cancel current run + clear pending inbox | Yes (boss token) | boss |
-| `hiboss agent delete` | Delete an agent | Yes (boss-privileged token) | boss |
+| `hiboss agent register` | Register a new agent | Yes (admin-privileged token) | admin |
+| `hiboss agent set` | Update agent settings and bindings | Yes (agent/admin token) | privileged |
+| `hiboss agent list` | List agents | Yes (agent/admin token) | restricted |
+| `hiboss agent status` | Show agent state/health | Yes (agent/admin token) | restricted |
+| `hiboss agent abort` | Cancel current run + clear pending inbox | Yes (admin token) | admin |
+| `hiboss agent delete` | Delete an agent | Yes (admin-privileged token) | admin |
 
-Note: `hiboss daemon start` prints startup failure guidance directly in CLI when available (for example missing-role remediation), and also writes details to `daemon.log`.
+Notes:
+- `hiboss daemon start|stop|status` auto-detect managed deployment via `settings.json` (`runtime.deployment.mode`: `docker` or `pm2`) and delegate to that runtime when configured.
+- `hiboss daemon start` prints startup failure guidance directly in CLI when available (for example missing-role remediation), and also writes details to `daemon.log` when running in direct local-daemon mode.
 
 ---
 
