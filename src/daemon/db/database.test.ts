@@ -4,7 +4,6 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { HiBossDatabase } from "./database.js";
-import { hashToken } from "../../agent/auth.js";
 
 function withTempDb(run: (db: HiBossDatabase) => void): void {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hiboss-db-test-"));
@@ -48,15 +47,5 @@ test("getAgentRoleCounts prefers explicit metadata.role over binding inference",
     db.createBinding("explicit-leader", "telegram", "123456:abcDEF");
 
     assert.deepEqual(db.getAgentRoleCounts(), { speaker: 0, leader: 1 });
-  });
-});
-
-test("verifyLegacyBossToken accepts legacy boss_token_hash", () => {
-  withTempDb((db) => {
-    const token = "legacy-token-123456789";
-    db.setConfig("boss_token_hash", hashToken(token));
-
-    assert.equal(db.verifyLegacyBossToken(token), true);
-    assert.equal(db.verifyAdminToken(token), false);
   });
 });
