@@ -76,30 +76,38 @@ ${HIBOSS_DIR:-$HOME/hiboss}/
 
 修复 / 重置：
 - 健康 setup 重跑（安全无副作用）：`hiboss setup`
-- setup 异常/不完整（非破坏）建议走配置导出+回放流程：
+- setup 异常/不完整（非破坏）建议直接编辑 `settings.json`：
 
 ```bash
 hiboss daemon stop --token <boss-token>
-hiboss setup export --out ./hiboss.setup.json
-# 编辑 ./hiboss.setup.json
-hiboss setup --config-file ./hiboss.setup.json --token <boss-token> --dry-run
-hiboss setup --config-file ./hiboss.setup.json --token <boss-token>
+# 编辑 ${HIBOSS_DIR:-$HOME/hiboss}/settings.json
 hiboss daemon start --token <boss-token>
 ```
 
-- 旧版单 Agent Telegram 场景（只有 speaker，没有 leader）的标准修复模板。保存为 `./hiboss.repair.v2.json`，并填写占位符：
+- 单 Agent Telegram 场景（只有 speaker，没有 leader）的标准修复模板。保存为 `./hiboss.repair.v3.json`，填写占位符后复制到 `${HIBOSS_DIR:-$HOME/hiboss}/settings.json`：
 
 ```json
 {
-  "version": 2,
-  "boss-name": "<your-name>",
-  "boss-timezone": "<IANA-timezone>",
+  "version": 3,
+  "boss": {
+    "name": "<your-name>",
+    "timezone": "<IANA-timezone>",
+    "token": "<boss-token>"
+  },
   "telegram": {
-    "adapter-boss-id": "<telegram-username-without-@>"
+    "boss-ids": ["<telegram-username-without-@>"]
+  },
+  "permission-policy": {
+    "version": 1,
+    "operations": {
+      "envelope.send": "restricted",
+      "agent.register": "boss"
+    }
   },
   "agents": [
     {
       "name": "nex",
+      "token": "<speaker-agent-token>",
       "role": "speaker",
       "provider": "<claude-or-codex>",
       "description": "Telegram speaker agent",
@@ -116,6 +124,7 @@ hiboss daemon start --token <boss-token>
     },
     {
       "name": "kai",
+      "token": "<leader-agent-token>",
       "role": "leader",
       "provider": "<claude-or-codex>",
       "description": "Background leader agent",
@@ -131,12 +140,9 @@ hiboss daemon start --token <boss-token>
 
 ```bash
 hiboss daemon stop --token <boss-token>
-hiboss setup --config-file ./hiboss.repair.v2.json --token <boss-token> --dry-run
-hiboss setup --config-file ./hiboss.repair.v2.json --token <boss-token>
+cp ./hiboss.repair.v3.json "${HIBOSS_DIR:-$HOME/hiboss}/settings.json"
 hiboss daemon start --token <boss-token>
 ```
-
-说明：setup config apply 是全量对齐（full reconcile），会重新生成 agent token（只打印一次）。
 
 完整重置（破坏性）：
 

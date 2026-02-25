@@ -1,8 +1,9 @@
 import type { AgentRole } from "../../../shared/agent-role.js";
+import type { KnownAdapterType } from "../../../shared/adapter-types.js";
 
 export type SetupProvider = "claude" | "codex";
 export type SetupReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
-export type SetupPermissionLevel = "restricted" | "standard" | "privileged" | "boss";
+export type SetupPermissionLevel = "restricted" | "standard" | "privileged" | "admin";
 
 export interface SetupSessionPolicy {
   dailyResetAt?: string;
@@ -24,7 +25,7 @@ export interface SetupAgentConfig {
 }
 
 export interface SetupBindingConfig {
-  adapterType: string;
+  adapterType: KnownAdapterType;
   adapterToken: string;
 }
 
@@ -37,42 +38,9 @@ export interface SetupConfig {
   speakerAgent: Omit<SetupAgentConfig, "role">;
   leaderAgent: Omit<SetupAgentConfig, "role">;
   adapter: {
-    adapterType: string;
+    adapterType: KnownAdapterType;
     adapterToken: string;
-    adapterBossId: string;
+    adapterBossIds: string[];
   };
-  bossToken: string;
-}
-
-export interface SetupDeclarativeAgentConfig extends SetupAgentConfig {
-  bindings: SetupBindingConfig[];
-}
-
-export interface SetupDeclarativeConfig {
-  version: 2;
-  bossName: string;
-  bossTimezone: string;
-  telegramBossId: string;
-  agents: SetupDeclarativeAgentConfig[];
-}
-
-export interface SetupDryRunDiff {
-  firstApply: boolean;
-  currentAgentNames: string[];
-  desiredAgentNames: string[];
-  removedAgentNames: string[];
-  recreatedAgentNames: string[];
-  newlyCreatedAgentNames: string[];
-  currentBindingCount: number;
-  desiredBindingCount: number;
-}
-
-export interface SetupReconcileResult {
-  dryRun: boolean;
-  diff: SetupDryRunDiff;
-  generatedAgentTokens: Array<{
-    name: string;
-    role: AgentRole;
-    token: string;
-  }>;
+  adminToken: string;
 }

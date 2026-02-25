@@ -1,17 +1,31 @@
 {
-  "version": 2,
-  "boss-name": "Kevin",
-  "boss-timezone": "Asia/Shanghai",
+  "version": 4,
+  "boss": {
+    "name": "Kevin",
+    "timezone": "Asia/Shanghai"
+  },
+  "admin": {
+    "token": "REPLACE_ME_ADMIN_TOKEN"
+  },
   "telegram": {
-    "adapter-boss-id": "kky1024"
+    "boss-ids": ["kky1024"]
+  },
+  "permission-policy": {
+    "version": 1,
+    "operations": {
+      "envelope.send": "restricted",
+      "envelope.list": "restricted",
+      "agent.register": "admin"
+    }
   },
   "agents": [
     {
       "name": "test-claude",
+      "token": "REPLACE_ME_TEST_CLAUDE_TOKEN",
       "role": "speaker",
       "provider": "claude",
       "description": "test-claude (claude/sonnet)",
-      "workspace": "/Users/kky/Dev/hi-boss.test-provider-runtime",
+      "workspace": "REPLACE_ME_WORKSPACE_PATH",
       "model": "sonnet",
       "reasoning-effort": "medium",
       "permission-level": "standard",
@@ -24,10 +38,11 @@
     },
     {
       "name": "leader",
+      "token": "REPLACE_ME_LEADER_TOKEN",
       "role": "leader",
       "provider": "claude",
       "description": "leader for provider runtime validation",
-      "workspace": "/Users/kky/Dev/hi-boss.test-provider-runtime",
+      "workspace": "REPLACE_ME_WORKSPACE_PATH",
       "model": null,
       "reasoning-effort": null,
       "permission-level": "standard",
