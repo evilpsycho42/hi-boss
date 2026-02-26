@@ -55,7 +55,7 @@ function withTempDb(run: (db: HiBossDatabase) => Promise<void> | void): Promise<
 
 test("channel bridge stamps channelSessionId at ingest and does not drift owner to non-boss users", async () => {
   await withTempDb(async (db) => {
-    db.registerAgent({ name: "nex", provider: "codex", role: "speaker" });
+    db.registerAgent({ name: "nex", provider: "codex" });
     db.createBinding("nex", "telegram", "bot-token");
     db.setAdapterBossIds("telegram", ["boss_user"]);
 

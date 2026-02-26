@@ -7,19 +7,12 @@ import type { Envelope, CreateEnvelopeInput, EnvelopeStatus } from "../../envelo
 import type { CronSchedule, CreateCronScheduleInput } from "../../cron/types.js";
 import type { SessionPolicyConfig } from "../../shared/session-policy.js";
 import {
-  BACKGROUND_AGENT_NAME,
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
   DEFAULT_SESSION_CONCURRENCY_GLOBAL,
   DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
   getDefaultAgentDescription,
 } from "../../shared/defaults.js";
-import type { AgentRole } from "../../shared/agent-role.js";
-import {
-  inferAgentRoleFromBindingCount,
-  parseAgentRoleFromMetadata,
-  withAgentRoleMetadata,
-} from "../../shared/agent-role.js";
 import { generateToken, hashToken, verifyToken } from "../../agent/auth.js";
 import { generateUUID } from "../../shared/uuid.js";
 import { assertValidAgentName } from "../../shared/validation.js";
@@ -51,6 +44,7 @@ interface EnvelopeRow {
   from_boss: number;
   content_text: string | null;
   content_attachments: string | null;
+  priority: number | null;
   deliver_at: number | null;
   status: string;
   created_at: number;
@@ -212,8 +206,15 @@ export class HiBossDatabase {
 
   private initSchema(): void {
     this.db.exec(SCHEMA_SQL);
+    this.ensureEnvelopePriorityColumn();
     this.assertSchemaCompatible();
     this.reconcileStaleAgentRunsOnStartup();
+  }
+
+  private ensureEnvelopePriorityColumn(): void {
+    const info = this.db.prepare("PRAGMA table_info(envelopes)").all() as Array<{ name: string }>;
+    if (info.some((col) => col.name === "priority")) return;
+    this.db.prepare("ALTER TABLE envelopes ADD COLUMN priority INTEGER DEFAULT 0").run();
   }
 
   private assertSchemaCompatible(): void {
@@ -240,6 +241,7 @@ export class HiBossDatabase {
         "from_boss",
         "content_text",
         "content_attachments",
+        "priority",
         "deliver_at",
         "status",
         "created_at",
@@ -308,6 +310,7 @@ export class HiBossDatabase {
       { table: "agents", column: "last_seen_at" },
       { table: "agent_bindings", column: "created_at" },
       { table: "envelopes", column: "created_at" },
+      { table: "envelopes", column: "priority" },
       { table: "envelopes", column: "deliver_at" },
       { table: "cron_schedules", column: "created_at" },
       { table: "cron_schedules", column: "updated_at" },
@@ -473,11 +476,7 @@ export class HiBossDatabase {
           metadataInput.sessionHandle = existingSessionHandle;
         }
 
-        const metadata = withAgentRoleMetadata({
-          metadata: metadataInput,
-          role: agent.role,
-          stripSessionHandle: false,
-        });
+        const metadata = Object.keys(metadataInput).length > 0 ? metadataInput : undefined;
 
         upsertAgentStmt.run(
           agent.name,
@@ -540,9 +539,6 @@ export class HiBossDatabase {
    */
   registerAgent(input: RegisterAgentInput): { agent: Agent; token: string } {
     assertValidAgentName(input.name);
-    if (input.name.trim().toLowerCase() === BACKGROUND_AGENT_NAME) {
-      throw new Error(`Reserved agent name: ${BACKGROUND_AGENT_NAME}`);
-    }
 
     const existing = this.getAgentByNameCaseInsensitive(input.name);
     if (existing) {
@@ -551,11 +547,11 @@ export class HiBossDatabase {
 
     const token = generateToken();
     const createdAt = Date.now();
-    const metadataWithRole = withAgentRoleMetadata({
-      metadata: input.metadata,
-      role: input.role,
-      stripSessionHandle: true,
-    });
+    const metadataWithSessionTrimmed = (() => {
+      const base = input.metadata ? { ...input.metadata } : {};
+      delete (base as Record<string, unknown>).sessionHandle;
+      return Object.keys(base).length > 0 ? base : undefined;
+    })();
 
     const stmt = this.db.prepare(`
       INSERT INTO agents (name, token, description, workspace, provider, model, reasoning_effort, permission_level, session_policy, created_at, metadata)
@@ -573,7 +569,7 @@ export class HiBossDatabase {
       input.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL,
       input.sessionPolicy ? JSON.stringify(input.sessionPolicy) : null,
       createdAt,
-      metadataWithRole ? JSON.stringify(metadataWithRole) : null
+      metadataWithSessionTrimmed ? JSON.stringify(metadataWithSessionTrimmed) : null
     );
 
     const agent = this.getAgentByName(input.name)!;
@@ -641,7 +637,6 @@ export class HiBossDatabase {
       provider?: "claude" | "codex" | null;
       model?: string | null;
       reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh" | null;
-      role?: AgentRole;
     }
   ): Agent {
     const agent = this.getAgentByNameCaseInsensitive(name);
@@ -673,23 +668,13 @@ export class HiBossDatabase {
       params.push(update.reasoningEffort);
     }
 
-    if (updates.length === 0 && update.role === undefined) {
+    if (updates.length === 0) {
       return this.getAgentByName(agent.name)!;
     }
 
     if (updates.length > 0) {
       const stmt = this.db.prepare(`UPDATE agents SET ${updates.join(", ")} WHERE name = ?`);
       stmt.run(...params, agent.name);
-    }
-
-    if (update.role !== undefined) {
-      const current = this.getAgentByName(agent.name)!;
-      const nextMetadata = withAgentRoleMetadata({
-        metadata: current.metadata,
-        role: update.role,
-      });
-      const mdStmt = this.db.prepare("UPDATE agents SET metadata = ? WHERE name = ?");
-      mdStmt.run(nextMetadata ? JSON.stringify(nextMetadata) : null, agent.name);
     }
 
     return this.getAgentByName(agent.name)!;
@@ -736,12 +721,11 @@ export class HiBossDatabase {
       throw new Error("Agent not found");
     }
 
-    const role = parseAgentRoleFromMetadata(agent.metadata);
-    const withRole = withAgentRoleMetadata({
-      metadata: metadata ?? undefined,
-      role,
-      stripSessionHandle: true,
-    });
+    const withUserMetadata = (() => {
+      const base = metadata ? { ...metadata } : {};
+      delete (base as Record<string, unknown>).sessionHandle;
+      return Object.keys(base).length > 0 ? base : undefined;
+    })();
 
     const existingSessionHandle = (() => {
       const current = agent.metadata;
@@ -751,96 +735,16 @@ export class HiBossDatabase {
 
     if (existingSessionHandle === undefined) {
       const stmt = this.db.prepare("UPDATE agents SET metadata = ? WHERE name = ?");
-      stmt.run(withRole ? JSON.stringify(withRole) : null, agent.name);
+      stmt.run(withUserMetadata ? JSON.stringify(withUserMetadata) : null, agent.name);
       return;
     }
 
     const nextWithSessionHandle = {
-      ...(withRole ?? {}),
+      ...(withUserMetadata ?? {}),
       sessionHandle: existingSessionHandle,
     };
     const stmt = this.db.prepare("UPDATE agents SET metadata = ? WHERE name = ?");
     stmt.run(JSON.stringify(nextWithSessionHandle), agent.name);
-  }
-
-  setAgentRole(name: string, role: AgentRole): Agent {
-    return this.updateAgentFields(name, { role });
-  }
-
-  backfillLegacyAgentRolesFromBindings(): {
-    updated: number;
-    speaker: number;
-    leader: number;
-  } {
-    const agents = this.listAgents();
-    if (agents.length === 0) {
-      return { updated: 0, speaker: 0, leader: 0 };
-    }
-
-    const bindingCountByAgent = new Map<string, number>();
-    for (const binding of this.listBindings()) {
-      bindingCountByAgent.set(binding.agentName, (bindingCountByAgent.get(binding.agentName) ?? 0) + 1);
-    }
-
-    const patchTargets = agents
-      .filter((agent) => !parseAgentRoleFromMetadata(agent.metadata))
-      .map((agent) => ({
-        name: agent.name,
-        metadata: agent.metadata,
-        role: inferAgentRoleFromBindingCount(bindingCountByAgent.get(agent.name) ?? 0),
-      }));
-
-    if (patchTargets.length === 0) {
-      return { updated: 0, speaker: 0, leader: 0 };
-    }
-
-    const updateStmt = this.db.prepare("UPDATE agents SET metadata = ? WHERE name = ?");
-
-    this.db.transaction(() => {
-      for (const target of patchTargets) {
-        const nextMetadata = withAgentRoleMetadata({
-          metadata: target.metadata,
-          role: target.role,
-        });
-        updateStmt.run(nextMetadata ? JSON.stringify(nextMetadata) : null, target.name);
-      }
-    })();
-
-    let speaker = 0;
-    let leader = 0;
-    for (const target of patchTargets) {
-      if (target.role === "speaker") speaker += 1;
-      if (target.role === "leader") leader += 1;
-    }
-
-    return {
-      updated: patchTargets.length,
-      speaker,
-      leader,
-    };
-  }
-
-  getAgentRoleCounts(): { speaker: number; leader: number } {
-    const counts = { speaker: 0, leader: 0 };
-    const bindingCountByAgent = new Map<string, number>();
-    for (const binding of this.listBindings()) {
-      bindingCountByAgent.set(binding.agentName, (bindingCountByAgent.get(binding.agentName) ?? 0) + 1);
-    }
-
-    for (const agent of this.listAgents()) {
-      const role =
-        parseAgentRoleFromMetadata(agent.metadata) ??
-        inferAgentRoleFromBindingCount(bindingCountByAgent.get(agent.name) ?? 0);
-      if (role === "speaker") counts.speaker += 1;
-      if (role === "leader") counts.leader += 1;
-    }
-
-    return counts;
-  }
-
-  hasRequiredAgentRoles(): boolean {
-    const counts = this.getAgentRoleCounts();
-    return counts.speaker > 0 && counts.leader > 0;
   }
 
   /**
@@ -953,8 +857,6 @@ export class HiBossDatabase {
       }
     }
 
-    const role = parseAgentRoleFromMetadata(metadata);
-
     return {
       name: row.name,
       token: row.token,
@@ -964,7 +866,6 @@ export class HiBossDatabase {
       model: row.model ?? undefined,
       reasoningEffort: (row.reasoning_effort as 'none' | 'low' | 'medium' | 'high' | 'xhigh') ?? undefined,
       permissionLevel,
-      role,
       sessionPolicy,
       createdAt: row.created_at,
       lastSeenAt: row.last_seen_at ?? undefined,
@@ -982,8 +883,8 @@ export class HiBossDatabase {
     const createdAt = Date.now();
 
     const stmt = this.db.prepare(`
-      INSERT INTO envelopes (id, "from", "to", from_boss, content_text, content_attachments, deliver_at, status, created_at, metadata)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO envelopes (id, "from", "to", from_boss, content_text, content_attachments, priority, deliver_at, status, created_at, metadata)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     stmt.run(
@@ -993,6 +894,7 @@ export class HiBossDatabase {
       input.fromBoss ? 1 : 0,
       input.content.text ?? null,
       input.content.attachments ? JSON.stringify(input.content.attachments) : null,
+      input.priority ?? 0,
       input.deliverAt ?? null,
       "pending",
       createdAt,
@@ -1141,6 +1043,7 @@ export class HiBossDatabase {
           ? JSON.parse(row.content_attachments)
           : undefined,
       },
+      priority: typeof row.priority === "number" ? row.priority : 0,
       deliverAt: row.deliver_at ?? undefined,
       status: row.status as EnvelopeStatus,
       createdAt: row.created_at,
@@ -1567,7 +1470,7 @@ export class HiBossDatabase {
       SELECT * FROM envelopes
       WHERE "to" = ? AND status = 'pending'
         AND (deliver_at IS NULL OR deliver_at <= ?)
-      ORDER BY COALESCE(deliver_at, created_at) ASC, created_at ASC
+      ORDER BY priority DESC, COALESCE(deliver_at, created_at) ASC, created_at ASC
       LIMIT ?
     `);
     const rows = stmt.all(address, nowMs, limit) as EnvelopeRow[];

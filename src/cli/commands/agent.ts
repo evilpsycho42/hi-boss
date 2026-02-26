@@ -44,7 +44,6 @@ interface AgentDeleteResult {
 export interface RegisterAgentOptions {
   token?: string;
   name: string;
-  role: string;
   description?: string;
   workspace?: string;
   provider: string;
@@ -83,7 +82,6 @@ export interface ListAgentsOptions {
 export interface SetAgentOptions {
   token?: string;
   name: string;
-  role?: string;
   description?: string;
   workspace?: string;
   provider?: string;
@@ -120,7 +118,6 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
     const result = await client.call<RegisterAgentResult>("agent.register", {
       token,
       name: options.name,
-      role: options.role,
       description: options.description,
       workspace: options.workspace,
       provider: options.provider,
@@ -140,7 +137,6 @@ export async function registerAgent(options: RegisterAgentOptions): Promise<void
       console.log("dry-run: true");
     }
     console.log(`name: ${result.agent.name}`);
-    console.log(`role: ${result.agent.role ?? "(missing)"}`);
     console.log(`description: ${result.agent.description ?? "(none)"}`);
     console.log(`workspace: ${result.agent.workspace ?? "(none)"}`);
     if (result.dryRun) {
@@ -201,7 +197,6 @@ export async function setAgent(options: SetAgentOptions): Promise<void> {
     const result = await client.call<AgentSetResult>("agent.set", {
       token,
       agentName: options.name,
-      role: options.role,
       description: options.description,
       workspace: options.workspace,
       provider: options.provider,
@@ -217,7 +212,6 @@ export async function setAgent(options: SetAgentOptions): Promise<void> {
 
     console.log(`success: ${result.success ? "true" : "false"}`);
     console.log(`agent-name: ${result.agent.name}`);
-    console.log(`role: ${result.agent.role ?? "(missing)"}`);
     console.log(`description: ${result.agent.description ?? "(none)"}`);
     console.log(`workspace: ${result.agent.workspace ?? "(none)"}`);
     console.log(`provider: ${result.agent.provider ?? "(none)"}`);
@@ -264,7 +258,6 @@ export async function listAgents(options: ListAgentsOptions): Promise<void> {
 
     for (const agent of result.agents) {
       console.log(`name: ${agent.name}`);
-      console.log(`role: ${agent.role ?? "(missing)"}`);
       if (agent.workspace) {
         console.log(`workspace: ${agent.workspace}`);
       }
@@ -298,7 +291,6 @@ export async function agentStatus(options: AgentStatusOptions): Promise<void> {
     });
 
     console.log(`name: ${result.agent.name}`);
-    console.log(`role: ${result.agent.role ?? "(missing)"}`);
     console.log(`workspace: ${result.effective.workspace}`);
     console.log(`provider: ${result.effective.provider}`);
     console.log(`model: ${result.agent.model ?? "default"}`);

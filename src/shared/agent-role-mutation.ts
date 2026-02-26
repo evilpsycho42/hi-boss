@@ -2,7 +2,7 @@
  * Agent role mutation validation.
  *
  * Utilities for predicting role changes and validating that mutations
- * will not violate the role invariant (minimum 1 speaker + 1 leader).
+ * will not violate the role invariant (minimum 1 leader).
  */
 
 import type { Agent } from "../agent/types.js";
@@ -16,18 +16,13 @@ export interface RoleMutationPrediction {
   /** Would this mutation break the invariant? */
   breaking: boolean;
   /** If breaking, which role would be missing */
-  missingRole?: "speaker" | "leader";
+  missingRole?: "leader";
 }
 
 /**
  * Predict role change from binding mutation.
  *
- * **Binding-count transience**: Agents without explicit roles flip role
- * based on binding count:
- * - bindingCount > 0 → "speaker" (bound to channel)
- * - bindingCount == 0 → "leader" (free agent, handles coordination)
- *
- * Agents with explicit `metadata.role` do NOT flip.
+ * Binding mutations no longer imply role transitions.
  */
 export function predictRoleAfterBindingMutation(params: {
   agent: Agent;
@@ -64,8 +59,8 @@ export function predictRoleAfterBindingMutation(params: {
     bindings: newBindings,
   });
 
-  const breaking = coverage.missingSpeaker || coverage.missingLeader;
-  const missingRole = coverage.missingSpeaker ? ("speaker" as const) : coverage.missingLeader ? ("leader" as const) : undefined;
+  const breaking = coverage.missingLeader;
+  const missingRole = coverage.missingLeader ? ("leader" as const) : undefined;
 
   return {
     before,
@@ -104,8 +99,8 @@ export function predictRoleAfterExplicitMutation(params: {
     bindings: allBindings,
   });
 
-  const breaking = coverage.missingSpeaker || coverage.missingLeader;
-  const missingRole = coverage.missingSpeaker ? ("speaker" as const) : coverage.missingLeader ? ("leader" as const) : undefined;
+  const breaking = coverage.missingLeader;
+  const missingRole = coverage.missingLeader ? ("leader" as const) : undefined;
 
   return {
     before,
@@ -126,7 +121,7 @@ export function predictRoleAfterDeletion(params: {
   allBindings: Array<{ agentName: string }>;
 }): {
   breaking: boolean;
-  missingRole?: "speaker" | "leader";
+  missingRole?: "leader";
 } {
   const { agentName, allAgents, allBindings } = params;
 
@@ -139,8 +134,8 @@ export function predictRoleAfterDeletion(params: {
     bindings: bindingsAfterDelete,
   });
 
-  const breaking = coverage.missingSpeaker || coverage.missingLeader;
-  const missingRole = coverage.missingSpeaker ? ("speaker" as const) : coverage.missingLeader ? ("leader" as const) : undefined;
+  const breaking = coverage.missingLeader;
+  const missingRole = coverage.missingLeader ? ("leader" as const) : undefined;
 
   return {
     breaking,
@@ -154,7 +149,7 @@ export function predictRoleAfterDeletion(params: {
 export function buildMutationInvariantViolationMessage(params: {
   operation: "unbind" | "delete" | "set-role";
   agentName: string;
-  prediction: RoleMutationPrediction | { breaking: boolean; missingRole?: "speaker" | "leader" };
+  prediction: RoleMutationPrediction | { breaking: boolean; missingRole?: "leader" };
 }): string {
   const { operation, agentName, prediction } = params;
   const missingRole = "missingRole" in prediction ? prediction.missingRole : undefined;
@@ -163,7 +158,7 @@ export function buildMutationInvariantViolationMessage(params: {
     // Deletion prediction
     return (
       `Cannot ${operation} agent '${agentName}': would leave zero ${missingRole}s.\n` +
-      `Required invariant: at least 1 speaker and 1 leader.\n` +
+      `Required invariant: at least 1 leader.\n` +
       `Create another ${missingRole} before removing this agent.`
     );
   }
@@ -174,7 +169,7 @@ export function buildMutationInvariantViolationMessage(params: {
     return (
       `Cannot unbind agent '${agentName}': would break role invariant.\n` +
       `Role would change: ${before} → ${after}\n` +
-      `Required invariant: at least 1 speaker and 1 leader.\n` +
+      `Required invariant: at least 1 leader.\n` +
       `Currently, '${agentName}' is the only ${before}.\n` +
       `Create another ${before} before unbinding.`
     );

@@ -7,11 +7,9 @@ import { isValidAgentName, AGENT_NAME_ERROR_MESSAGE } from "../../shared/validat
 import { parseDailyResetAt, parseDurationToMs } from "../../shared/session-policy.js";
 import { setupAgentHome } from "../../agent/home-setup.js";
 import {
-  BACKGROUND_AGENT_NAME,
   getDefaultAgentDescription,
 } from "../../shared/defaults.js";
 import { isPermissionLevel } from "../../shared/permissions.js";
-import { isAgentRole } from "../../shared/agent-role.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 import { generateToken } from "../../agent/auth.js";
 import { mutateSettingsAndSync } from "../settings-sync.js";
@@ -30,9 +28,6 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
       if (typeof p.name !== "string" || !isValidAgentName(p.name)) {
         rpcError(RPC_ERRORS.INVALID_PARAMS, AGENT_NAME_ERROR_MESSAGE);
       }
-      if (p.name.trim().toLowerCase() === BACKGROUND_AGENT_NAME) {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, `Reserved agent name: ${BACKGROUND_AGENT_NAME}`);
-      }
 
       // Check if agent already exists (case-insensitive)
       const existing = ctx.db.getAgentByNameCaseInsensitive(p.name);
@@ -45,10 +40,6 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
       }
       const provider: "claude" | "codex" = p.provider;
 
-      if (!isAgentRole(p.role)) {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid role (expected speaker or leader)");
-      }
-      const role: "speaker" | "leader" = p.role;
       if (p.dryRun !== undefined && typeof p.dryRun !== "boolean") {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid dry-run");
       }
@@ -57,13 +48,6 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
       const bindAdapterType = p.bindAdapterType;
       const bindAdapterToken = p.bindAdapterToken;
       const wantsBind = bindAdapterType !== undefined || bindAdapterToken !== undefined;
-
-      if (role === "speaker" && !wantsBind) {
-        rpcError(
-          RPC_ERRORS.INVALID_PARAMS,
-          "Speaker agents must be bound to at least one adapter at registration."
-        );
-      }
 
       if (wantsBind) {
         if (typeof bindAdapterType !== "string" || !bindAdapterType.trim()) {
@@ -189,7 +173,6 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
           dryRun: true,
           agent: {
             name: normalizedName,
-            role,
             description: normalizedDescription,
             workspace: normalizedWorkspace,
             createdAt: Date.now(),
@@ -227,7 +210,6 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
             settings.agents.push({
               name: p.name.trim(),
               token: generatedToken,
-              role,
               provider,
               description:
                 typeof p.description === "string"
@@ -266,7 +248,6 @@ export function createAgentRegisterHandler(ctx: DaemonContext): RpcMethodHandler
       return {
         agent: {
           name: p.name.trim(),
-          role,
           description:
             typeof p.description === "string"
               ? p.description

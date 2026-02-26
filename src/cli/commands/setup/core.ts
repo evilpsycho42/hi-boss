@@ -7,11 +7,6 @@ import { HiBossDatabase } from "../../../daemon/db/database.js";
 import { setupAgentHome } from "../../../agent/home-setup.js";
 import type { SetupCheckResult } from "../../../daemon/ipc/types.js";
 import type { SetupConfig } from "./types.js";
-import type { AgentRole } from "../../../shared/agent-role.js";
-import {
-  getSpeakerBindingIntegrity,
-  toSpeakerBindingIntegrityView,
-} from "../../../shared/speaker-binding-invariant.js";
 import { generateToken } from "../../../agent/auth.js";
 import { DEFAULT_PERMISSION_POLICY } from "../../../shared/defaults.js";
 import type { SettingsV4 } from "../../../shared/settings.js";
@@ -35,40 +30,12 @@ export interface SetupStatus {
   completed: boolean;
   ready: boolean;
   hasSettingsFile: boolean;
-  roleCounts: {
-    speaker: number;
-    leader: number;
-  };
-  missingRoles: AgentRole[];
   agents: Array<{
     name: string;
-    role?: AgentRole;
     workspace?: string;
     provider?: "claude" | "codex";
   }>;
-  integrity: {
-    speakerWithoutBindings: string[];
-    duplicateSpeakerBindings: Array<{
-      adapterType: string;
-      adapterTokenRedacted: string;
-      speakers: string[];
-    }>;
-  };
   userInfo: SetupUserInfoStatus;
-}
-
-function getMissingRoles(roleCounts: { speaker: number; leader: number }): AgentRole[] {
-  const missing: AgentRole[] = [];
-  if (roleCounts.speaker < 1) missing.push("speaker");
-  if (roleCounts.leader < 1) missing.push("leader");
-  return missing;
-}
-
-function hasIntegrityViolations(integrity: SetupStatus["integrity"]): boolean {
-  return (
-    integrity.speakerWithoutBindings.length > 0 ||
-    integrity.duplicateSpeakerBindings.length > 0
-  );
 }
 
 function buildUserInfoStatus(db: HiBossDatabase): SetupUserInfoStatus {
@@ -95,13 +62,7 @@ function buildEmptySetupStatus(): SetupStatus {
     completed: false,
     ready: false,
     hasSettingsFile: false,
-    roleCounts: { speaker: 0, leader: 0 },
-    missingRoles: ["speaker", "leader"],
     agents: [],
-    integrity: {
-      speakerWithoutBindings: [],
-      duplicateSpeakerBindings: [],
-    },
     userInfo: {
       hasAdminToken: false,
       missing: {
@@ -119,37 +80,22 @@ function buildSetupStatusFromDb(db: HiBossDatabase): SetupStatus {
   const hasSettingsFile = fs.existsSync(getSettingsPath(daemonConfig.dataDir));
   const completed = db.isSetupComplete();
   const agents = db.listAgents();
-  const bindings = db.listBindings();
-  const roleCounts = db.getAgentRoleCounts();
-  const missingRoles = getMissingRoles(roleCounts);
-  const integrity = toSpeakerBindingIntegrityView(
-    getSpeakerBindingIntegrity({
-      agents,
-      bindings,
-    })
-  );
   const userInfo = buildUserInfoStatus(db);
   const hasMissingUserInfo = Object.values(userInfo.missing).some(Boolean);
   const ready =
     hasSettingsFile &&
     completed &&
-    missingRoles.length === 0 &&
-    !hasMissingUserInfo &&
-    !hasIntegrityViolations(integrity);
+    !hasMissingUserInfo;
 
   return {
     completed,
     ready,
     hasSettingsFile,
-    roleCounts,
-    missingRoles,
     agents: agents.map((agent) => ({
       name: agent.name,
-      role: agent.role,
-      workspace: agent.workspace,
-      provider: agent.provider,
+      ...(agent.workspace ? { workspace: agent.workspace } : {}),
+      ...(agent.provider ? { provider: agent.provider } : {}),
     })),
-    integrity,
     userInfo,
   };
 }
@@ -164,30 +110,19 @@ export async function checkSetupStatus(): Promise<SetupStatus> {
     const client = new IpcClient(getSocketPath());
     const result = await client.call<SetupCheckResult>("setup.check");
 
-    const roleCounts = result.roleCounts ?? { speaker: 0, leader: 0 };
-    const missingRoles = result.missingRoles ?? getMissingRoles(roleCounts);
     const userInfo = result.userInfo ?? buildEmptySetupStatus().userInfo;
     const hasMissingUserInfo = Object.values(userInfo.missing).some(Boolean);
-    const integrity = result.integrity ?? {
-      speakerWithoutBindings: [],
-      duplicateSpeakerBindings: [],
-    };
     const remoteReady =
       typeof result.ready === "boolean"
         ? result.ready
         : result.completed &&
-          missingRoles.length === 0 &&
-          !hasMissingUserInfo &&
-          !hasIntegrityViolations(integrity);
+          !hasMissingUserInfo;
 
     return {
       completed: result.completed,
       ready: hasSettingsFile && remoteReady,
       hasSettingsFile,
-      roleCounts,
-      missingRoles,
       agents: result.agents ?? [],
-      integrity,
       userInfo,
     };
   } catch (err) {
@@ -232,14 +167,14 @@ function ensureBossProfileFile(hibossDir: string): void {
 /**
  * Execute full first-time setup.
  */
-export async function executeSetup(config: SetupConfig): Promise<{ speakerAgentToken: string; leaderAgentToken: string }> {
+export async function executeSetup(config: SetupConfig): Promise<{ primaryAgentToken: string; secondaryAgentToken: string }> {
   if (await isDaemonRunning()) {
     throw new Error("Daemon is running. Stop it first: hiboss daemon stop --token <admin-token>");
   }
   return executeSetupDirect(config);
 }
 
-async function executeSetupDirect(config: SetupConfig): Promise<{ speakerAgentToken: string; leaderAgentToken: string }> {
+async function executeSetupDirect(config: SetupConfig): Promise<{ primaryAgentToken: string; secondaryAgentToken: string }> {
   const daemonConfig = getDefaultConfig();
   const settingsPath = getSettingsPath(daemonConfig.dataDir);
   const hasSettingsFile = fs.existsSync(settingsPath);
@@ -262,12 +197,12 @@ async function executeSetupDirect(config: SetupConfig): Promise<{ speakerAgentTo
       );
     }
 
-    await setupAgentHome(config.speakerAgent.name, daemonConfig.dataDir);
-    await setupAgentHome(config.leaderAgent.name, daemonConfig.dataDir);
+    await setupAgentHome(config.primaryAgent.name, daemonConfig.dataDir);
+    await setupAgentHome(config.secondaryAgent.name, daemonConfig.dataDir);
     ensureBossProfileFile(daemonConfig.dataDir);
 
-    const speakerAgentToken = generateToken();
-    const leaderAgentToken = generateToken();
+    const primaryAgentToken = generateToken();
+    const secondaryAgentToken = generateToken();
 
     const settings: SettingsV4 = {
       version: 4,
@@ -284,17 +219,16 @@ async function executeSetupDirect(config: SetupConfig): Promise<{ speakerAgentTo
       permissionPolicy: DEFAULT_PERMISSION_POLICY,
       agents: [
         {
-          name: config.speakerAgent.name,
-          token: speakerAgentToken,
-          role: "speaker",
-          provider: config.speakerAgent.provider,
-          description: config.speakerAgent.description ?? "",
-          workspace: config.speakerAgent.workspace,
-          model: config.speakerAgent.model ?? null,
-          reasoningEffort: config.speakerAgent.reasoningEffort ?? null,
-          permissionLevel: config.speakerAgent.permissionLevel ?? "standard",
-          sessionPolicy: config.speakerAgent.sessionPolicy,
-          metadata: config.speakerAgent.metadata,
+          name: config.primaryAgent.name,
+          token: primaryAgentToken,
+          provider: config.primaryAgent.provider,
+          description: config.primaryAgent.description ?? "",
+          workspace: config.primaryAgent.workspace,
+          model: config.primaryAgent.model ?? null,
+          reasoningEffort: config.primaryAgent.reasoningEffort ?? null,
+          permissionLevel: config.primaryAgent.permissionLevel ?? "standard",
+          sessionPolicy: config.primaryAgent.sessionPolicy,
+          metadata: config.primaryAgent.metadata,
           bindings: [
             {
               adapterType: config.adapter.adapterType,
@@ -303,17 +237,16 @@ async function executeSetupDirect(config: SetupConfig): Promise<{ speakerAgentTo
           ],
         },
         {
-          name: config.leaderAgent.name,
-          token: leaderAgentToken,
-          role: "leader",
-          provider: config.leaderAgent.provider,
-          description: config.leaderAgent.description ?? "",
-          workspace: config.leaderAgent.workspace,
-          model: config.leaderAgent.model ?? null,
-          reasoningEffort: config.leaderAgent.reasoningEffort ?? null,
-          permissionLevel: config.leaderAgent.permissionLevel ?? "standard",
-          sessionPolicy: config.leaderAgent.sessionPolicy,
-          metadata: config.leaderAgent.metadata,
+          name: config.secondaryAgent.name,
+          token: secondaryAgentToken,
+          provider: config.secondaryAgent.provider,
+          description: config.secondaryAgent.description ?? "",
+          workspace: config.secondaryAgent.workspace,
+          model: config.secondaryAgent.model ?? null,
+          reasoningEffort: config.secondaryAgent.reasoningEffort ?? null,
+          permissionLevel: config.secondaryAgent.permissionLevel ?? "standard",
+          sessionPolicy: config.secondaryAgent.sessionPolicy,
+          metadata: config.secondaryAgent.metadata,
           bindings: [],
         },
       ],
@@ -323,8 +256,8 @@ async function executeSetupDirect(config: SetupConfig): Promise<{ speakerAgentTo
     syncSettingsToDb(db, settings);
 
     return {
-      speakerAgentToken,
-      leaderAgentToken,
+      primaryAgentToken,
+      secondaryAgentToken,
     };
   } finally {
     db.close();

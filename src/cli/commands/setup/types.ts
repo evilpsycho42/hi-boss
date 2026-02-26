@@ -1,4 +1,3 @@
-import type { AgentRole } from "../../../shared/agent-role.js";
 import type { KnownAdapterType } from "../../../shared/adapter-types.js";
 
 export type SetupProvider = "claude" | "codex";
@@ -13,7 +12,6 @@ export interface SetupSessionPolicy {
 
 export interface SetupAgentConfig {
   name: string;
-  role: AgentRole;
   provider: SetupProvider;
   description?: string;
   workspace: string;
@@ -35,8 +33,8 @@ export interface SetupBindingConfig {
 export interface SetupConfig {
   bossName: string;
   bossTimezone: string; // IANA timezone (used for all displayed timestamps)
-  speakerAgent: Omit<SetupAgentConfig, "role">;
-  leaderAgent: Omit<SetupAgentConfig, "role">;
+  primaryAgent: SetupAgentConfig;
+  secondaryAgent: SetupAgentConfig;
   adapter: {
     adapterType: KnownAdapterType;
     adapterToken: string;

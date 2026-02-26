@@ -14,7 +14,6 @@ import type { DaemonContext } from "./context.js";
 import { requireToken, rpcError } from "./context.js";
 import { formatAgentAddress, parseAddress } from "../../adapters/types.js";
 import { parseDateTimeInputToUnixMsInTimeZone } from "../../shared/time.js";
-import { BACKGROUND_AGENT_NAME } from "../../shared/defaults.js";
 import { resolveEnvelopeIdInput } from "./resolve-envelope-id.js";
 import type { Envelope } from "../../envelope/types.js";
 
@@ -69,6 +68,7 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
 
     let from: string;
     let fromBoss = false;
+    let interruptNow = false;
     const metadata: Record<string, unknown> = {};
 
     if (p.from !== undefined || p.fromBoss !== undefined || p.fromName !== undefined) {
@@ -79,12 +79,15 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
     ctx.db.updateAgentLastSeen(agent.name);
     from = formatAgentAddress(agent.name);
 
+    if (p.interruptNow !== undefined) {
+      if (typeof p.interruptNow !== "boolean") {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid interrupt-now");
+      }
+      interruptNow = p.interruptNow;
+    }
+
     const to = (() => {
       if (destination.type !== "agent") return toInput;
-
-      if (destination.agentName.toLowerCase() === BACKGROUND_AGENT_NAME) {
-        return formatAgentAddress(BACKGROUND_AGENT_NAME);
-      }
 
       const destAgent = ctx.db.getAgentByNameCaseInsensitive(destination.agentName);
       if (!destAgent) {
@@ -92,6 +95,14 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
       }
       return formatAgentAddress(destAgent.name);
     })();
+
+    if (interruptNow && p.deliverAt !== undefined) {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, "interrupt-now cannot be used with deliver-at");
+    }
+
+    if (interruptNow && destination.type !== "agent") {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, "interrupt-now is only supported for agent destinations");
+    }
 
     // Check binding for channel destinations (agent sender only)
     if (destination.type === "channel") {
@@ -151,6 +162,18 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
     }
 
     const finalMetadata = Object.keys(metadata).length > 0 ? metadata : undefined;
+    let interruptedWork = false;
+
+    if (interruptNow && destination.type === "agent") {
+      const targetAgent = ctx.db.getAgentByNameCaseInsensitive(destination.agentName);
+      if (!targetAgent) {
+        rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
+      }
+      interruptedWork = ctx.executor.abortCurrentRun(
+        targetAgent.name,
+        "rpc:envelope.send:interrupt-now"
+      );
+    }
 
     try {
       const envelope = await ctx.router.routeEnvelope({
@@ -161,11 +184,19 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
           text: p.text,
           attachments: p.attachments,
         },
+        priority: interruptNow ? 1 : 0,
         deliverAt,
         metadata: finalMetadata,
       });
 
       ctx.scheduler.onEnvelopeCreated(envelope);
+      if (interruptNow) {
+        return {
+          id: envelope.id,
+          interruptedWork,
+          priorityApplied: true,
+        };
+      }
       return { id: envelope.id };
     } catch (err) {
       // Best-effort: ensure the scheduler sees newly-created scheduled envelopes, even if immediate delivery failed.

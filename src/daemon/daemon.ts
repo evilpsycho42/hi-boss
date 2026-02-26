@@ -9,7 +9,6 @@ import { IpcServer } from "./ipc/server.js";
 import { MessageRouter } from "./router/message-router.js";
 import { ChannelBridge } from "./bridges/channel-bridge.js";
 import { AgentExecutor, createAgentExecutor } from "../agent/executor.js";
-import { type BackgroundExecutor, createBackgroundExecutor } from "../agent/background-executor.js";
 import { type OneShotExecutor, createOneShotExecutor } from "../agent/oneshot-executor.js";
 import type { Agent } from "../agent/types.js";
 import { EnvelopeScheduler } from "./scheduler/envelope-scheduler.js";
@@ -19,7 +18,7 @@ import type { RpcMethodRegistry } from "./ipc/types.js";
 import { RPC_ERRORS } from "./ipc/types.js";
 import type { ChatAdapter } from "../adapters/types.js";
 import { TelegramAdapter } from "../adapters/telegram.adapter.js";
-import { BACKGROUND_AGENT_NAME, DEFAULT_AGENT_PERMISSION_LEVEL } from "../shared/defaults.js";
+import { DEFAULT_AGENT_PERMISSION_LEVEL } from "../shared/defaults.js";
 import { getHiBossPaths } from "../shared/hiboss-paths.js";
 import {
   DEFAULT_PERMISSION_POLICY,
@@ -46,12 +45,6 @@ import {
   createAgentDeleteHandler,
 } from "./rpc/index.js";
 import { createChannelCommandHandler } from "./channel-commands.js";
-import { buildMissingAgentRolesGuidance } from "../shared/agent-role.js";
-import {
-  getSpeakerBindingIntegrity,
-  hasSpeakerBindingIntegrityViolations,
-  toSpeakerBindingIntegrityView,
-} from "../shared/speaker-binding-invariant.js";
 import { TelegramTypingManager } from "./telegram-typing.js";
 import { resolveUiLocale } from "../shared/ui-locale.js";
 import { getSettingsPath } from "../shared/settings-io.js";
@@ -108,7 +101,6 @@ export class Daemon {
   private router: MessageRouter;
   private bridge: ChannelBridge;
   private executor: AgentExecutor;
-  private backgroundExecutor: BackgroundExecutor;
   private oneshotExecutor: OneShotExecutor;
   private scheduler: EnvelopeScheduler;
   private cronScheduler: CronScheduler | null = null;
@@ -153,7 +145,6 @@ export class Daemon {
         return this.telegramTypingManager.onRunFinished({ runId });
       },
     });
-    this.backgroundExecutor = createBackgroundExecutor({ db: this.db, router: this.router });
     this.oneshotExecutor = createOneShotExecutor({
       db: this.db,
       router: this.router,
@@ -279,48 +270,6 @@ export class Daemon {
       // All displayed timestamps (including daemon logs) use the boss timezone.
       setDaemonLogTimeZone(this.db.getBossTimezone());
 
-      const roleBackfill = this.db.backfillLegacyAgentRolesFromBindings();
-      if (roleBackfill.updated > 0) {
-        logEvent("info", "daemon-agent-role-backfill", {
-          updated: roleBackfill.updated,
-          speaker: roleBackfill.speaker,
-          leader: roleBackfill.leader,
-        });
-      }
-
-      const roleCounts = this.db.getAgentRoleCounts();
-      const missingSpeaker = roleCounts.speaker < 1;
-      const missingLeader = roleCounts.leader < 1;
-      if (missingSpeaker || missingLeader) {
-        const agentCount = this.db.listAgents().length;
-
-        logEvent("error", "daemon-startup-blocked-roles", {
-          "speaker-count": roleCounts.speaker,
-          "leader-count": roleCounts.leader,
-          "agent-count": agentCount,
-        });
-
-        const guidance = buildMissingAgentRolesGuidance({
-          missingSpeaker,
-          missingLeader,
-        });
-
-        throw new Error(guidance);
-      }
-
-      const integrity = getSpeakerBindingIntegrity({
-        agents: this.db.listAgents(),
-        bindings: this.db.listBindings(),
-      });
-      if (hasSpeakerBindingIntegrityViolations(integrity)) {
-        const view = toSpeakerBindingIntegrityView(integrity);
-        logEvent("error", "daemon-startup-blocked-speaker-bindings", {
-          "speaker-without-bindings": view.speakerWithoutBindings.join(",") || undefined,
-          "duplicate-speaker-binding-count": view.duplicateSpeakerBindings.length,
-        });
-        throw new Error(buildMissingAgentRolesGuidance({ missingSpeaker: false, missingLeader: false }));
-      }
-
       // Set up command handler for /new etc.
       this.setupCommandHandler();
 
@@ -329,7 +278,6 @@ export class Daemon {
 
       // Register agent handlers for auto-execution
       await this.registerAgentExecutionHandlers();
-      this.registerBackgroundAgentHandler();
 
       // Start all loaded adapters
       for (const adapter of this.adapters.values()) {
@@ -366,6 +314,7 @@ export class Daemon {
       db: this.db,
       executor: this.executor,
       router: this.router,
+      hibossDir: this.config.dataDir,
     }));
   }
 
@@ -412,12 +361,6 @@ export class Daemon {
           error: errorMessage(err),
         });
       });
-    });
-  }
-
-  private registerBackgroundAgentHandler(): void {
-    this.router.registerAgentHandler(BACKGROUND_AGENT_NAME, async (envelope) => {
-      this.backgroundExecutor.enqueue(envelope);
     });
   }
 

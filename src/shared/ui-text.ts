@@ -2,7 +2,7 @@ import type { OneshotType } from "../envelope/types.js";
 import type { UiLocale } from "./ui-locale.js";
 
 interface TelegramCommandDescription {
-  command: "new" | "status" | "abort" | "isolated" | "clone" | "sessions" | "session";
+  command: "new" | "status" | "trace" | "provider" | "abort" | "isolated" | "clone" | "sessions" | "session";
   description: string;
 }
 
@@ -16,6 +16,9 @@ interface UiTextBundle {
     sessionSwitchInvalidId: string;
     sessionSwitchNotFound: string;
     sessionSwitchNotVisible: string;
+    providerUsage: string;
+    providerSwitchFailed: string;
+    traceUsage: string;
     abortOk: string;
     usage(mode: OneshotType): string;
     sessionUsage: string;
@@ -41,6 +44,10 @@ const EN_TEXT: UiTextBundle = {
     sessionSwitchInvalidId: "error: Invalid session id",
     sessionSwitchNotFound: "error: Session not found",
     sessionSwitchNotVisible: "error: Session is not visible in this scope",
+    providerUsage:
+      "Usage: /provider <claude|codex> [model=<name|default>] [reasoning-effort=<none|low|medium|high|xhigh|default>]",
+    providerSwitchFailed: "error: Failed to switch provider",
+    traceUsage: "Usage: /trace",
     abortOk: "abort: ok",
     usage: (mode) => `Usage: /${mode} <message>`,
     sessionUsage: "Usage: /session <session-id>",
@@ -54,6 +61,8 @@ const EN_TEXT: UiTextBundle = {
     commandDescriptions: [
       { command: "new", description: "Start a new session" },
       { command: "status", description: "Show agent status" },
+      { command: "trace", description: "Show current run trace" },
+      { command: "provider", description: "Switch provider and optional model/reasoning" },
       { command: "abort", description: "Abort current run and clear message queue" },
       { command: "isolated", description: "One-shot with clean context" },
       { command: "clone", description: "One-shot with current session context" },
@@ -77,6 +86,10 @@ const ZH_CN_TEXT: UiTextBundle = {
     sessionSwitchInvalidId: "error: 会话 ID 无效",
     sessionSwitchNotFound: "error: 未找到该会话",
     sessionSwitchNotVisible: "error: 该会话当前不可见",
+    providerUsage:
+      "用法: /provider <claude|codex> [model=<name|default>] [reasoning-effort=<none|low|medium|high|xhigh|default>]",
+    providerSwitchFailed: "error: 切换 provider 失败",
+    traceUsage: "用法: /trace",
     abortOk: "abort: ok",
     usage: (mode) => `用法: /${mode} <消息>`,
     sessionUsage: "用法: /session <会话-id>",
@@ -90,6 +103,8 @@ const ZH_CN_TEXT: UiTextBundle = {
     commandDescriptions: [
       { command: "new", description: "开启新会话" },
       { command: "status", description: "查看 Agent 状态" },
+      { command: "trace", description: "查看当前 run trace" },
+      { command: "provider", description: "切换 provider，并可设置 model/reasoning" },
       { command: "abort", description: "中止当前运行并清空消息队列" },
       { command: "isolated", description: "隔离单次执行（全新上下文）" },
       { command: "clone", description: "克隆单次执行（沿用当前上下文）" },

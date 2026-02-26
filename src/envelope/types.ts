@@ -39,6 +39,7 @@ export interface Envelope {
   to: Address;
   fromBoss: boolean;          // true if sender matches boss config
   content: EnvelopeContent;
+  priority?: number;          // 0=normal, 1=interrupt-now (higher first for agent queues)
   deliverAt?: number;         // unix epoch ms (UTC) (not-before delivery)
   status: EnvelopeStatus;
   createdAt: number;          // unix epoch ms (UTC)
@@ -53,6 +54,7 @@ export interface CreateEnvelopeInput {
   to: Address;
   fromBoss?: boolean;
   content: EnvelopeContent;
+  priority?: number;
   deliverAt?: number;
   metadata?: Record<string, unknown>;
 }

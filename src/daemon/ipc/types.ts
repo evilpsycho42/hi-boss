@@ -3,7 +3,6 @@
  */
 
 import type { Envelope } from "../../envelope/types.js";
-import type { AgentRole } from "../../shared/agent-role.js";
 
 export interface JsonRpcRequest {
   jsonrpc: "2.0";
@@ -62,6 +61,7 @@ export interface EnvelopeSendParams {
   text?: string;
   attachments?: Array<{ source: string; filename?: string; telegramFileId?: string }>;
   deliverAt?: string;
+  interruptNow?: boolean;
   parseMode?: "plain" | "markdownv2" | "html";
   replyToEnvelopeId?: string;
 }
@@ -126,7 +126,6 @@ export interface CronDeleteParams {
 export interface AgentRegisterParams {
   token: string;
   name: string;
-  role: "speaker" | "leader";
   description?: string;
   workspace?: string;
   provider: "claude" | "codex";
@@ -210,7 +209,6 @@ export interface AgentAbortResult {
 export interface AgentStatusResult {
   agent: {
     name: string;
-    role?: "speaker" | "leader";
     description?: string;
     workspace?: string;
     provider?: "claude" | "codex";
@@ -260,7 +258,6 @@ export interface AgentSessionPolicySetParams {
 export interface AgentSetParams {
   token: string;
   agentName: string;
-  role?: "speaker" | "leader";
   description?: string | null;
   workspace?: string | null;
   provider?: "claude" | "codex" | null;
@@ -282,7 +279,6 @@ export interface AgentSetResult {
   success: boolean;
   agent: {
     name: string;
-    role?: "speaker" | "leader";
     description?: string;
     workspace?: string;
     provider: "claude" | "codex";
@@ -321,22 +317,8 @@ export interface SetupCheckParams {
 export interface SetupCheckResult {
   completed: boolean;
   ready: boolean;
-  roleCounts: {
-    speaker: number;
-    leader: number;
-  };
-  missingRoles: AgentRole[];
-  integrity: {
-    speakerWithoutBindings: string[];
-    duplicateSpeakerBindings: Array<{
-      adapterType: string;
-      adapterTokenRedacted: string;
-      speakers: string[];
-    }>;
-  };
   agents: Array<{
     name: string;
-    role?: AgentRole;
     workspace?: string;
     provider?: "claude" | "codex";
   }>;
@@ -357,10 +339,9 @@ export interface SetupCheckResult {
 export interface SetupExecuteParams {
   bossName: string;
   bossTimezone: string;
-  speakerAgent: {
+  primaryAgent: {
     name: string;
     provider: "claude" | "codex";
-    role?: "speaker";
     description?: string;
     workspace?: string;
     model?: string | null;
@@ -373,10 +354,9 @@ export interface SetupExecuteParams {
     };
     metadata?: Record<string, unknown>;
   };
-  leaderAgent: {
+  secondaryAgent?: {
     name: string;
     provider: "claude" | "codex";
-    role?: "leader";
     description?: string;
     workspace?: string;
     model?: string | null;
@@ -398,8 +378,8 @@ export interface SetupExecuteParams {
 }
 
 export interface SetupExecuteResult {
-  speakerAgentToken: string;
-  leaderAgentToken: string;
+  primaryAgentToken: string;
+  secondaryAgentToken?: string;
 }
 
 export interface AdminVerifyParams {

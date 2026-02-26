@@ -6,6 +6,7 @@ import test from "node:test";
 
 import { createChannelCommandHandler } from "./channel-commands.js";
 import { HiBossDatabase } from "./db/database.js";
+import { writeAgentRunTrace } from "../shared/agent-run-trace.js";
 
 function withTempDb(run: (db: HiBossDatabase) => Promise<void> | void): Promise<void> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hiboss-channel-cmd-test-"));
@@ -21,7 +22,7 @@ function withTempDb(run: (db: HiBossDatabase) => Promise<void> | void): Promise<
 
 test("/new switches current chat session and returns old/new ids", async () => {
   await withTempDb(async (db) => {
-    db.registerAgent({ name: "nex", provider: "codex", role: "speaker" });
+    db.registerAgent({ name: "nex", provider: "codex" });
     const initial = db.getOrCreateChannelActiveSession({
       agentName: "nex",
       adapterType: "telegram",
@@ -63,7 +64,7 @@ test("/new switches current chat session and returns old/new ids", async () => {
 
 test("/sessions returns keyboard with tabs and pager", async () => {
   await withTempDb(async (db) => {
-    db.registerAgent({ name: "nex", provider: "codex", role: "speaker" });
+    db.registerAgent({ name: "nex", provider: "codex" });
     db.getOrCreateChannelActiveSession({
       agentName: "nex",
       adapterType: "telegram",
@@ -101,7 +102,7 @@ test("/sessions returns keyboard with tabs and pager", async () => {
 
 test("/new uses command adapter type instead of hardcoded telegram", async () => {
   await withTempDb(async (db) => {
-    db.registerAgent({ name: "nex", provider: "codex", role: "speaker" });
+    db.registerAgent({ name: "nex", provider: "codex" });
 
     const handler = createChannelCommandHandler({
       db,
@@ -133,7 +134,7 @@ test("/new uses command adapter type instead of hardcoded telegram", async () =>
 
 test("/abort uses adapter-specific reason", async () => {
   await withTempDb(async (db) => {
-    db.registerAgent({ name: "nex", provider: "codex", role: "speaker" });
+    db.registerAgent({ name: "nex", provider: "codex" });
     let abortReason = "";
 
     const handler = createChannelCommandHandler({
@@ -163,9 +164,385 @@ test("/abort uses adapter-specific reason", async () => {
   });
 });
 
+test("/provider switches provider, clears overrides, and requests refresh", async () => {
+  await withTempDb(async (db) => {
+    db.registerAgent({
+      name: "nex",
+      provider: "codex",
+      model: "gpt-5-codex",
+      reasoningEffort: "high",
+    });
+
+    let refreshReason = "";
+    const handler = createChannelCommandHandler({
+      db,
+      executor: {
+        isAgentBusy: () => false,
+        abortCurrentRun: () => false,
+        invalidateChannelSessionCache: () => undefined,
+        requestSessionRefresh: (_agentName: string, reason: string) => {
+          refreshReason = reason;
+        },
+      } as any,
+      router: { routeEnvelope: async () => undefined } as any,
+    });
+
+    const response = await handler({
+      command: "provider",
+      args: "claude",
+      adapterType: "telegram",
+      chatId: "chat-1",
+      authorId: "u-1",
+      authorUsername: "alice",
+      agentName: "nex",
+    } as any);
+
+    assert.ok(response);
+    assert.equal(typeof response?.text, "string");
+    assert.equal(response?.text?.includes("provider-switch: ok"), true);
+
+    const updated = db.getAgentByNameCaseInsensitive("nex");
+    assert.ok(updated);
+    assert.equal(updated?.provider, "claude");
+    assert.equal(updated?.model, null);
+    assert.equal(updated?.reasoningEffort, null);
+    assert.equal(refreshReason, "telegram:/provider");
+  });
+});
+
+test("/provider updates model and reasoning-effort without provider switch", async () => {
+  await withTempDb(async (db) => {
+    db.registerAgent({
+      name: "nex",
+      provider: "codex",
+      model: null,
+      reasoningEffort: null,
+    });
+
+    let refreshReason = "";
+    const handler = createChannelCommandHandler({
+      db,
+      executor: {
+        isAgentBusy: () => false,
+        abortCurrentRun: () => false,
+        invalidateChannelSessionCache: () => undefined,
+        requestSessionRefresh: (_agentName: string, reason: string) => {
+          refreshReason = reason;
+        },
+      } as any,
+      router: { routeEnvelope: async () => undefined } as any,
+    });
+
+    const response = await handler({
+      command: "provider",
+      args: "codex model=gpt-5.3-codex reasoning-effort=high",
+      adapterType: "telegram",
+      chatId: "chat-1",
+      authorId: "u-1",
+      authorUsername: "alice",
+      agentName: "nex",
+    } as any);
+
+    assert.ok(response);
+    assert.equal(typeof response?.text, "string");
+    assert.equal(response?.text?.includes("provider-switch: ok"), true);
+    assert.equal(response?.text?.includes("new-model: gpt-5.3-codex"), true);
+    assert.equal(response?.text?.includes("new-reasoning-effort: high"), true);
+
+    const updated = db.getAgentByNameCaseInsensitive("nex");
+    assert.ok(updated);
+    assert.equal(updated?.provider, "codex");
+    assert.equal(updated?.model, "gpt-5.3-codex");
+    assert.equal(updated?.reasoningEffort, "high");
+    assert.equal(refreshReason, "telegram:/provider");
+  });
+});
+
+test("/provider without args returns usage", async () => {
+  await withTempDb(async (db) => {
+    db.registerAgent({ name: "nex", provider: "codex" });
+
+    const handler = createChannelCommandHandler({
+      db,
+      executor: {
+        isAgentBusy: () => false,
+        abortCurrentRun: () => false,
+        invalidateChannelSessionCache: () => undefined,
+      } as any,
+      router: { routeEnvelope: async () => undefined } as any,
+    });
+
+    const response = await handler({
+      command: "provider",
+      args: "",
+      adapterType: "telegram",
+      chatId: "chat-1",
+      authorId: "u-1",
+      authorUsername: "alice",
+      agentName: "nex",
+    } as any);
+
+    assert.equal(
+      response?.text,
+      "Usage: /provider <claude|codex> [model=<name|default>] [reasoning-effort=<none|low|medium|high|xhigh|default>]"
+    );
+  });
+});
+
+test("/trace returns usage when args are provided", async () => {
+  await withTempDb(async (db) => {
+    db.registerAgent({ name: "nex", provider: "claude" });
+    const handler = createChannelCommandHandler({
+      db,
+      executor: {
+        isAgentBusy: () => false,
+        abortCurrentRun: () => false,
+        invalidateChannelSessionCache: () => undefined,
+      } as any,
+      router: { routeEnvelope: async () => undefined } as any,
+      hibossDir: os.tmpdir(),
+    });
+
+    const response = await handler({
+      command: "trace",
+      args: "abcdef12",
+      chatId: "chat-1",
+      authorId: "u-1",
+      authorUsername: "alice",
+      agentName: "nex",
+    } as any);
+
+    assert.equal(response?.text, "Usage: /trace");
+  });
+});
+
+test("/trace reads latest finished run trace", async () => {
+  const hibossDir = fs.mkdtempSync(path.join(os.tmpdir(), "hiboss-trace-test-"));
+  await withTempDb(async (db) => {
+    try {
+      db.registerAgent({ name: "nex", provider: "claude" });
+      const run = db.createAgentRun("nex", ["env-1"]);
+      db.completeAgentRun(run.id, "done", 1234);
+      writeAgentRunTrace(hibossDir, {
+        version: 1,
+        runId: run.id,
+        agentName: "nex",
+        provider: "claude",
+        status: "success",
+        startedAt: Date.now() - 1000,
+        completedAt: Date.now(),
+        entries: [
+          { type: "assistant", text: "I will check the repo." },
+          { type: "tool-call", toolName: "Bash", text: "Bash input={\"cmd\":\"ls -la\"}" },
+        ],
+      });
+
+      const handler = createChannelCommandHandler({
+        db,
+        executor: {
+          isAgentBusy: () => false,
+          abortCurrentRun: () => false,
+          invalidateChannelSessionCache: () => undefined,
+        } as any,
+        router: { routeEnvelope: async () => undefined } as any,
+        hibossDir,
+      });
+
+      const response = await handler({
+        command: "trace",
+        args: "",
+        chatId: "chat-1",
+        authorId: "u-1",
+        authorUsername: "alice",
+        agentName: "nex",
+      } as any);
+
+      assert.equal(response?.text?.includes("trace: ok"), true);
+      assert.equal(response?.text?.includes("provider: claude"), true);
+      assert.equal(response?.text?.includes("entry-1-type: assistant"), true);
+      assert.equal(response?.text?.includes("entry-2-type: tool-call"), true);
+    } finally {
+      fs.rmSync(hibossDir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("/trace shows live entries when current run is in progress", async () => {
+  const hibossDir = fs.mkdtempSync(path.join(os.tmpdir(), "hiboss-trace-live-test-"));
+  await withTempDb(async (db) => {
+    try {
+      db.registerAgent({ name: "nex", provider: "claude" });
+      const run = db.createAgentRun("nex", ["env-1"]);
+      writeAgentRunTrace(hibossDir, {
+        version: 1,
+        runId: run.id,
+        agentName: "nex",
+        provider: "claude",
+        status: "running",
+        startedAt: Date.now() - 1000,
+        completedAt: Date.now(),
+        entries: [
+          { type: "assistant", text: "Working on it." },
+          { type: "tool-call", toolName: "Bash", text: "Bash input={\"cmd\":\"ls -la\"}" },
+        ],
+      });
+
+      const handler = createChannelCommandHandler({
+        db,
+        executor: {
+          isAgentBusy: () => true,
+          abortCurrentRun: () => false,
+          invalidateChannelSessionCache: () => undefined,
+        } as any,
+        router: { routeEnvelope: async () => undefined } as any,
+        hibossDir,
+      });
+
+      const response = await handler({
+        command: "trace",
+        args: "",
+        chatId: "chat-1",
+        authorId: "u-1",
+        authorUsername: "alice",
+        agentName: "nex",
+      } as any);
+
+      assert.equal(response?.text?.includes("trace: pending"), true);
+      assert.equal(response?.text?.includes("entry-1-type: assistant"), true);
+      assert.equal(response?.text?.includes("entry-2-type: tool-call"), true);
+    } finally {
+      fs.rmSync(hibossDir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("/trace reads Codex run traces", async () => {
+  const hibossDir = fs.mkdtempSync(path.join(os.tmpdir(), "hiboss-trace-codex-test-"));
+  await withTempDb(async (db) => {
+    try {
+      db.registerAgent({ name: "nex", provider: "codex" });
+      const run = db.createAgentRun("nex", ["env-1"]);
+      db.completeAgentRun(run.id, "done", 1234);
+      writeAgentRunTrace(hibossDir, {
+        version: 1,
+        runId: run.id,
+        agentName: "nex",
+        provider: "codex",
+        status: "success",
+        startedAt: Date.now() - 1000,
+        completedAt: Date.now(),
+        entries: [
+          { type: "assistant", text: "I inspected the repo." },
+          { type: "tool-call", toolName: "bash", text: "bash input={\"cmd\":\"ls\"}" },
+        ],
+      });
+
+      const handler = createChannelCommandHandler({
+        db,
+        executor: {
+          isAgentBusy: () => false,
+          abortCurrentRun: () => false,
+          invalidateChannelSessionCache: () => undefined,
+        } as any,
+        router: { routeEnvelope: async () => undefined } as any,
+        hibossDir,
+      });
+
+      const response = await handler({
+        command: "trace",
+        args: "",
+        chatId: "chat-1",
+        authorId: "u-1",
+        authorUsername: "alice",
+        agentName: "nex",
+      } as any);
+
+      assert.equal(response?.text?.includes("trace: ok"), true);
+      assert.equal(response?.text?.includes("provider: codex"), true);
+      assert.equal(response?.text?.includes("entry-2-tool: bash"), true);
+    } finally {
+      fs.rmSync(hibossDir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("/status resolves effective codex model/reasoning from CODEX_HOME config", async () => {
+  await withTempDb(async (db) => {
+    const codexHome = fs.mkdtempSync(path.join(os.tmpdir(), "hiboss-codex-home-"));
+    try {
+      fs.writeFileSync(
+        path.join(codexHome, "config.toml"),
+        [
+          "model_provider = \"custom\"",
+          "model = \"gpt-5.3-codex\"",
+          "model_reasoning_effort = \"high\"",
+          "disable_response_storage = true",
+          "",
+          "[model_providers.custom]",
+          "name = \"custom\"",
+          "wire_api = \"responses\"",
+          "requires_openai_auth = true",
+          "base_url = \"https://cch.ethanelift.com/v1\"",
+          "",
+          "[features]",
+          "multi_agent = true",
+          "",
+        ].join("\n"),
+        "utf8"
+      );
+
+      db.registerAgent({
+        name: "nex",
+        provider: "codex",
+        metadata: {
+          providerCli: {
+            codex: {
+              env: {
+                CODEX_HOME: codexHome,
+              },
+            },
+          },
+        },
+      });
+
+      const handler = createChannelCommandHandler({
+        db,
+        executor: {
+          isAgentBusy: () => false,
+          abortCurrentRun: () => false,
+          invalidateChannelSessionCache: () => undefined,
+        } as any,
+        router: { routeEnvelope: async () => undefined } as any,
+      });
+
+      const response = await handler({
+        command: "status",
+        args: "",
+        adapterType: "telegram",
+        chatId: "chat-1",
+        authorId: "u-1",
+        authorUsername: "alice",
+        agentName: "nex",
+      } as any);
+
+      assert.ok(response);
+      assert.equal(response?.text?.includes("effective-model: gpt-5.3-codex"), true);
+      assert.equal(response?.text?.includes("effective-reasoning-effort: high"), true);
+      assert.equal(response?.text?.includes("codex-config-model-provider: custom"), true);
+      assert.equal(response?.text?.includes("codex-config-features-multi-agent: true"), true);
+      assert.equal(
+        response?.text?.includes("codex-config-provider-base-url: https://cch.ethanelift.com/v1"),
+        true
+      );
+    } finally {
+      fs.rmSync(codexHome, { recursive: true, force: true });
+    }
+  });
+});
+
 test("/session not-found uses distinct message from invalid-id", async () => {
   await withTempDb(async (db) => {
-    db.registerAgent({ name: "nex", provider: "codex", role: "speaker" });
+    db.registerAgent({ name: "nex", provider: "codex" });
     db.getOrCreateChannelActiveSession({
       agentName: "nex",
       adapterType: "telegram",

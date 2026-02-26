@@ -22,6 +22,7 @@ import { readPersistedAgentSession } from "./persisted-session.js";
 import type { AgentRunTrigger } from "./executor-triggers.js";
 import { getTriggerFields } from "./executor-triggers.js";
 import { resolveSessionOpenMode } from "./session-resume.js";
+import { getProviderCliEnvOverrides } from "./provider-env.js";
 
 type SessionPolicy = {
   dailyResetAt?: { hour: number; minute: number; normalized: string };
@@ -66,9 +67,17 @@ export async function getOrCreateAgentSession(params: {
   // Apply any pending refresh request at the first safe point (before a run).
   const pendingRefreshReasons = await params.applyPendingSessionRefresh(params.agent.name);
   const triggerFields = getTriggerFields(params.trigger);
+  const desiredProvider = params.agent.provider ?? DEFAULT_AGENT_PROVIDER;
 
   let session = params.sessions.get(params.agent.name);
   let policyRefreshReason: string | null = null;
+  let providerRefreshReason: string | null = null;
+
+  if (session && session.provider !== desiredProvider) {
+    providerRefreshReason = `provider-mismatch:${session.provider}!=${desiredProvider}`;
+    await params.refreshSession(params.agent.name, providerRefreshReason);
+    session = undefined;
+  }
 
   // Apply policy-based refreshes before starting a new run.
   if (session) {
@@ -88,7 +97,6 @@ export async function getOrCreateAgentSession(params: {
       throw new Error(`Agent ${params.agent.name} not found in database`);
     }
 
-    const desiredProvider = params.agent.provider ?? DEFAULT_AGENT_PROVIDER;
     const persisted = readPersistedAgentSession(agentRecord);
     // If a resumable session handle exists, prefer its provider.
     const provider =
@@ -96,6 +104,7 @@ export async function getOrCreateAgentSession(params: {
         ? persisted.provider
         : desiredProvider;
     const workspace = params.agent.workspace ?? getDefaultRuntimeWorkspace();
+    const providerEnvOverrides = getProviderCliEnvOverrides(params.agent.metadata, provider);
     const codexCumulativeUsageTotals =
       provider === "codex"
         ? parseCodexCumulativeUsageTotals(persisted?.handle.metadata?.codexCumulativeUsage)
@@ -129,6 +138,7 @@ export async function getOrCreateAgentSession(params: {
         agentToken: agentRecord.token,
         systemInstructions: instructions,
         workspace,
+        providerEnvOverrides,
         model: params.agent.model,
         reasoningEffort: params.agent.reasoningEffort,
         sessionId,
@@ -138,7 +148,11 @@ export async function getOrCreateAgentSession(params: {
       };
       params.sessions.set(params.agent.name, session);
 
-      const refreshReasons = [...pendingRefreshReasons, ...(policyRefreshReason ? [policyRefreshReason] : [])];
+      const refreshReasons = [
+        ...pendingRefreshReasons,
+        ...(providerRefreshReason ? [providerRefreshReason] : []),
+        ...(policyRefreshReason ? [policyRefreshReason] : []),
+      ];
       const event = openMode === "resume" ? "agent-session-load" : "agent-session-create";
       logEvent("info", event, {
         "agent-name": params.agent.name,

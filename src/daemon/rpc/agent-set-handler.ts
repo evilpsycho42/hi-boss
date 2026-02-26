@@ -16,12 +16,6 @@ import {
   DEFAULT_AGENT_PROVIDER,
 } from "../../shared/defaults.js";
 import { isPermissionLevel } from "../../shared/permissions.js";
-import { isAgentRole, resolveAgentRole } from "../../shared/agent-role.js";
-import {
-  predictRoleAfterBindingMutation,
-  predictRoleAfterExplicitMutation,
-  buildMutationInvariantViolationMessage,
-} from "../../shared/agent-role-mutation.js";
 import { mutateSettingsAndSync } from "../settings-sync.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 import { isKnownAdapterType } from "../../shared/adapter-types.js";
@@ -58,7 +52,6 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
       const wantsUnbind = p.unbindAdapterType !== undefined;
 
       const hasAnyUpdate =
-        p.role !== undefined ||
         p.description !== undefined ||
         p.workspace !== undefined ||
         p.provider !== undefined ||
@@ -75,7 +68,6 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
       }
 
       changedKeys = [
-        ...(p.role !== undefined ? ["role"] : []),
         ...(p.description !== undefined ? ["description"] : []),
         ...(p.workspace !== undefined ? ["workspace"] : []),
         ...(p.provider !== undefined ? ["provider"] : []),
@@ -108,10 +100,7 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         rpcError(RPC_ERRORS.INVALID_PARAMS, `Unknown adapter type: ${unbindAdapterType}`);
       }
 
-      const allAgents = ctx.db.listAgents();
-      const allBindings = ctx.db.listBindings();
-      const bindingsForAgent = allBindings.filter((binding) => binding.agentName === agentName);
-      const currentBindingCount = bindingsForAgent.length;
+      const bindingsForAgent = ctx.db.listBindings().filter((binding) => binding.agentName === agentName);
 
       const unbindBinding =
         unbindAdapterType !== undefined
@@ -140,88 +129,7 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         }
       }
 
-      const currentBindingTypes = new Set(bindingsForAgent.map((binding) => binding.adapterType));
-      const nextBindingTypes = new Set(currentBindingTypes);
-      if (unbindAdapterType) nextBindingTypes.delete(unbindAdapterType);
-      if (bindAdapterType) nextBindingTypes.add(bindAdapterType);
-      const nextBindingCount = nextBindingTypes.size;
-      const bindingCountDelta = nextBindingCount - currentBindingCount;
-
-      let role: "speaker" | "leader" | undefined;
-      if (p.role !== undefined) {
-        if (!isAgentRole(p.role)) {
-          rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid role (expected speaker or leader)");
-        }
-        role = p.role;
-
-        // Validate post-role-change invariant
-        const prediction = predictRoleAfterExplicitMutation({
-          agent,
-          newRole: p.role,
-          allAgents,
-          allBindings,
-        });
-
-        if (prediction.breaking) {
-          const message = buildMutationInvariantViolationMessage({
-            operation: "set-role",
-            agentName: agentName,
-            prediction,
-          });
-          logEvent("warn", "agent-set-role-blocked-invariant", {
-            "agent-name": agentName,
-            "current-role": prediction.before,
-            "requested-role": prediction.after,
-            "missing-role": prediction.missingRole,
-          });
-          rpcError(RPC_ERRORS.INVALID_PARAMS, message);
-        }
-      }
-
-      if (role === "speaker" && nextBindingCount < 1) {
-        rpcError(
-          RPC_ERRORS.INVALID_PARAMS,
-          "Setting role to speaker requires at least one adapter binding in the same command."
-        );
-      }
-
-      const roleAfterMutation =
-        role ??
-        resolveAgentRole({
-          metadata: agent.metadata,
-          bindingCount: nextBindingCount,
-        });
-
-      if (wantsUnbind && roleAfterMutation === "speaker" && nextBindingCount < 1) {
-        rpcError(
-          RPC_ERRORS.INVALID_PARAMS,
-          "Cannot unbind the last adapter from speaker agent. Bind another adapter or change role to leader in the same command."
-        );
-      }
-
-      if (wantsUnbind && role !== "leader" && bindingCountDelta < 0) {
-        const prediction = predictRoleAfterBindingMutation({
-          agent,
-          bindingCountDelta,
-          allAgents,
-          allBindings,
-        });
-
-        if (prediction.breaking) {
-          const message = buildMutationInvariantViolationMessage({
-            operation: "unbind",
-            agentName: agentName,
-            prediction,
-          });
-          logEvent("warn", "agent-set-unbind-blocked-invariant", {
-            "agent-name": agentName,
-            "current-role": prediction.before,
-            "would-flip-to": prediction.after,
-            "missing-role": prediction.missingRole,
-          });
-          rpcError(RPC_ERRORS.INVALID_PARAMS, message);
-        }
-      }
+      void agent;
 
       let provider: "claude" | "codex" | null | undefined;
       if (p.provider !== undefined) {
@@ -382,17 +290,12 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
       }
 
       const updates: {
-        role?: "speaker" | "leader";
         description?: string | null;
         workspace?: string | null;
         provider?: "claude" | "codex" | null;
         model?: string | null;
         reasoningEffort?: Agent["reasoningEffort"] | null;
       } = {};
-
-      if (role !== undefined) {
-        updates.role = role;
-      }
 
       if (p.description !== undefined) {
         if (p.description !== null && typeof p.description !== "string") {
@@ -462,9 +365,6 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
               });
             }
 
-            if (updates.role !== undefined) {
-              target.role = updates.role;
-            }
             if (updates.description !== undefined) {
               target.description = updates.description ?? "";
             }
@@ -542,7 +442,6 @@ export function createAgentSetHandler(ctx: DaemonContext): RpcMethodRegistry {
         success: true,
         agent: {
           name: updated.name,
-          role: updated.role,
           description: updated.description,
           workspace: updated.workspace,
           provider: updated.provider ?? DEFAULT_AGENT_PROVIDER,

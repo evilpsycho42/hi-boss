@@ -9,6 +9,8 @@ import { getDaemonTimeContext } from "../time-context.js";
 
 interface SendEnvelopeResult {
   id: string;
+  interruptedWork?: boolean;
+  priorityApplied?: boolean;
 }
 
 interface ListEnvelopesResult {
@@ -31,6 +33,7 @@ export interface SendEnvelopeOptions {
   textFile?: string;
   attachment?: string[];
   deliverAt?: string;
+  interruptNow?: boolean;
   parseMode?: string;
   replyTo?: string;
 }
@@ -76,11 +79,17 @@ export async function sendEnvelope(options: SendEnvelopeOptions): Promise<void> 
         };
       }),
       deliverAt: options.deliverAt,
+      interruptNow: options.interruptNow,
       parseMode,
       replyToEnvelopeId: options.replyTo,
     });
 
     console.log(`id: ${formatShortId(result.id)}`);
+    if (options.interruptNow) {
+      console.log("interrupt-now: true");
+      console.log(`interrupted-work: ${result.interruptedWork ? "true" : "false"}`);
+      console.log(`priority-applied: ${result.priorityApplied ? "true" : "false"}`);
+    }
   } catch (err) {
     const e = err as Error & { code?: number; data?: unknown };
     console.error("error:", e.message);

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import Database from "better-sqlite3";
 import { HiBossDatabase } from "./database.js";
 
 function withTempDb(run: (db: HiBossDatabase) => void): void {
@@ -17,35 +18,104 @@ function withTempDb(run: (db: HiBossDatabase) => void): void {
   }
 }
 
-test("getAgentRoleCounts infers legacy roles from bindings", () => {
+test("registerAgent persists and lists agents", () => {
   withTempDb((db) => {
     db.registerAgent({
-      name: "speakerish",
+      name: "agent-a",
       provider: "codex",
-      role: undefined,
     });
     db.registerAgent({
-      name: "leaderish",
+      name: "agent-b",
       provider: "codex",
-      role: undefined,
     });
 
-    db.createBinding("speakerish", "telegram", "123456:abcDEF");
-
-    assert.deepEqual(db.getAgentRoleCounts(), { speaker: 1, leader: 1 });
+    const names = db.listAgents().map((agent) => agent.name).sort();
+    assert.deepEqual(names, ["agent-a", "agent-b"]);
   });
 });
 
-test("getAgentRoleCounts prefers explicit metadata.role over binding inference", () => {
+test("envelopes default priority to 0", () => {
   withTempDb((db) => {
-    db.registerAgent({
-      name: "explicit-leader",
-      provider: "codex",
-      role: "leader",
+    const env = db.createEnvelope({
+      from: "agent:sender",
+      to: "agent:receiver",
+      content: { text: "hello" },
     });
 
-    db.createBinding("explicit-leader", "telegram", "123456:abcDEF");
-
-    assert.deepEqual(db.getAgentRoleCounts(), { speaker: 0, leader: 1 });
+    const stored = db.getEnvelopeById(env.id);
+    assert.ok(stored);
+    assert.equal(stored.priority, 0);
   });
+});
+
+test("getPendingEnvelopesForAgent prioritizes higher priority envelopes first", () => {
+  withTempDb((db) => {
+    db.registerAgent({
+      name: "nex",
+      provider: "codex",
+    });
+
+    const low1 = db.createEnvelope({
+      from: "agent:sender",
+      to: "agent:nex",
+      content: { text: "low-1" },
+      priority: 0,
+    });
+    const high = db.createEnvelope({
+      from: "agent:sender",
+      to: "agent:nex",
+      content: { text: "high" },
+      priority: 1,
+    });
+    const low2 = db.createEnvelope({
+      from: "agent:sender",
+      to: "agent:nex",
+      content: { text: "low-2" },
+      priority: 0,
+    });
+
+    const pending = db.getPendingEnvelopesForAgent("nex", 10);
+    assert.deepEqual(
+      pending.map((item) => item.id),
+      [high.id, low1.id, low2.id]
+    );
+  });
+});
+
+test("legacy envelopes table without priority is auto-migrated on startup", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hiboss-db-legacy-priority-test-"));
+  const dbPath = path.join(dir, "hiboss.db");
+
+  const legacyDb = new Database(dbPath);
+  legacyDb.exec(`
+    CREATE TABLE envelopes (
+      id TEXT PRIMARY KEY,
+      "from" TEXT NOT NULL,
+      "to" TEXT NOT NULL,
+      from_boss INTEGER DEFAULT 0,
+      content_text TEXT,
+      content_attachments TEXT,
+      deliver_at INTEGER,
+      status TEXT,
+      created_at INTEGER,
+      metadata TEXT
+    );
+  `);
+  legacyDb.close();
+
+  const db = new HiBossDatabase(dbPath);
+  try {
+    const probe = db.createEnvelope({
+      from: "agent:sender",
+      to: "agent:receiver",
+      content: { text: "probe" },
+      priority: 1,
+    });
+    const stored = db.getEnvelopeById(probe.id);
+    assert.ok(stored);
+    assert.equal(stored.priority, 1);
+  } finally {
+    db.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });

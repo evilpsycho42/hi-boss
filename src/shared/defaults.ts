@@ -41,8 +41,6 @@ export const DEFAULT_AGENT_PERMISSION_LEVEL = "standard" as const;
 
 // ==================== Reserved Agents ====================
 
-export const BACKGROUND_AGENT_NAME = "background" as const;
-export const DEFAULT_BACKGROUND_MAX_CONCURRENT = 4 as const;
 export const DEFAULT_ONESHOT_MAX_CONCURRENT = 4 as const;
 export const DEFAULT_SESSION_CONCURRENCY_PER_AGENT = 4 as const;
 export const DEFAULT_SESSION_CONCURRENCY_GLOBAL = 16 as const;

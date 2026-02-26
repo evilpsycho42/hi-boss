@@ -130,44 +130,47 @@ export async function runInteractiveSetup(): Promise<void> {
     console.error("\n❌ Tokens do not match. Please try again.\n");
   }
 
-  console.log("\n📦 Speaker Information (channel-facing)\n");
+  console.log("\n📦 Primary Agent Information\n");
 
-  const speakerAgentName = (
+  const primaryAgentName = (
     await input({
-      message: "Speaker agent name (slug):",
+      message: "Primary agent name (slug):",
       default: DEFAULT_SETUP_AGENT_NAME,
       validate: (value) => (isValidAgentName(value.trim()) ? true : AGENT_NAME_ERROR_MESSAGE),
     })
   ).trim();
 
-  const speakerWorkspace = await input({
-    message: "Speaker workspace directory:",
+  const primaryWorkspace = await input({
+    message: "Primary agent workspace directory:",
     default: getDefaultSetupWorkspace(),
     validate: (value) => (path.isAbsolute(value) ? true : "Please provide an absolute path"),
   });
 
-  const speakerPermissionLevel = await promptAgentPermissionLevel({
-    message: "Speaker permission level:",
+  const primaryPermissionLevel = await promptAgentPermissionLevel({
+    message: "Primary agent permission level:",
     defaultValue: DEFAULT_SETUP_PERMISSION_LEVEL,
   });
 
-  const speakerProvider = await promptAgentProvider("Speaker provider:");
+  const primaryProvider = await promptAgentProvider("Primary agent provider:");
 
-  const speakerModel = await promptAgentModel({
-    provider: speakerProvider,
-    message: "Speaker model:",
+  const primaryModel = await promptAgentModel({
+    provider: primaryProvider,
+    message: "Primary agent model:",
   });
 
-  const speakerReasoningEffort = await promptAgentReasoningEffort("Speaker reasoning effort:");
+  const primaryReasoningEffort = await promptAgentReasoningEffort("Primary agent reasoning effort:");
 
-  const speakerAgentDescription = (
+  const primaryAgentDescription = (
     await input({
-      message: "Speaker description (optional):",
-      default: getDefaultAgentDescription(speakerAgentName),
+      message: "Primary agent description (optional):",
+      default: getDefaultAgentDescription(primaryAgentName),
     })
   ).trim();
 
-  const speakerAdvanced = await promptAgentAdvancedOptions({ agentLabel: "Speaker" });
+  const primaryAdvanced = await promptAgentAdvancedOptions({
+    agentLabel: "Primary agent",
+    provider: primaryProvider,
+  });
 
   console.log("\n📱 Telegram Binding\n");
   console.log("\n📋 To create a Telegram bot:");
@@ -185,78 +188,81 @@ export async function runInteractiveSetup(): Promise<void> {
     })
   ).trim();
 
-  console.log("\n🧭 Leader Information (delegation/orchestration)\n");
+  console.log("\n🧰 Secondary Agent Information\n");
 
-  const leaderAgentName = (
+  const secondaryAgentName = (
     await input({
-      message: "Leader agent name (slug):",
-      default: "kai",
+      message: "Secondary agent name (slug):",
+      default: "walt",
       validate: (value) => {
         const name = value.trim();
         if (!isValidAgentName(name)) return AGENT_NAME_ERROR_MESSAGE;
-        if (name.toLowerCase() === speakerAgentName.toLowerCase()) {
-          return "Leader name must be different from speaker name";
+        if (name.toLowerCase() === primaryAgentName.toLowerCase()) {
+          return "Secondary name must be different from primary name";
         }
         return true;
       },
     })
   ).trim();
 
-  const leaderWorkspace = await input({
-    message: "Leader workspace directory:",
-    default: speakerWorkspace,
+  const secondaryWorkspace = await input({
+    message: "Secondary agent workspace directory:",
+    default: primaryWorkspace,
     validate: (value) => (path.isAbsolute(value) ? true : "Please provide an absolute path"),
   });
 
-  const leaderPermissionLevel = await promptAgentPermissionLevel({
-    message: "Leader permission level:",
-    defaultValue: speakerPermissionLevel,
+  const secondaryPermissionLevel = await promptAgentPermissionLevel({
+    message: "Secondary agent permission level:",
+    defaultValue: primaryPermissionLevel,
   });
 
-  const leaderProvider = await promptAgentProvider("Leader provider:");
+  const secondaryProvider = await promptAgentProvider("Secondary agent provider:");
 
-  const leaderModel = await promptAgentModel({
-    provider: leaderProvider,
-    message: "Leader model:",
+  const secondaryModel = await promptAgentModel({
+    provider: secondaryProvider,
+    message: "Secondary agent model:",
   });
 
-  const leaderReasoningEffort = await promptAgentReasoningEffort("Leader reasoning effort:");
+  const secondaryReasoningEffort = await promptAgentReasoningEffort("Secondary agent reasoning effort:");
 
-  const leaderAgentDescription = (
+  const secondaryAgentDescription = (
     await input({
-      message: "Leader description (optional):",
-      default: getDefaultAgentDescription(leaderAgentName),
+      message: "Secondary agent description (optional):",
+      default: getDefaultAgentDescription(secondaryAgentName),
     })
   ).trim();
 
-  const leaderAdvanced = await promptAgentAdvancedOptions({ agentLabel: "Leader" });
+  const secondaryAdvanced = await promptAgentAdvancedOptions({
+    agentLabel: "Secondary agent",
+    provider: secondaryProvider,
+  });
 
   console.log("\n⚙️  Applying configuration...\n");
 
   const config: SetupConfig = {
     bossName,
     bossTimezone,
-    speakerAgent: {
-      name: speakerAgentName,
-      provider: speakerProvider,
-      description: speakerAgentDescription,
-      workspace: speakerWorkspace,
-      model: speakerModel,
-      reasoningEffort: speakerReasoningEffort,
-      permissionLevel: speakerPermissionLevel,
-      sessionPolicy: speakerAdvanced.sessionPolicy,
-      metadata: speakerAdvanced.metadata,
+    primaryAgent: {
+      name: primaryAgentName,
+      provider: primaryProvider,
+      description: primaryAgentDescription,
+      workspace: primaryWorkspace,
+      model: primaryModel,
+      reasoningEffort: primaryReasoningEffort,
+      permissionLevel: primaryPermissionLevel,
+      sessionPolicy: primaryAdvanced.sessionPolicy,
+      metadata: primaryAdvanced.metadata,
     },
-    leaderAgent: {
-      name: leaderAgentName,
-      provider: leaderProvider,
-      description: leaderAgentDescription,
-      workspace: leaderWorkspace,
-      model: leaderModel,
-      reasoningEffort: leaderReasoningEffort,
-      permissionLevel: leaderPermissionLevel,
-      sessionPolicy: leaderAdvanced.sessionPolicy,
-      metadata: leaderAdvanced.metadata,
+    secondaryAgent: {
+      name: secondaryAgentName,
+      provider: secondaryProvider,
+      description: secondaryAgentDescription,
+      workspace: secondaryWorkspace,
+      model: secondaryModel,
+      reasoningEffort: secondaryReasoningEffort,
+      permissionLevel: secondaryPermissionLevel,
+      sessionPolicy: secondaryAdvanced.sessionPolicy,
+      metadata: secondaryAdvanced.metadata,
     },
     adapter: {
       adapterType: "telegram",
@@ -273,10 +279,10 @@ export async function runInteractiveSetup(): Promise<void> {
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log(`   daemon-timezone: ${daemonTimeZone}`);
     console.log(`   boss-timezone:  ${bossTimezone}`);
-    console.log(`   speaker-agent-name:  ${speakerAgentName}`);
-    console.log(`   speaker-agent-token: ${setupResult.speakerAgentToken}`);
-    console.log(`   leader-agent-name:   ${leaderAgentName}`);
-    console.log(`   leader-agent-token:  ${setupResult.leaderAgentToken}`);
+    console.log(`   primary-agent-name:   ${primaryAgentName}`);
+    console.log(`   primary-agent-token:  ${setupResult.primaryAgentToken}`);
+    console.log(`   secondary-agent-name: ${secondaryAgentName}`);
+    console.log(`   secondary-agent-token:${setupResult.secondaryAgentToken}`);
     console.log(`   admin-token: ${adminToken}`);
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("\n⚠️  Save these tokens! They won't be shown again.\n");

@@ -24,7 +24,6 @@ test("channel session mapping creates once and switches active session", () => {
     db.registerAgent({
       name: "nex",
       provider: "codex",
-      role: "speaker",
     });
 
     const first = db.getOrCreateChannelActiveSession({
@@ -76,7 +75,6 @@ test("list sessions scope respects current chat, owner, and agent-wide visibilit
     db.registerAgent({
       name: "nex",
       provider: "codex",
-      role: "speaker",
     });
 
     const s1 = db.getOrCreateChannelActiveSession({

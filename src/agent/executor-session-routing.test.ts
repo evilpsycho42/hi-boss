@@ -81,9 +81,64 @@ test("abortCurrentRun skips queued tasks enqueued before abort generation bump",
   assert.deepEqual(calls, ["e1"]);
 });
 
+test("abortCurrentRun skips old queued tasks but allows new tasks queued after abort", async () => {
+  const executor = new AgentExecutor();
+  const calls: string[] = [];
+
+  let releaseFirst!: () => void;
+  const firstRunGate = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+
+  (executor as any).runSessionExecution = async (params: { envelopes: Array<{ id: string }> }) => {
+    const id = params.envelopes[0]?.id;
+    if (id) calls.push(id);
+    if (id === "e1") {
+      await firstRunGate;
+    }
+  };
+
+  const agent = { name: "nex" } as any;
+  const db = {} as any;
+  const scope = { kind: "default", cacheKey: "default:nex" } as any;
+
+  (executor as any).queueSessionExecution({
+    agent,
+    db,
+    scope,
+    envelopes: [{ id: "e1" }],
+    refreshReasons: [],
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  (executor as any).queueSessionExecution({
+    agent,
+    db,
+    scope,
+    envelopes: [{ id: "e2" }],
+    refreshReasons: [],
+  });
+
+  const cancelled = executor.abortCurrentRun("nex", "test:/abort");
+  assert.equal(cancelled, true);
+
+  (executor as any).queueSessionExecution({
+    agent,
+    db,
+    scope,
+    envelopes: [{ id: "e3" }],
+    refreshReasons: [],
+  });
+
+  releaseFirst();
+  await waitUntilIdle(executor, "nex");
+
+  assert.deepEqual(calls, ["e1", "e3"]);
+});
+
 test("resolveExecutionScope respects envelope channelSessionId pin even after active mapping changed", () => {
   withTempDb((db) => {
-    db.registerAgent({ name: "nex", provider: "codex", role: "speaker" });
+    db.registerAgent({ name: "nex", provider: "codex" });
 
     const first = db.getOrCreateChannelActiveSession({
       agentName: "nex",

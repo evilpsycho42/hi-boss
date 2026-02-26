@@ -1,19 +1,43 @@
-import { input, select } from "@inquirer/prompts";
+import path from "node:path";
+import { input, password, select } from "@inquirer/prompts";
 import { parseDailyResetAt, parseDurationToMs } from "../../../shared/session-policy.js";
 import {
   DEFAULT_SETUP_PERMISSION_LEVEL,
   SETUP_MODEL_CHOICES_BY_PROVIDER,
 } from "../../../shared/defaults.js";
+import { mergeProviderCliEnvOverrides } from "../../../agent/provider-env.js";
 import type { SetupConfig } from "./types.js";
 
 type Provider = "claude" | "codex";
-type PermissionLevel = NonNullable<SetupConfig["speakerAgent"]["permissionLevel"]>;
+type PermissionLevel = NonNullable<SetupConfig["primaryAgent"]["permissionLevel"]>;
 
 const MODEL_PROVIDER_DEFAULT = "default";
 const MODEL_CUSTOM = "__custom__";
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function parseEnvOverridesJson(value: string): Record<string, string> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error("Invalid JSON");
+  }
+  if (!isPlainObject(parsed)) {
+    throw new Error("Must be a JSON object");
+  }
+  const env: Record<string, string> = {};
+  for (const [rawKey, rawValue] of Object.entries(parsed)) {
+    const key = rawKey.trim();
+    if (!key) continue;
+    if (typeof rawValue !== "string") {
+      throw new Error(`Value for '${rawKey}' must be a string`);
+    }
+    env[key] = rawValue;
+  }
+  return env;
 }
 
 export async function promptAgentProvider(message: string): Promise<Provider> {
@@ -66,7 +90,7 @@ export async function promptAgentModel(params: {
 
 export async function promptAgentReasoningEffort(
   message: string
-): Promise<SetupConfig["speakerAgent"]["reasoningEffort"]> {
+): Promise<SetupConfig["primaryAgent"]["reasoningEffort"]> {
   const reasoningEffortChoice = await select<"default" | "none" | "low" | "medium" | "high" | "xhigh">({
     message,
     choices: [
@@ -101,8 +125,9 @@ export async function promptAgentPermissionLevel(params: {
 
 export async function promptAgentAdvancedOptions(params: {
   agentLabel: string;
+  provider: Provider;
 }): Promise<{
-  sessionPolicy?: SetupConfig["speakerAgent"]["sessionPolicy"];
+  sessionPolicy?: SetupConfig["primaryAgent"]["sessionPolicy"];
   metadata?: Record<string, unknown>;
 }> {
   const sessionDailyResetAt = (
@@ -173,7 +198,102 @@ export async function promptAgentAdvancedOptions(params: {
     })
   ).trim();
 
-  const metadata = metadataRaw ? (JSON.parse(metadataRaw) as Record<string, unknown>) : undefined;
+  let metadata = metadataRaw ? (JSON.parse(metadataRaw) as Record<string, unknown>) : undefined;
+
+  const providerEnvMode = await select<"default" | "custom">({
+    message: `${params.agentLabel} ${params.provider} provider env overrides:`,
+    choices: [
+      { value: "default", name: "Default (shared provider home/env)" },
+      { value: "custom", name: "Custom (per-agent env overrides)" },
+    ],
+    default: "default",
+  });
+
+  if (providerEnvMode === "custom") {
+    const envOverrides: Record<string, string> = {};
+
+    if (params.provider === "claude") {
+      const anthropicBaseUrl = (
+        await input({
+          message: `${params.agentLabel} ANTHROPIC_BASE_URL (optional):`,
+          default: "",
+        })
+      ).trim();
+      if (anthropicBaseUrl) {
+        envOverrides.ANTHROPIC_BASE_URL = anthropicBaseUrl;
+      }
+
+      const anthropicApiKey = (
+        await password({
+          message: `${params.agentLabel} ANTHROPIC_API_KEY (optional):`,
+          mask: "*",
+        })
+      ).trim();
+      if (anthropicApiKey) {
+        envOverrides.ANTHROPIC_API_KEY = anthropicApiKey;
+      }
+
+      const claudeConfigDir = (
+        await input({
+          message: `${params.agentLabel} CLAUDE_CONFIG_DIR (optional; absolute path):`,
+          default: "",
+          validate: (value) => {
+            const trimmed = value.trim();
+            if (!trimmed) return true;
+            if (!path.isAbsolute(trimmed)) return "Expected absolute path";
+            return true;
+          },
+        })
+      ).trim();
+      if (claudeConfigDir) {
+        envOverrides.CLAUDE_CONFIG_DIR = claudeConfigDir;
+      }
+    }
+
+    if (params.provider === "codex") {
+      const codexHome = (
+        await input({
+          message: `${params.agentLabel} CODEX_HOME (optional; absolute path):`,
+          default: "",
+          validate: (value) => {
+            const trimmed = value.trim();
+            if (!trimmed) return true;
+            if (!path.isAbsolute(trimmed)) return "Expected absolute path";
+            return true;
+          },
+        })
+      ).trim();
+      if (codexHome) {
+        envOverrides.CODEX_HOME = codexHome;
+      }
+    }
+
+    const extraEnvRaw = (
+      await input({
+        message: `${params.agentLabel} extra provider env JSON (optional; {"KEY":"value"}):`,
+        default: "",
+        validate: (value) => {
+          const trimmed = value.trim();
+          if (!trimmed) return true;
+          try {
+            parseEnvOverridesJson(trimmed);
+            return true;
+          } catch (err) {
+            return (err as Error).message;
+          }
+        },
+      })
+    ).trim();
+    if (extraEnvRaw) {
+      Object.assign(envOverrides, parseEnvOverridesJson(extraEnvRaw));
+    }
+
+    metadata = mergeProviderCliEnvOverrides({
+      metadata,
+      provider: params.provider,
+      envOverrides: Object.keys(envOverrides).length > 0 ? envOverrides : undefined,
+    });
+  }
 
   const sessionPolicy =
     sessionDailyResetAt || sessionIdleTimeout || sessionMaxContextLength !== undefined

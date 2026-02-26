@@ -25,7 +25,6 @@ export function registerAgentCommands(program: Command): void {
     .command("register")
     .description("Register a new agent")
     .requiredOption("--name <name>", "Agent name (alphanumeric with hyphens)")
-    .requiredOption("--role <role>", "Agent role (speaker or leader)")
     .requiredOption("--provider <provider>", "Provider (claude or codex)")
     .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
     .option("--description <description>", "Agent description")
@@ -61,7 +60,6 @@ export function registerAgentCommands(program: Command): void {
       registerAgent({
         token: options.token,
         name: options.name,
-        role: options.role,
         description: options.description,
         workspace: options.workspace,
         provider: options.provider,
@@ -84,7 +82,6 @@ export function registerAgentCommands(program: Command): void {
     .description("Update agent settings and bindings")
     .requiredOption("--name <name>", "Agent name")
     .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
-    .option("--role <role>", "Agent role (speaker or leader)")
     .option("--description <description>", "Agent description")
     .option("--workspace <path>", "Workspace directory for provider CLI runs")
     .option("--provider <provider>", "Provider (claude or codex)")
@@ -130,7 +127,6 @@ export function registerAgentCommands(program: Command): void {
       setAgent({
         token: options.token,
         name: options.name,
-        role: options.role,
         description: options.description,
         workspace: options.workspace,
         provider: options.provider,

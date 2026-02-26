@@ -15,7 +15,14 @@ import {
   findCodexRolloutPathForThread,
   readCodexFinalCallTokenUsageFromRollout,
 } from "./codex-rollout.js";
-import { parseClaudeOutput, parseCodexOutput } from "./provider-cli-parsers.js";
+import {
+  parseClaudeOutput,
+  parseClaudeTraceEntries,
+  parseCodexTraceEntries,
+  parseCodexFailureMessage,
+  parseCodexOutput,
+  type ProviderTraceEntry,
+} from "./provider-cli-parsers.js";
 
 export interface CliTurnResult {
   status: "success" | "cancelled";
@@ -23,6 +30,13 @@ export interface CliTurnResult {
   usage: TurnTokenUsage;
   /** Session/thread ID extracted from output (for resume). */
   sessionId?: string;
+}
+
+export interface CliTurnTraceCapture {
+  provider: "claude" | "codex";
+  status: "success" | "failed" | "cancelled";
+  entries: ProviderTraceEntry[];
+  error?: string;
 }
 
 /**
@@ -115,6 +129,8 @@ export async function executeCliTurn(
     agentName: string;
     signal?: AbortSignal;
     onChildProcess?: (proc: ChildProcess) => void;
+    onTraceProgress?: (trace: { provider: "claude" | "codex"; entries: ProviderTraceEntry[] }) => void;
+    onTraceCaptured?: (trace: CliTurnTraceCapture) => void;
   },
 ): Promise<CliTurnResult> {
   const { hibossDir, agentName, signal } = options;
@@ -130,17 +146,24 @@ export async function executeCliTurn(
     [HIBOSS_TOKEN_ENV]: session.agentToken,
   };
 
-  // Provider CLIs support "home" overrides via env vars, but Hi-Boss intentionally
-  // forces the shared default homes for stable behavior across machines:
+  // Provider CLIs support "home" overrides via env vars. Hi-Boss starts from
+  // shared defaults for stable behavior across machines:
   // - Claude: ~/.claude (override var: CLAUDE_CONFIG_DIR)
   // - Codex:  ~/.codex  (override var: CODEX_HOME)
+  // and then applies optional per-agent overrides from metadata.
   delete env.CLAUDE_CONFIG_DIR;
   delete env.CODEX_HOME;
+  if (session.providerEnvOverrides) {
+    for (const [key, value] of Object.entries(session.providerEnvOverrides)) {
+      env[key] = value;
+    }
+  }
 
   return new Promise<CliTurnResult>((resolve, reject) => {
     let cancelled = false;
     let stdoutChunks: Buffer[] = [];
     let stderrChunks: Buffer[] = [];
+    let stdoutText = "";
 
     const child = spawn(cmd, args, {
       cwd: session.workspace,
@@ -162,6 +185,14 @@ export async function executeCliTurn(
 
     child.stdout?.on("data", (chunk: Buffer) => {
       stdoutChunks.push(chunk);
+      const text = chunk.toString("utf-8");
+      stdoutText += text;
+      const progressEntries =
+        session.provider === "claude" ? parseClaudeTraceEntries(stdoutText) : parseCodexTraceEntries(stdoutText);
+      options.onTraceProgress?.({
+        provider: session.provider,
+        entries: progressEntries,
+      });
     });
 
     child.stderr?.on("data", (chunk: Buffer) => {
@@ -200,6 +231,14 @@ export async function executeCliTurn(
       const stderr = Buffer.concat(stderrChunks).toString("utf-8");
 
       if (cancelled) {
+        const traceEntries =
+          session.provider === "claude" ? parseClaudeTraceEntries(stdout) : parseCodexTraceEntries(stdout);
+        options.onTraceCaptured?.({
+          provider: session.provider,
+          status: "cancelled",
+          entries: traceEntries,
+          error: "run-cancelled",
+        });
         resolve({
           status: "cancelled",
           finalText: "",
@@ -209,12 +248,23 @@ export async function executeCliTurn(
       }
 
       if (code !== 0 && code !== null) {
-        const errMsg = stderr.trim() || `CLI exited with code ${code}`;
+        const codexFailureMessage =
+          session.provider === "codex" ? parseCodexFailureMessage(stdout) : null;
+        const errMsg = stderr.trim() || codexFailureMessage || `CLI exited with code ${code}`;
+        const traceEntries =
+          session.provider === "claude" ? parseClaudeTraceEntries(stdout) : parseCodexTraceEntries(stdout);
+        options.onTraceCaptured?.({
+          provider: session.provider,
+          status: "failed",
+          entries: traceEntries,
+          error: errMsg,
+        });
         logEvent("warn", "agent-cli-exit-nonzero", {
           "agent-name": agentName,
           provider: session.provider,
           "exit-code": code,
           stderr: stderr.slice(0, 500),
+          ...(codexFailureMessage ? { "codex-failure-message": codexFailureMessage.slice(0, 500) } : {}),
         });
         reject(new Error(`${cmd} exited with code ${code}: ${errMsg.slice(0, 300)}`));
         return;
@@ -234,6 +284,13 @@ export async function executeCliTurn(
 
       try {
         const parsed = session.provider === "claude" ? parseClaudeOutput(stdout) : parseCodexOutput(stdout);
+        const traceEntries =
+          session.provider === "claude" ? parseClaudeTraceEntries(stdout) : parseCodexTraceEntries(stdout);
+        options.onTraceCaptured?.({
+          provider: session.provider,
+          status: "success",
+          entries: traceEntries,
+        });
 
         (async () => {
           // Best-effort: for Codex, refine context-length using the rollout log’s token_count events.

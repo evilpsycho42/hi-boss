@@ -1,7 +1,6 @@
 import * as path from "node:path";
 
 import {
-  BACKGROUND_AGENT_NAME,
   DEFAULT_PERMISSION_POLICY,
   DEFAULT_SESSION_CONCURRENCY_GLOBAL,
   DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
@@ -35,7 +34,6 @@ export interface SettingsSessionPolicyV4 {
 export interface SettingsAgentV4 {
   name: string;
   token: string;
-  role: "speaker" | "leader";
   provider: SettingsProvider;
   description: string;
   workspace: string | null;
@@ -266,9 +264,6 @@ function parseAgent(raw: unknown, index: number): SettingsAgentV4 {
   if (!name || !isValidAgentName(name)) {
     fail(`agents[${index}].name`, AGENT_NAME_ERROR_MESSAGE);
   }
-  if (name.toLowerCase() === BACKGROUND_AGENT_NAME) {
-    fail(`agents[${index}].name`, `reserved name '${BACKGROUND_AGENT_NAME}'`);
-  }
 
   const token = typeof raw.token === "string" ? raw.token.trim() : "";
   if (!token) {
@@ -276,11 +271,6 @@ function parseAgent(raw: unknown, index: number): SettingsAgentV4 {
   }
   if (!AGENT_TOKEN_REGEX.test(token)) {
     fail(`agents[${index}].token`, "must be 32 lowercase hex characters");
-  }
-
-  const role = raw.role;
-  if (role !== "speaker" && role !== "leader") {
-    fail(`agents[${index}].role`, "must be speaker or leader");
   }
 
   const provider = raw.provider;
@@ -349,7 +339,6 @@ function parseAgent(raw: unknown, index: number): SettingsAgentV4 {
   return {
     name,
     token,
-    role,
     provider,
     description,
     workspace,
@@ -383,9 +372,6 @@ export function assertValidSettingsV4(settings: SettingsV4): void {
   const byToken = new Set<string>();
   const bindingIdentity = new Set<string>();
 
-  let speakerCount = 0;
-  let leaderCount = 0;
-
   for (const agent of settings.agents) {
     const loweredName = agent.name.toLowerCase();
     if (byName.has(loweredName)) {
@@ -401,9 +387,6 @@ export function assertValidSettingsV4(settings: SettingsV4): void {
     }
     byToken.add(agent.token);
 
-    if (agent.role === "speaker") speakerCount++;
-    if (agent.role === "leader") leaderCount++;
-
     for (const binding of agent.bindings) {
       const key = `${binding.adapterType}\u0000${binding.adapterToken}`;
       if (bindingIdentity.has(key)) {
@@ -412,14 +395,8 @@ export function assertValidSettingsV4(settings: SettingsV4): void {
       bindingIdentity.add(key);
     }
 
-    if (agent.role === "speaker" && agent.bindings.length < 1) {
-      fail(`agents[${agent.name}]`, "speaker must have at least one binding");
-    }
   }
 
-  if (speakerCount < 1 || leaderCount < 1) {
-    fail("agents", "must contain at least one speaker and one leader");
-  }
 }
 
 export function parseSettingsV4Json(json: string): SettingsV4 {
@@ -515,7 +492,6 @@ export function stringifySettingsV4(settings: SettingsV4): string {
     agents: settings.agents.map((agent) => ({
       name: agent.name,
       token: agent.token,
-      role: agent.role,
       provider: agent.provider,
       description: agent.description,
       workspace: agent.workspace,

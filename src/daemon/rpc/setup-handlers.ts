@@ -6,10 +6,6 @@ import type { RpcMethodRegistry, AdminVerifyParams } from "../ipc/types.js";
 import { RPC_ERRORS } from "../ipc/types.js";
 import type { DaemonContext } from "./context.js";
 import { rpcError } from "./context.js";
-import {
-  getSpeakerBindingIntegrity,
-  toSpeakerBindingIntegrityView,
-} from "../../shared/speaker-binding-invariant.js";
 
 /**
  * Create setup RPC handlers.
@@ -19,17 +15,6 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
     "setup.check": async () => {
       const completed = ctx.db.isSetupComplete();
       const agents = ctx.db.listAgents();
-      const bindings = ctx.db.listBindings();
-      const roleCounts = ctx.db.getAgentRoleCounts();
-      const missingRoles: Array<"speaker" | "leader"> = [];
-      if (roleCounts.speaker < 1) missingRoles.push("speaker");
-      if (roleCounts.leader < 1) missingRoles.push("leader");
-      const integrityView = toSpeakerBindingIntegrityView(
-        getSpeakerBindingIntegrity({
-          agents,
-          bindings,
-        })
-      );
 
       const bossName = (ctx.db.getBossName() ?? "").trim();
       const bossTimezone = (ctx.db.getConfig("boss_timezone") ?? "").trim();
@@ -42,23 +27,14 @@ export function createSetupHandlers(ctx: DaemonContext): RpcMethodRegistry {
         adminToken: !hasAdminToken,
       };
       const hasMissingUserInfo = Object.values(missingUserInfo).some(Boolean);
-      const hasIntegrityViolations =
-        integrityView.speakerWithoutBindings.length > 0 ||
-        integrityView.duplicateSpeakerBindings.length > 0;
 
       return {
         completed,
         ready:
           completed &&
-          missingRoles.length === 0 &&
-          !hasMissingUserInfo &&
-          !hasIntegrityViolations,
-        roleCounts,
-        missingRoles,
-        integrity: integrityView,
+          !hasMissingUserInfo,
         agents: agents.map((agent) => ({
           name: agent.name,
-          role: agent.role,
           workspace: agent.workspace,
           provider: agent.provider,
         })),

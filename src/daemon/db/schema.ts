@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS envelopes (
   from_boss INTEGER DEFAULT 0,
   content_text TEXT,
   content_attachments TEXT,
+  priority INTEGER DEFAULT 0, -- 0=normal, 1=interrupt-now (higher first for agent queue)
   deliver_at INTEGER,         -- unix epoch ms (UTC) (not-before delivery)
   status TEXT DEFAULT '${DEFAULT_ENVELOPE_STATUS}',
   created_at INTEGER DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000),

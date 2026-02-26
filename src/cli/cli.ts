@@ -109,6 +109,7 @@ envelope
   .option("--text <text>", "Envelope text (use - to read from stdin)")
   .option("--text-file <path>", "Read envelope text from file")
   .option("--attachment <path>", "Attachment path (can be used multiple times)", collect, [])
+  .option("--interrupt-now", "Interrupt current run and prioritize this envelope (agent destinations only)")
   .option("--parse-mode <mode>", "Parse mode (Telegram): plain (default), html (recommended), markdownv2")
   .option(
     "--reply-to <envelope-id>",
@@ -126,6 +127,7 @@ envelope
       "  - Default is plain text. Use --parse-mode html for long or formatted messages (bold/italic/links; structured blocks via <pre>/<code>, incl. ASCII tables).",
       "  - Use --parse-mode markdownv2 only if you can escape special characters correctly.",
       "  - Most Telegram users reply without quoting; only use --reply-to when it prevents confusion (busy groups, multiple questions).",
+      "  - --interrupt-now only works with --to agent:<name> and cannot be combined with --deliver-at.",
       "",
     ].join("\n")
   )
@@ -137,6 +139,7 @@ envelope
       textFile: options.textFile,
       attachment: options.attachment,
       deliverAt: options.deliverAt,
+      interruptNow: options.interruptNow,
       parseMode: options.parseMode,
       replyTo: options.replyTo,
     });

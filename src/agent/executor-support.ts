@@ -6,6 +6,7 @@ export interface AgentSession {
   agentToken: string;
   systemInstructions: string;
   workspace: string;
+  providerEnvOverrides?: Record<string, string>;
   model?: string;
   reasoningEffort?: string;
   /** CLI child process for the current run (set during executeCliTurn). */

@@ -1,18 +1,29 @@
 /**
- * Session summary generation — spawns Claude CLI (Haiku) to summarize
+ * Session summary generation — runs a provider CLI one-shot prompt to summarize
  * a session's conversation on session end.
  *
  * Summary generation is best-effort: failures are logged and result in
  * a null summary. This never blocks session refresh or daemon stop.
  */
 
-import { spawn } from "node:child_process";
-
 import type { SessionFile } from "./types.js";
 import type { ConversationHistory } from "./conversation-history.js";
 import { readSessionFile, updateSummary } from "./session-file-io.js";
+import { executeOneShotPrompt } from "../../agent/oneshot-turn.js";
 import { logEvent, errorMessage } from "../../shared/daemon-log.js";
-import { DEFAULT_SESSION_SUMMARY_TIMEOUT_MS } from "../../shared/defaults.js";
+import {
+  DEFAULT_AGENT_PROVIDER,
+  DEFAULT_SESSION_SUMMARY_TIMEOUT_MS,
+  getDefaultRuntimeWorkspace,
+} from "../../shared/defaults.js";
+
+export interface SessionSummaryOptions {
+  provider?: "claude" | "codex";
+  workspace?: string;
+  providerEnvOverrides?: Record<string, string>;
+  model?: string;
+  reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
+}
 
 const SUMMARY_PROMPT = `Summarize the following conversation between a user and an AI assistant.
 Write 2-5 sentences focusing on key topics discussed and decisions made.
@@ -31,8 +42,9 @@ Be concise. Do not start with "The conversation" or "In this conversation".
 export async function generateSessionSummary(params: {
   sessionFile: SessionFile;
   timeoutMs?: number;
+  options?: SessionSummaryOptions;
 }): Promise<string | null> {
-  const { sessionFile, timeoutMs = DEFAULT_SESSION_SUMMARY_TIMEOUT_MS } = params;
+  const { sessionFile, timeoutMs = DEFAULT_SESSION_SUMMARY_TIMEOUT_MS, options } = params;
 
   if (sessionFile.conversations.length === 0) return null;
 
@@ -43,7 +55,7 @@ export async function generateSessionSummary(params: {
   const prompt = SUMMARY_PROMPT.replace("{{CONVERSATIONS}}", conversationText);
 
   try {
-    const result = await spawnClaudeHaiku(prompt, timeoutMs);
+    const result = await runSessionSummaryPrompt(prompt, timeoutMs, options);
     if (!result || result.trim().length === 0) return null;
     return result.trim();
   } catch (err) {
@@ -62,8 +74,9 @@ export async function generateSessionSummary(params: {
 export async function summarizeAndCloseSession(params: {
   history: ConversationHistory;
   agentName: string;
+  options?: SessionSummaryOptions;
 }): Promise<void> {
-  const { history, agentName } = params;
+  const { history, agentName, options } = params;
   const filePath = history.getCurrentSessionFilePath(agentName);
   if (!filePath) return;
 
@@ -78,7 +91,7 @@ export async function summarizeAndCloseSession(params: {
     return;
   }
 
-  const summary = await generateSessionSummary({ sessionFile });
+  const summary = await generateSessionSummary({ sessionFile, options });
   history.withFileLock(agentName, () => {
     updateSummary(filePath, summary, Date.now());
   });
@@ -98,8 +111,9 @@ export async function summarizeAndCloseSession(params: {
 export async function summarizeAndCloseSessionByPath(params: {
   filePath: string;
   agentName: string;
+  options?: SessionSummaryOptions;
 }): Promise<void> {
-  const { filePath, agentName } = params;
+  const { filePath, agentName, options } = params;
 
   const sessionFile = readSessionFile(filePath);
   if (!sessionFile) return;
@@ -108,7 +122,7 @@ export async function summarizeAndCloseSessionByPath(params: {
     return;
   }
 
-  const summary = await generateSessionSummary({ sessionFile });
+  const summary = await generateSessionSummary({ sessionFile, options });
   updateSummary(filePath, summary, Date.now());
 
   logEvent("info", "session-summary-generated", {
@@ -126,8 +140,14 @@ export async function summarizeAllActiveSessions(params: {
   history: ConversationHistory;
   agentNames: string[];
   timeoutMs?: number;
+  getSummaryOptions?: (agentName: string) => SessionSummaryOptions | undefined;
 }): Promise<void> {
-  const { history, agentNames, timeoutMs = DEFAULT_SESSION_SUMMARY_TIMEOUT_MS } = params;
+  const {
+    history,
+    agentNames,
+    timeoutMs = DEFAULT_SESSION_SUMMARY_TIMEOUT_MS,
+    getSummaryOptions,
+  } = params;
 
   if (agentNames.length === 0) return;
 
@@ -139,7 +159,11 @@ export async function summarizeAllActiveSessions(params: {
       agentNames.map(async (agentName) => {
         if (controller.signal.aborted) return;
         try {
-          await summarizeAndCloseSession({ history, agentName });
+          await summarizeAndCloseSession({
+            history,
+            agentName,
+            options: getSummaryOptions?.(agentName),
+          });
         } catch (err) {
           logEvent("warn", "session-summary-close-failed", {
             "agent-name": agentName,
@@ -153,59 +177,31 @@ export async function summarizeAllActiveSessions(params: {
   }
 }
 
-// ── CLI spawn ──
+// ── Provider CLI spawn ──
 
 /**
- * Spawn `claude -p --model haiku` to generate a summary.
+ * Run a one-shot provider prompt to generate a summary.
  * Returns the text output or null on failure.
  */
-function spawnClaudeHaiku(prompt: string, timeoutMs: number): Promise<string | null> {
-  return new Promise((resolve) => {
-    let resolved = false;
-    const finish = (value: string | null) => {
-      if (resolved) return;
-      resolved = true;
-      resolve(value);
-    };
-
-    let child;
-    try {
-      child = spawn("claude", ["-p", "--model", "haiku"], {
-        stdio: ["pipe", "pipe", "pipe"],
-        env: { ...process.env as Record<string, string> },
-      });
-    } catch {
-      finish(null);
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      try { child.kill("SIGTERM"); } catch { /* best-effort */ }
-      finish(null);
-    }, timeoutMs);
-
-    const stdoutChunks: Buffer[] = [];
-
-    child.stdout?.on("data", (chunk: Buffer) => {
-      stdoutChunks.push(chunk);
+async function runSessionSummaryPrompt(
+  prompt: string,
+  timeoutMs: number,
+  options?: SessionSummaryOptions
+): Promise<string | null> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const result = await executeOneShotPrompt({
+      provider: options?.provider ?? DEFAULT_AGENT_PROVIDER,
+      workspace: options?.workspace ?? getDefaultRuntimeWorkspace(),
+      prompt,
+      envOverrides: options?.providerEnvOverrides,
+      model: options?.model,
+      reasoningEffort: options?.reasoningEffort,
+      signal: controller.signal,
     });
-
-    child.stdin?.write(prompt);
-    child.stdin?.end();
-
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (code !== 0) {
-        finish(null);
-        return;
-      }
-      const stdout = Buffer.concat(stdoutChunks).toString("utf-8");
-      finish(stdout);
-    });
-
-    child.on("error", () => {
-      clearTimeout(timer);
-      finish(null);
-    });
-  });
+    return result.finalText?.trim() || null;
+  } finally {
+    clearTimeout(timer);
+  }
 }

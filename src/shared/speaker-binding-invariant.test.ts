@@ -9,7 +9,7 @@ import {
 test("detects speakers without bindings", () => {
   const integrity = getSpeakerBindingIntegrity({
     agents: [
-      { name: "speaker-a", metadata: { role: "speaker" } },
+      { name: "speaker-a", metadata: { role: "leader" } },
       { name: "leader-a", metadata: { role: "leader" } },
     ],
     bindings: [],
@@ -23,8 +23,8 @@ test("detects speakers without bindings", () => {
 test("detects duplicate adapter token shared by speakers", () => {
   const integrity = getSpeakerBindingIntegrity({
     agents: [
-      { name: "speaker-a", metadata: { role: "speaker" } },
-      { name: "speaker-b", metadata: { role: "speaker" } },
+      { name: "speaker-a", metadata: { role: "leader" } },
+      { name: "speaker-b", metadata: { role: "leader" } },
       { name: "leader-a", metadata: { role: "leader" } },
     ],
     bindings: [

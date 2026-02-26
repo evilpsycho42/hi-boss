@@ -5,13 +5,15 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { HIBOSS_TOKEN_ENV } from "../shared/env.js";
 import { errorMessage, logEvent } from "../shared/daemon-log.js";
+import { parseCodexFailureMessage } from "./provider-cli-parsers.js";
 
-export type BackgroundProvider = "claude" | "codex";
+export type OneShotProvider = "claude" | "codex";
 
-export interface ExecuteBackgroundPromptParams {
-  provider: BackgroundProvider;
+export interface ExecuteOneShotPromptParams {
+  provider: OneShotProvider;
   workspace: string;
   prompt: string;
+  envOverrides?: Record<string, string>;
   model?: string;
   reasoningEffort?: "none" | "low" | "medium" | "high" | "xhigh";
   signal?: AbortSignal;
@@ -56,13 +58,13 @@ function buildCodexArgs(params: {
 
 function buildTempOutputPath(): string {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  return path.join(tmpdir(), `hiboss-background-codex-last-message-${suffix}.txt`);
+  return path.join(tmpdir(), `hiboss-oneshot-codex-last-message-${suffix}.txt`);
 }
 
 /**
  * Execute a one-shot provider CLI prompt without Hi-Boss system instructions and without `HIBOSS_TOKEN`.
  */
-export async function executeBackgroundPrompt(params: ExecuteBackgroundPromptParams): Promise<{ finalText: string }> {
+export async function executeOneShotPrompt(params: ExecuteOneShotPromptParams): Promise<{ finalText: string }> {
   const cmd = params.provider === "claude" ? "claude" : "codex";
   let outputLastMessagePath: string | undefined;
   const args =
@@ -82,12 +84,17 @@ export async function executeBackgroundPrompt(params: ExecuteBackgroundPromptPar
     ...(process.env as Record<string, string>),
   };
 
-  // Ensure background jobs do not inherit the Hi-Boss token.
+  // Ensure one-shot executions do not inherit the Hi-Boss token.
   delete env[HIBOSS_TOKEN_ENV];
 
-  // Force shared default provider homes for stable behavior across machines.
+  // Start from shared default provider homes for stable behavior across machines.
   delete env.CLAUDE_CONFIG_DIR;
   delete env.CODEX_HOME;
+  if (params.envOverrides) {
+    for (const [key, value] of Object.entries(params.envOverrides)) {
+      env[key] = value;
+    }
+  }
 
   return new Promise<{ finalText: string }>((resolve, reject) => {
     let cancelled = false;
@@ -162,11 +169,14 @@ export async function executeBackgroundPrompt(params: ExecuteBackgroundPromptPar
 
       if (code !== 0 && code !== null) {
         void cleanupCodexOutputFile();
-        const errMsg = stderr.trim() || `CLI exited with code ${code}`;
-        logEvent("warn", "background-cli-exit-nonzero", {
+        const codexFailureMessage =
+          params.provider === "codex" ? parseCodexFailureMessage(stdout) : null;
+        const errMsg = stderr.trim() || codexFailureMessage || `CLI exited with code ${code}`;
+        logEvent("warn", "oneshot-cli-exit-nonzero", {
           provider: params.provider,
           "exit-code": code,
           stderr: stderr.slice(0, 500),
+          ...(codexFailureMessage ? { "codex-failure-message": codexFailureMessage.slice(0, 500) } : {}),
         });
         reject(new Error(`${cmd} exited with code ${code}: ${errMsg.slice(0, 300)}`));
         return;
@@ -175,7 +185,7 @@ export async function executeBackgroundPrompt(params: ExecuteBackgroundPromptPar
       if (code === null) {
         void cleanupCodexOutputFile();
         const sig = closeSignal ?? "unknown-signal";
-        logEvent("warn", "background-cli-exit-signal", {
+        logEvent("warn", "oneshot-cli-exit-signal", {
           provider: params.provider,
           signal: sig,
           stderr: stderr.slice(0, 500),
@@ -194,7 +204,7 @@ export async function executeBackgroundPrompt(params: ExecuteBackgroundPromptPar
               finalText = text;
             }
           } catch (err) {
-            logEvent("warn", "background-codex-output-read-failed", {
+            logEvent("warn", "oneshot-codex-output-read-failed", {
               error: errorMessage(err),
             });
           } finally {

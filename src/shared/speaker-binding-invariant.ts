@@ -1,4 +1,4 @@
-import { resolveAgentRole, type AgentRole } from "./agent-role.js";
+import type { AgentRole } from "./agent-role.js";
 
 export interface AgentBindingLike {
   agentName: string;
@@ -40,62 +40,22 @@ function buildBindingCountByAgent(bindings: AgentBindingLike[]): Map<string, num
 }
 
 function resolveAgentRoleWithCount(
-  agent: AgentLike,
-  bindingCountByAgent: Map<string, number>
+  _agent: AgentLike,
+  _bindingCountByAgent: Map<string, number>
 ): AgentRole {
-  return resolveAgentRole({
-    metadata: agent.metadata,
-    bindingCount: bindingCountByAgent.get(agent.name) ?? 0,
-  });
+  return "leader";
 }
 
 export function getSpeakerBindingIntegrity(params: {
   agents: AgentLike[];
   bindings: AgentBindingLike[];
 }): SpeakerBindingIntegrity {
-  const bindingCountByAgent = buildBindingCountByAgent(params.bindings);
-
-  const speakers = params.agents
-    .filter((agent) => resolveAgentRoleWithCount(agent, bindingCountByAgent) === "speaker")
-    .map((agent) => agent.name);
-
-  const speakerSet = new Set(speakers);
-
-  const speakerWithoutBindings = speakers
-    .filter((name) => (bindingCountByAgent.get(name) ?? 0) < 1)
-    .sort((a, b) => a.localeCompare(b));
-
-  const speakersByAdapter = new Map<string, { adapterType: string; adapterToken: string; speakers: Set<string> }>();
-  for (const binding of params.bindings) {
-    if (!speakerSet.has(binding.agentName)) continue;
-    const key = `${binding.adapterType}\u0000${binding.adapterToken}`;
-    const current = speakersByAdapter.get(key);
-    if (current) {
-      current.speakers.add(binding.agentName);
-      continue;
-    }
-    speakersByAdapter.set(key, {
-      adapterType: binding.adapterType,
-      adapterToken: binding.adapterToken,
-      speakers: new Set([binding.agentName]),
-    });
-  }
-
-  const duplicateSpeakerBindings = Array.from(speakersByAdapter.values())
-    .filter((entry) => entry.speakers.size > 1)
-    .map((entry) => ({
-      adapterType: entry.adapterType,
-      adapterToken: entry.adapterToken,
-      speakers: Array.from(entry.speakers).sort((a, b) => a.localeCompare(b)),
-    }))
-    .sort((a, b) => {
-      if (a.adapterType !== b.adapterType) return a.adapterType.localeCompare(b.adapterType);
-      return a.adapterToken.localeCompare(b.adapterToken);
-    });
+  void params.agents;
+  void params.bindings;
 
   return {
-    speakerWithoutBindings,
-    duplicateSpeakerBindings,
+    speakerWithoutBindings: [],
+    duplicateSpeakerBindings: [],
   };
 }
 
@@ -122,4 +82,3 @@ export function toSpeakerBindingIntegrityView(
 export function hasSpeakerBindingIntegrityViolations(integrity: SpeakerBindingIntegrity): boolean {
   return integrity.speakerWithoutBindings.length > 0 || integrity.duplicateSpeakerBindings.length > 0;
 }
-

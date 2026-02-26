@@ -16,6 +16,7 @@ import {
   DEFAULT_AGENT_PROVIDER,
   DEFAULT_SESSION_CONCURRENCY_GLOBAL,
   DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
+  getDefaultRuntimeWorkspace,
 } from "../shared/defaults.js";
 import { errorMessage, logEvent } from "../shared/daemon-log.js";
 import {
@@ -30,11 +31,14 @@ import { getTriggerFields } from "./executor-triggers.js";
 import { countDuePendingEnvelopesForAgent } from "./executor-db.js";
 import { executeCliTurn } from "./executor-turn.js";
 import { getOrCreateAgentSession } from "./executor-session.js";
+import { getProviderCliEnvOverrides } from "./provider-env.js";
 import type { ConversationHistory } from "../daemon/history/conversation-history.js";
 import {
+  type SessionSummaryOptions,
   summarizeAndCloseSessionByPath,
   summarizeAllActiveSessions,
 } from "../daemon/history/session-summary.js";
+import { writeAgentRunTrace } from "../shared/agent-run-trace.js";
 
 /**
  * Maximum number of pending envelopes to process in a single turn.
@@ -80,6 +84,13 @@ type AgentRunFinishedHook = (params: {
   error?: string;
 }) => void | Promise<void>;
 
+type CapturedRunTrace = {
+  provider: "claude" | "codex";
+  status: "success" | "failed" | "cancelled";
+  entries: Array<{ type: "assistant" | "tool-call"; text: string; toolName?: string }>;
+  error?: string;
+};
+
 /**
  * Agent executor manages agent sessions and runs.
  */
@@ -102,6 +113,46 @@ export class AgentExecutor {
   private onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
   private onRunStarted?: AgentRunStartedHook;
   private onRunFinished?: AgentRunFinishedHook;
+
+  private getSessionSummaryOptions(agentName: string): SessionSummaryOptions | undefined {
+    if (this.db) {
+      const agent = this.db.getAgentByName(agentName);
+      if (agent) {
+        const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
+        return {
+          provider,
+          workspace: agent.workspace ?? getDefaultRuntimeWorkspace(),
+          providerEnvOverrides: getProviderCliEnvOverrides(agent.metadata, provider),
+          model: agent.model,
+          reasoningEffort: agent.reasoningEffort,
+        };
+      }
+    }
+
+    const cachedDefaultSession = this.sessions.get(agentName);
+    if (cachedDefaultSession) {
+      return {
+        provider: cachedDefaultSession.provider,
+        workspace: cachedDefaultSession.workspace,
+        providerEnvOverrides: cachedDefaultSession.providerEnvOverrides,
+        model: cachedDefaultSession.model,
+        reasoningEffort: cachedDefaultSession.reasoningEffort as SessionSummaryOptions["reasoningEffort"],
+      };
+    }
+
+    for (const [cacheKey, cachedChannelSession] of this.channelSessions.entries()) {
+      if (!cacheKey.startsWith(`channel-session:${agentName}:`)) continue;
+      return {
+        provider: cachedChannelSession.provider,
+        workspace: cachedChannelSession.workspace,
+        providerEnvOverrides: cachedChannelSession.providerEnvOverrides,
+        model: cachedChannelSession.model,
+        reasoningEffort: cachedChannelSession.reasoningEffort as SessionSummaryOptions["reasoningEffort"],
+      };
+    }
+
+    return undefined;
+  }
 
   constructor(
     options: {
@@ -477,6 +528,54 @@ export class AgentExecutor {
     let runLifecycleStarted = false;
     let completionState: RunCompletionState | null = null;
     let completionError: string | undefined;
+    let capturedTrace: CapturedRunTrace | null = null;
+    let lastRunningTraceFingerprint = "";
+    let lastRunningTraceWriteAtMs = 0;
+    let runningTraceWriteFailed = false;
+
+    const writeRunningTrace = (trace: { provider: "claude" | "codex"; entries: CapturedRunTrace["entries"] }): void => {
+      if (!runStartedAtMs) return;
+      const nowMs = Date.now();
+      const last = trace.entries[trace.entries.length - 1];
+      const fingerprint = [
+        trace.provider,
+        String(trace.entries.length),
+        last?.type ?? "",
+        last?.toolName ?? "",
+        last?.text ?? "",
+      ].join("|");
+      if (
+        fingerprint === lastRunningTraceFingerprint &&
+        nowMs - lastRunningTraceWriteAtMs < 2_000
+      ) {
+        return;
+      }
+
+      lastRunningTraceFingerprint = fingerprint;
+      lastRunningTraceWriteAtMs = nowMs;
+
+      try {
+        writeAgentRunTrace(this.hibossDir, {
+          version: 1,
+          runId: run.id,
+          agentName: params.agent.name,
+          provider: trace.provider,
+          status: "running",
+          startedAt: runStartedAtMs,
+          completedAt: nowMs,
+          entries: trace.entries,
+        });
+      } catch (err) {
+        if (!runningTraceWriteFailed) {
+          runningTraceWriteFailed = true;
+          logEvent("warn", "agent-run-trace-running-write-failed", {
+            "agent-name": params.agent.name,
+            "agent-run-id": run.id,
+            error: errorMessage(err),
+          });
+        }
+      }
+    };
 
     const inFlight: InFlightAgentRun = {
       runRecordId: run.id,
@@ -549,6 +648,12 @@ export class AgentExecutor {
         signal: inFlight.abortController.signal,
         onChildProcess: (proc) => {
           inFlight.childProcess = proc;
+        },
+        onTraceProgress: (trace) => {
+          writeRunningTrace(trace);
+        },
+        onTraceCaptured: (trace) => {
+          capturedTrace = trace;
         },
       });
 
@@ -695,6 +800,30 @@ export class AgentExecutor {
           });
         }
       }
+
+      const traceToWrite = capturedTrace;
+      if (runLifecycleStarted && completionState && runStartedAtMs && traceToWrite !== null) {
+        const traceRecord = traceToWrite as CapturedRunTrace;
+        try {
+          writeAgentRunTrace(this.hibossDir, {
+            version: 1,
+            runId: run.id,
+            agentName: params.agent.name,
+            provider: traceRecord.provider,
+            status: traceRecord.status,
+            startedAt: runStartedAtMs,
+            completedAt: Date.now(),
+            ...(completionError ? { error: completionError } : {}),
+            entries: traceRecord.entries,
+          });
+        } catch (err) {
+          logEvent("warn", "agent-run-trace-write-failed", {
+            "agent-name": params.agent.name,
+            "agent-run-id": run.id,
+            error: errorMessage(err),
+          });
+        }
+      }
     }
   }
 
@@ -747,6 +876,7 @@ export class AgentExecutor {
 
     const persistedRow = db.getAgentSessionById(scope.agentSessionId);
     const provider = persistedRow?.provider ?? (agent.provider ?? DEFAULT_AGENT_PROVIDER);
+    const providerEnvOverrides = getProviderCliEnvOverrides(agent.metadata, provider);
 
     const baseSession = await this.getOrCreateDefaultSession(agent, db);
     const session: AgentSession = {
@@ -754,6 +884,7 @@ export class AgentExecutor {
       agentToken: baseSession.agentToken,
       systemInstructions: baseSession.systemInstructions,
       workspace: agent.workspace ?? baseSession.workspace,
+      providerEnvOverrides,
       model: agent.model,
       reasoningEffort: agent.reasoningEffort,
       sessionId: persistedRow?.providerSessionId ?? undefined,
@@ -788,6 +919,7 @@ export class AgentExecutor {
           await summarizeAndCloseSessionByPath({
             filePath: oldSessionFilePath,
             agentName,
+            options: this.getSessionSummaryOptions(agentName),
           });
         } catch (err) {
           logEvent("warn", "session-summary-on-refresh-failed", {
@@ -842,6 +974,7 @@ export class AgentExecutor {
         await summarizeAllActiveSessions({
           history: this.conversationHistory,
           agentNames,
+          getSummaryOptions: (agentName) => this.getSessionSummaryOptions(agentName),
         });
       } catch (err) {
         logEvent("warn", "session-summary-on-close-all-failed", {
