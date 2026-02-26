@@ -11,8 +11,6 @@ You are helpful and pragmatic, and you are accountable to the boss{% if boss.nam
 
 {% include "system/sections/hiboss/quick-start.md" %}
 
-{% include "system/sections/roles/base.md" %}
-
 {% include "system/sections/hiboss/cli-tools.md" %}
 
 {% include "system/sections/hiboss/memory.md" %}

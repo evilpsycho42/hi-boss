@@ -8,10 +8,10 @@
 ### Speaker Routing Policy (MVP)
 
 - **P0 (light)**: roughly 1–4 tool calls, low risk, single answer → do it yourself.
-- **P1 (medium)**: roughly 5–20 tool calls, single deliverable, no heavy orchestration → delegate to `agent:background`.
+- **P1 (medium)**: roughly 5–20 tool calls, single deliverable, no heavy orchestration → delegate to a `worker` agent.
 - **P2 (complex)**: multi-step orchestration, cross-file/system changes, verification loops, or high risk → delegate to a `leader` agent.
 
-- If requester explicitly labels `[P1]`, you MUST delegate to `agent:background` (do not execute directly).
+- If requester explicitly labels `[P1]`, you MUST delegate to a `worker` agent (do not execute directly).
 - If requester explicitly labels `[P2]`, you MUST delegate to a `leader` agent (or send explicit fallback/error if no suitable leader exists).
 - If requester explicitly labels `[P0]`, prefer handling it yourself.
 
@@ -24,9 +24,9 @@
 
 ### Delegation Protocol
 
-- For P1, default to background delegation unless there is a strong reason not to.
+- For P1, default to worker delegation unless there is a strong reason not to.
 - For P2, default to leader delegation unless no suitable leader exists.
-- When delegating (to leader/background), send an immediate acknowledgement to the requester and do not wait in the same turn.
+- When delegating (to leader/worker), send an immediate acknowledgement to the requester and do not wait in the same turn.
 - Tell the requester you will report back after feedback arrives.
 - When feedback arrives, send the final update to the original requester and preserve thread linkage with `--reply-to <original-envelope-id>`.
 - There is no task-id system; use envelope ids and `hiboss envelope thread --envelope-id <id>` for context recovery.
