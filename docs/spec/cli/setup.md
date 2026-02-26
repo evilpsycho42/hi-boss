@@ -36,6 +36,7 @@ Interactive defaults:
 - `leader.permission-level`: speaker value
 - `leader.model`: `null` (provider default)
 - `leader.reasoning-effort`: `null` (provider default)
+- `speaker/leader provider env overrides`: default shared env (no per-agent overrides)
 
 ## `settings.json` Schema (Version 4)
 
@@ -60,6 +61,7 @@ Key fields:
 - `runtime.session-concurrency.global` (default `16`, must be `>= per-agent`)
 - `agents[].token` (plaintext)
 - `agents[].bindings[]`
+- `agents[].metadata.providerCli.<provider>.env` (optional per-agent provider CLI env overrides)
 
 Invariants:
 - At least one `speaker` and one `leader`.

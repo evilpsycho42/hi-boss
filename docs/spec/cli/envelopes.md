@@ -16,6 +16,7 @@ Flags:
 - `--text <text>` or `--text -` (stdin) or `--text-file <path>`
 - `--attachment <path>` (repeatable)
 - `--reply-to <envelope-id>` (optional; adds thread context for agent↔agent envelopes; for channel destinations, also replies/quotes the referenced channel envelope when possible)
+- `--interrupt-now` (optional; only for `to=agent:<name>`; immediately interrupts current work and prioritizes this envelope)
 - `--parse-mode <mode>` (optional; channel destinations only; `plain|markdownv2|html`)
 - `--deliver-at <time>` (ISO 8601 or relative: `+2h`, `+30m`, `+1Y2M`, `-15m`; units: `Y/M/D/h/m/s`)
 
@@ -23,11 +24,24 @@ Notes:
 - Sender identity is derived from the authenticated **agent token**.
 - Admin tokens cannot send envelopes via `hiboss envelope send`; to message an agent as a human/boss, send via a channel adapter (e.g., Telegram).
 - Sending to `agent:<name>` fails fast if the agent does not exist (`NOT_FOUND`) or the address is invalid (`INVALID_PARAMS`).
+- `--interrupt-now` is only supported for `to=agent:<name>`.
+- `--interrupt-now` and `--deliver-at` are mutually exclusive.
 
 Output (parseable):
 
+Default success output:
+
 ```
 id: <envelope-id>  # short id
+```
+
+When `--interrupt-now` is used:
+
+```
+id: <envelope-id>  # short id
+interrupt-now: true
+interrupted-work: true|false
+priority-applied: true
 ```
 
 Default permission:

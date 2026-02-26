@@ -47,10 +47,12 @@ Boss-only command flow:
 2. `ChannelBridge` enforces boss identity and binds `agentName`.
 3. `createChannelCommandHandler(...)` handles command:
    - `/status`
+   - `/trace` (current run trace snapshot)
    - `/abort`
    - `/new` (current chat -> fresh session)
    - `/sessions` (tabbed, paged session list)
    - `/session <id>` (switch current chat mapping)
+   - `/provider <claude|codex> [model=<name|default>] [reasoning-effort=<none|low|medium|high|xhigh|default>]` (switch provider and/or provider overrides + request full session refresh on change)
    - `/isolated`, `/clone` (one-shot; active mapping unchanged)
 4. Adapter replies in parseable text format; `/sessions` includes inline keyboard for tabs/pager.
 

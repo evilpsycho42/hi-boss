@@ -87,7 +87,8 @@ Flags:
   - `--unbind-adapter-type <type>` (optional)
 
 Notes:
-- Updating `--provider`, `--model`, or `--reasoning-effort` does **not** force a session refresh. Existing/resumed sessions may continue using the previous session config until a refresh (`/new`) or policy refresh opens a new session.
+- Updating `--model` or `--reasoning-effort` does **not** force a session refresh.
+- Updating `--provider` may trigger an immediate refresh when an active in-memory session exists for a different provider, to prevent cross-provider session reuse.
 - When switching providers without specifying `--model` / `--reasoning-effort`, Hi-Boss clears these overrides so the new provider can use its defaults when a fresh session is eventually opened.
 - `--clear-metadata` clears user metadata but preserves the internal session resume handle (`metadata.sessionHandle`). The `sessionHandle` key is reserved and is ignored if provided via `--metadata-*`.
 - Role/binding mutations are rejected when they would violate the required role invariant (`>=1 speaker` and `>=1 leader`).

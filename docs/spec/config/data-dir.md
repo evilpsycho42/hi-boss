@@ -24,4 +24,4 @@ Provider CLI homes are not part of the Hi-Boss data directory:
 - Claude: `~/.claude`
 - Codex: `~/.codex`
 
-Provider-home behavior (including cleared override env vars) is canonical in `docs/spec/provider-clis.md#provider-homes-shared-forced`.
+Provider-home behavior (including cleared override env vars and optional per-agent overrides) is canonical in `docs/spec/provider-clis.md#provider-homes-shared-defaults-agent-overrides-optional`.

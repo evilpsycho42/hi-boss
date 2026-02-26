@@ -32,10 +32,10 @@ To clear via CLI, use the sentinel value `default`, for example:
 
 ## Provider homes
 
-Provider-home behavior is canonical in `docs/spec/provider-clis.md#provider-homes-shared-forced`.
+Provider-home behavior is canonical in `docs/spec/provider-clis.md#provider-homes-shared-defaults-agent-overrides-optional`.
 
 Operator summary:
-- Provider CLI state is shared across all agents (no per-agent provider homes).
+- Provider CLI state defaults to shared homes, with optional per-agent env overrides via `agent.metadata.providerCli.<provider>.env`.
 - Shared default homes:
   - Claude: `~/.claude`
   - Codex: `~/.codex`

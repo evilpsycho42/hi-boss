@@ -42,7 +42,19 @@ Sessions are refreshed when:
 | `maxContextLength` | Context-length threshold exceeded |
 | Manual `/new` | Creates and switches current chat to a fresh active session |
 | Manual `/session <id>` | Switches current chat to a selected visible session |
+| Manual `/provider <claude|codex> [...]` | Switches agent provider, optionally sets model/reasoning overrides, and requests agent-wide session refresh when values change |
 | Daemon restart | Runtime cache is rebuilt from DB state |
+
+### Session Summary Generation
+
+When Hi-Boss closes an active session (manual `/new`, policy refresh, or daemon shutdown), summary generation uses the **current agent provider settings**:
+
+- provider: `claude` or `codex` from the agent record
+- model/reasoning-effort: current agent overrides when set (otherwise provider defaults)
+- workspace: agent workspace (fallback: default runtime workspace)
+- provider env overrides: `metadata.providerCli.<provider>.env` when configured
+
+Summary generation is best-effort and does not block session close.
 
 ## Storage
 
@@ -82,6 +94,16 @@ Boss-only commands:
   - switches current chat binding to target session if visible
 - `/new`
   - switches current chat to a new fresh session and returns old/new ids
+- `/trace`
+  - shows the current run trace snapshot (current running run if any; otherwise last finished run)
+  - no run-id argument
+  - when run is still in progress, returns partial live entries when available
+  - returns structured trace entries for Claude and Codex runs
+- `/provider <claude|codex> [model=<name|default>] [reasoning-effort=<none|low|medium|high|xhigh|default>]`
+  - switches the bound agent provider
+  - when provided, updates model/reasoning-effort overrides
+  - on provider change without explicit overrides, resets model/reasoning-effort to provider defaults
+  - requests agent-wide session refresh when provider/model/reasoning changed (all scopes/chats)
 
 ## Concurrency
 
@@ -106,6 +128,8 @@ Config keys mirrored into SQLite config cache:
 |------|---------|
 | `src/agent/executor.ts` | Session scope resolution, execution scheduling, concurrency limits |
 | `src/daemon/db/database.ts` | Session registry/binding/link persistence |
-| `src/daemon/channel-commands.ts` | `/new`, `/sessions`, `/session` behavior |
+| `src/daemon/channel-commands.ts` | `/new`, `/sessions`, `/session`, `/trace`, `/provider` behavior |
+| `src/daemon/channel-provider-command.ts` | `/provider` provider switch + session refresh behavior |
+| `src/daemon/channel-trace-command.ts` | `/trace` run-trace read/render behavior |
 | `src/adapters/telegram.adapter.ts` | Telegram command + callback wiring |
 | `src/shared/settings.ts` | runtime session concurrency parsing/validation |

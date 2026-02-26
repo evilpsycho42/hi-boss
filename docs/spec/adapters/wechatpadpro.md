@@ -35,6 +35,8 @@ WeChatPadPro commands are boss-only (non-boss receives no reply):
 - `/new`
 - `/sessions`
 - `/session <id>`
+- `/trace`
+- `/provider <claude|codex> [model=<name|default>] [reasoning-effort=<none|low|medium|high|xhigh|default>]`
 - `/status`
 - `/abort`
 - `/isolated`

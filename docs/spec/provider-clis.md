@@ -19,15 +19,42 @@ Key implementation files:
 - `src/agent/provider-cli-parsers.ts` (JSONL parsing)
 - `src/agent/session-resume.ts` / `src/agent/persisted-session.ts` (resume handles)
 
-## Provider homes (shared, forced)
+## Provider homes (shared defaults, agent overrides optional)
 
-Provider state is shared across all agents (no per-agent provider homes). Hi-Boss always uses the user's default homes:
+By default, provider state is shared across all agents and Hi-Boss uses the user's default homes:
 - Claude: `~/.claude`
 - Codex: `~/.codex`
 
-To keep behavior stable, Hi-Boss clears provider-home override env vars when spawning provider processes:
+During agent-home setup (`hiboss setup`, `agent.register`, `agent.set` when creating home), Hi-Boss ensures `~/.codex/config.toml` has `[features] multi_agent = true` when not explicitly configured.
+
+At runtime, Hi-Boss first clears provider-home override env vars:
 - clears `CLAUDE_CONFIG_DIR`
 - clears `CODEX_HOME`
+
+Then, if the agent has `metadata.providerCli.<provider>.env`, those env vars are applied as per-agent overrides.
+
+Canonical metadata shape:
+
+```json
+{
+  "providerCli": {
+    "claude": {
+      "env": {
+        "ANTHROPIC_BASE_URL": "https://...",
+        "ANTHROPIC_API_KEY": "...",
+        "CLAUDE_CONFIG_DIR": "/absolute/path"
+      }
+    },
+    "codex": {
+      "env": {
+        "CODEX_HOME": "/absolute/path"
+      }
+    }
+  }
+}
+```
+
+This allows per-agent provider credentials/endpoints and alternate provider homes while keeping default behavior stable for agents without overrides.
 
 ## System instructions injection
 
@@ -59,6 +86,11 @@ Background one-shot (`to: agent:background`):
 - Claude: `claude -p --output-format text --permission-mode bypassPermissions [-m <model>]`
 - Codex: `codex exec --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -o <tmp-file> [-c model_reasoning_effort="..."] [-m <model>] <prompt>`
 - Final feedback text is taken from provider-native stable outputs (Claude text stdout, Codex `-o` file), not JSONL event parsing.
+
+Session-summary one-shot (session close):
+- Uses the same one-shot provider execution mode as background turns.
+- Provider/model/reasoning/workspace/env overrides are resolved from the current agent settings.
+- No summary-specific hardcoded model is applied.
 
 ## Abort / cancellation behavior
 

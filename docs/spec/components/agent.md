@@ -48,10 +48,10 @@ Hi-Boss supports two provider CLIs:
 
 | Provider | CLI Command | Default Home |
 |----------|-------------|--------------|
-| claude | `claude` (Claude Code CLI) | `~/.claude` (shared) |
-| codex | `codex` (Codex CLI) | `~/.codex` (shared) |
+| claude | `claude` (Claude Code CLI) | `~/.claude` (shared default; overridable per agent) |
+| codex | `codex` (Codex CLI) | `~/.codex` (shared default; overridable per agent) |
 
-Provider-home behavior (shared defaults, no per-agent provider homes, and cleared override env vars) is canonical in `docs/spec/provider-clis.md`. System prompts are injected via CLI flags:
+Provider-home behavior (shared defaults, cleared override env vars, then optional per-agent env overrides) is canonical in `docs/spec/provider-clis.md`. System prompts are injected via CLI flags:
 - Claude: `--append-system-prompt`
 - Codex: `-c developer_instructions=...`
 
@@ -64,6 +64,7 @@ Set at registration or via agent settings:
 | `provider` | SDK provider | `claude`, `codex` |
 | `model` | Model override | Provider-specific model ID (`null`/unset means “use provider default”) |
 | `reasoningEffort` | Reasoning effort override | `none`, `low`, `medium`, `high`, `xhigh` (`null`/unset means “use provider default”) |
+| `metadata.providerCli.<provider>.env` | Per-agent provider CLI environment overrides | String env map (for example `ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`) |
 | `permissionLevel` | Authorization for CLI/RPC ops | `restricted`, `standard`, `privileged`, `admin` |
 | `sessionPolicy` | Session refresh policy | See [Session Policy](#session-policy) |
 
@@ -214,7 +215,7 @@ Behavior (canonical):
 - **Runtime permissions**: runs in the same non-interactive full-access mode as normal agent turns:
   - Codex: `--dangerously-bypass-approvals-and-sandbox`
   - Claude: `--permission-mode bypassPermissions`
-- **Config inheritance**: provider/model/reasoning-effort/workspace default to the **sender agent’s** settings. If sender workspace is unset, effective workspace falls back to the user's home directory.
+- **Config inheritance**: provider/model/reasoning-effort/workspace/provider env overrides default to the **sender agent’s** settings. If sender workspace is unset, effective workspace falls back to the user's home directory.
 - **Feedback (best-effort)**: for valid sender agents, the daemon sends a feedback envelope back to the sender:
   - `from: agent:background`
   - `to: agent:<sender>`

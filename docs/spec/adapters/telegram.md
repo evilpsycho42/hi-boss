@@ -29,7 +29,9 @@ Telegram commands are boss-only (non-boss receives no reply):
 - `/new` -> switch current chat to a fresh active session
 - `/sessions` -> list recent sessions (tabs + pager)
 - `/session <id>` -> switch current chat to selected session
-- `/status` -> agent status
+- `/trace` -> show current run trace (no run-id required)
+- `/provider <claude|codex> [model=<name|default>] [reasoning-effort=<none|low|medium|high|xhigh|default>]` -> switch agent provider and optionally set provider/model/reasoning; requests full session refresh on change
+- `/status` -> agent status (includes override and effective provider/model/reasoning fields)
 - `/abort` -> cancel current runs and clear due pending non-cron inbox
 - `/isolated` -> one-shot fresh run
 - `/clone` -> one-shot clone-context run

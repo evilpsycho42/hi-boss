@@ -29,7 +29,7 @@ Supported values:
 - `zh-CN` (also accepts `zh` / `zh_cn`)
 
 Current scope:
-- Telegram slash-command descriptions (`/new`, `/sessions`, `/session`, `/status`, `/abort`, `/isolated`, `/clone`)
+- Telegram slash-command descriptions (`/new`, `/sessions`, `/session`, `/trace`, `/provider`, `/status`, `/abort`, `/isolated`, `/clone`)
 - Telegram fixed system messages (for example unbound-adapter guidance, `/new` ack, oneshot usage/errors)
 
 Notes:
@@ -40,7 +40,8 @@ Notes:
 
 ## Provider CLI homes
 
-Provider-home behavior is canonical in `docs/spec/provider-clis.md#provider-homes-shared-forced`.
+Provider-home behavior is canonical in `docs/spec/provider-clis.md#provider-homes-shared-defaults-agent-overrides-optional`.
 
-Environment guarantee:
-- Hi-Boss clears `CLAUDE_CONFIG_DIR` and `CODEX_HOME` when spawning provider processes.
+Environment behavior:
+- Hi-Boss first clears `CLAUDE_CONFIG_DIR` and `CODEX_HOME` when spawning provider processes.
+- If `agent.metadata.providerCli.<provider>.env` is set, those env vars are then applied as per-agent overrides.

@@ -9,6 +9,7 @@ Cross-cutting naming, boss-marker, and short-id conventions are canonical in `do
 
 Canonical mapping (selected):
 - `envelope.deliverAt` → SQLite `deliver_at` → `--deliver-at` → `deliver-at:`
+- `envelope.priority` → SQLite `priority` → `--interrupt-now` (when `1`)
 - `envelope.createdAt` → SQLite `created_at` → `created-at:`
 - `envelope.fromBoss` → SQLite `from_boss` → `[boss]` suffix in rendered sender lines
 - `config.bossTimezone` → SQLite `config.boss_timezone` → setup `boss-timezone` → `boss-timezone:`
@@ -97,6 +98,7 @@ Table: `envelopes` (see `src/daemon/db/schema.ts`)
 | `envelope.fromBoss` | `from_boss` | `0/1` boolean |
 | `envelope.content.text` | `content_text` | Nullable |
 | `envelope.content.attachments` | `content_attachments` | JSON (nullable) |
+| `envelope.priority` | `priority` | Integer priority (`0` normal, `1` interrupt-now) |
 | `envelope.deliverAt` | `deliver_at` | Unix epoch ms (UTC) (nullable) |
 | `envelope.status` | `status` | `pending` or `done` |
 | `envelope.createdAt` | `created_at` | Unix epoch ms (UTC) |
@@ -141,6 +143,10 @@ Command flags:
 
 `hiboss envelope send` prints:
 - `id: <envelope-id>` (short id; derived from the internal envelope UUID)
+- With `--interrupt-now`, additional parseable keys:
+  - `interrupt-now: true`
+  - `interrupted-work: true|false`
+  - `priority-applied: true`
 
 Notes:
 - Channel platform message ids (e.g., Telegram `message_id`) are stored internally in `envelope.metadata.channelMessageId` for adapter delivery, but are intentionally **not rendered** in agent prompts/CLI envelope instructions.
@@ -219,6 +225,10 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 
 - `metadata.sessionHandle`: persisted session resume handle (see `docs/spec/components/session.md`). This key is maintained by the daemon, preserved across `hiboss agent set --metadata-*` and `hiboss agent set --clear-metadata`, and ignored if provided by the user.
 - `metadata.role`: logical agent role (`speaker` or `leader`).
+- `metadata.providerCli`: optional per-agent provider CLI overrides. Supported shape:
+  - `metadata.providerCli.claude.env` (string env map)
+  - `metadata.providerCli.codex.env` (string env map)
+  - Common examples: `ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`
 - On daemon startup, legacy agents with missing/invalid `metadata.role` are backfilled from binding state and persisted (`bound => speaker`, `unbound => leader`).
 
 ### CLI

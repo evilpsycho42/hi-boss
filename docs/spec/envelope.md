@@ -57,6 +57,11 @@ Envelopes are **at-most-once**: once acknowledged as read/delivered they are ter
 Permission note:
 - Sending to `channel:<adapter>:...` is only allowed if the sending agent is bound to that adapter type (enforced in `envelope.send`).
 
+Interrupt-now note:
+- `hiboss envelope send --interrupt-now --to agent:<name>` is a priority mode that interrupts the target agent’s current/queued work and creates the new envelope with higher queue priority.
+- Existing unread pending envelopes are preserved; no queue-clear is performed.
+- `--interrupt-now` is mutually exclusive with `--deliver-at`.
+
 ---
 
 ## Reply / Threading (canonical)

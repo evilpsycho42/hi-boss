@@ -43,6 +43,9 @@ Canonical envelope methods:
 - `envelope.list`
 - `envelope.thread`
 
+`envelope.send` notable params:
+- `interruptNow?: boolean` (agent destinations only; mutually exclusive with `deliverAt`; interrupts current work and prioritizes the new envelope)
+
 Reactions:
 
 - `reaction.set`
