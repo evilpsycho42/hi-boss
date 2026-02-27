@@ -26,13 +26,6 @@ export const DEFAULT_MEMORY_LONGTERM_MAX_CHARS = 12_000 as const;
 export const DEFAULT_MEMORY_SHORTTERM_PER_DAY_MAX_CHARS = 4_000 as const;
 export const DEFAULT_MEMORY_SHORTTERM_DAYS = 2 as const;
 
-// ==================== Session Summary Defaults ====================
-
-export const DEFAULT_SESSION_SUMMARY_MAX_CHARS_PER_SESSION = 500 as const;
-export const DEFAULT_SESSION_SUMMARY_MAX_CHARS_TOTAL = 4_000 as const;
-export const DEFAULT_SESSION_SUMMARY_RECENT_DAYS = 2 as const;
-export const DEFAULT_SESSION_SUMMARY_TIMEOUT_MS = 30_000 as const;
-
 // ==================== Agent Defaults ====================
 
 export const DEFAULT_AGENT_PROVIDER = "claude" as const;

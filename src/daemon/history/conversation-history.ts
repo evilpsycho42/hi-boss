@@ -172,7 +172,7 @@ export class ConversationHistory {
   }
 
   /**
-   * Clear the active session tracking for an agent (after summary + close).
+   * Clear the active session tracking for an agent after close.
    */
   clearActiveSession(agentName: string): void {
     this.activeSessionIds.delete(agentName);

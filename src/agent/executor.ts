@@ -16,7 +16,6 @@ import {
   DEFAULT_AGENT_PROVIDER,
   DEFAULT_SESSION_CONCURRENCY_GLOBAL,
   DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
-  getDefaultRuntimeWorkspace,
 } from "../shared/defaults.js";
 import { errorMessage, logEvent } from "../shared/daemon-log.js";
 import {
@@ -33,11 +32,7 @@ import { executeCliTurn } from "./executor-turn.js";
 import { getOrCreateAgentSession } from "./executor-session.js";
 import { getProviderCliEnvOverrides } from "./provider-env.js";
 import type { ConversationHistory } from "../daemon/history/conversation-history.js";
-import {
-  type SessionSummaryOptions,
-  summarizeAndCloseSessionByPath,
-  summarizeAllActiveSessions,
-} from "../daemon/history/session-summary.js";
+import { closeAllActiveSessions, closeSessionByPath } from "../daemon/history/session-close.js";
 import { writeAgentRunTrace } from "../shared/agent-run-trace.js";
 
 /**
@@ -118,51 +113,6 @@ export class AgentExecutor {
   private onEnvelopesDone?: (envelopeIds: string[], db: HiBossDatabase) => void | Promise<void>;
   private onRunStarted?: AgentRunStartedHook;
   private onRunFinished?: AgentRunFinishedHook;
-
-  private getSessionSummaryOptions(agentName: string): SessionSummaryOptions | undefined {
-    if (this.db) {
-      const agent = this.db.getAgentByName(agentName);
-      if (agent) {
-        const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
-        return {
-          provider,
-          workspace: agent.workspace ?? getDefaultRuntimeWorkspace(),
-          providerEnvOverrides: getProviderCliEnvOverrides(agent.metadata, provider),
-          model: agent.model,
-          reasoningEffort: agent.reasoningEffort,
-        };
-      }
-    }
-
-    const cachedDefaultSession = this.sessions.get(agentName);
-    if (cachedDefaultSession) {
-      return {
-        provider: cachedDefaultSession.provider,
-        workspace: cachedDefaultSession.workspace,
-        providerEnvOverrides: cachedDefaultSession.providerEnvOverrides,
-        model: cachedDefaultSession.model,
-        reasoningEffort: cachedDefaultSession.reasoningEffort as SessionSummaryOptions["reasoningEffort"],
-      };
-    }
-
-    for (const [cacheKey, cachedChannelSession] of this.channelSessions.entries()) {
-      if (
-        !cacheKey.startsWith(`channel-session:${agentName}:`) &&
-        !cacheKey.startsWith(`agent-session:${agentName}:`)
-      ) {
-        continue;
-      }
-      return {
-        provider: cachedChannelSession.provider,
-        workspace: cachedChannelSession.workspace,
-        providerEnvOverrides: cachedChannelSession.providerEnvOverrides,
-        model: cachedChannelSession.model,
-        reasoningEffort: cachedChannelSession.reasoningEffort as SessionSummaryOptions["reasoningEffort"],
-      };
-    }
-
-    return undefined;
-  }
 
   constructor(
     options: {
@@ -1016,19 +966,18 @@ export class AgentExecutor {
       const oldSessionFilePath = this.conversationHistory.getCurrentSessionFilePath(agentName);
 
       // Create new history session FIRST so incoming envelopes land in the new session
-      // (avoids race where messages arriving during async summary go to the old session).
+      // (avoids race where messages arriving during close flow go to the old session).
       this.conversationHistory.startSession(agentName);
 
-      // Best-effort: summarize and close the old session file.
+      // Best-effort: close the old session file.
       if (oldSessionFilePath) {
         try {
-          await summarizeAndCloseSessionByPath({
+          closeSessionByPath({
             filePath: oldSessionFilePath,
             agentName,
-            options: this.getSessionSummaryOptions(agentName),
           });
         } catch (err) {
-          logEvent("warn", "session-summary-on-refresh-failed", {
+          logEvent("warn", "session-close-on-refresh-failed", {
             "agent-name": agentName,
             reason,
             error: errorMessage(err),
@@ -1071,7 +1020,7 @@ export class AgentExecutor {
    * Close all sessions on shutdown.
    */
   async closeAll(): Promise<void> {
-    // Best-effort: summarize all active sessions before shutdown.
+    // Best-effort: close all active sessions before shutdown.
     if (this.conversationHistory) {
       try {
         const defaultSessionAgents = [...this.sessions.keys()];
@@ -1080,13 +1029,12 @@ export class AgentExecutor {
           .filter((value) => value.length > 0);
         const historyAgents = this.conversationHistory.getActiveAgentNames();
         const agentNames = [...new Set([...defaultSessionAgents, ...channelSessionAgents, ...historyAgents])];
-        await summarizeAllActiveSessions({
+        closeAllActiveSessions({
           history: this.conversationHistory,
           agentNames,
-          getSummaryOptions: (agentName) => this.getSessionSummaryOptions(agentName),
         });
       } catch (err) {
-        logEvent("warn", "session-summary-on-close-all-failed", {
+        logEvent("warn", "session-close-on-close-all-failed", {
           error: errorMessage(err),
         });
       }

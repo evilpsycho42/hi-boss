@@ -45,16 +45,9 @@ Sessions are refreshed when:
 | Manual `/provider <claude|codex> [...]` | Switches agent provider, optionally sets model/reasoning overrides, and requests agent-wide session refresh when values change |
 | Daemon restart | Runtime cache is rebuilt from DB state |
 
-### Session Summary Generation
+### Session Close
 
-When Hi-Boss closes an active session (manual `/new`, policy refresh, or daemon shutdown), summary generation uses the **current agent provider settings**:
-
-- provider: `claude` or `codex` from the agent record
-- model/reasoning-effort: current agent overrides when set (otherwise provider defaults)
-- workspace: agent workspace (fallback: default runtime workspace)
-- provider env overrides: `metadata.providerCli.<provider>.env` when configured
-
-Summary generation is best-effort and does not block session close.
+When Hi-Boss closes an active session (manual `/new`, policy refresh, or daemon shutdown), it only marks `endedAtMs` in the session history file. Session close does not generate or inject summaries.
 
 ## Storage
 

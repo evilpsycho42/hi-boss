@@ -16,7 +16,6 @@ function writeSessionFile(filePath: string, version: number): void {
       agentName: "agent",
       startedAtMs: Date.now(),
       endedAtMs: null,
-      summary: null,
       conversations: [],
       events: [],
     }),

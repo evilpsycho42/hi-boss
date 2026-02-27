@@ -12,6 +12,7 @@ import { CronScheduler } from "./scheduler/cron-scheduler.js";
 import { ConversationHistory } from "./history/conversation-history.js";
 import { archiveLegacyHistoryV1 } from "./history/legacy-history-archive.js";
 import { bindHistoryHooks } from "./history/history-runtime-hooks.js";
+import { purgeSessionSummaryFields } from "./history/purge-session-summaries.js";
 import type { RpcMethodRegistry } from "./ipc/types.js";
 import { RPC_ERRORS } from "./ipc/types.js";
 import type { ChatAdapter } from "../adapters/types.js";
@@ -242,6 +243,9 @@ export class Daemon {
 
       archiveLegacyHistoryV1({
         dataDir: this.config.dataDir,
+        agentsDir: path.join(this.config.dataDir, "agents"),
+      });
+      purgeSessionSummaryFields({
         agentsDir: path.join(this.config.dataDir, "agents"),
       });
 

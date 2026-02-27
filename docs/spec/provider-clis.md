@@ -87,11 +87,6 @@ Background one-shot (`to: agent:background`):
 - Codex: `codex exec --skip-git-repo-check --dangerously-bypass-approvals-and-sandbox -o <tmp-file> [-c model_reasoning_effort="..."] [-m <model>] <prompt>`
 - Final feedback text is taken from provider-native stable outputs (Claude text stdout, Codex `-o` file), not JSONL event parsing.
 
-Session-summary one-shot (session close):
-- Uses the same one-shot provider execution mode as background turns.
-- Provider/model/reasoning/workspace/env overrides are resolved from the current agent settings.
-- No summary-specific hardcoded model is applied.
-
 ## Abort / cancellation behavior
 
 Provider CLIs can be aborted by terminating the child process (SIGINT/SIGTERM). Expect partial output; do not assume a final success-result event.

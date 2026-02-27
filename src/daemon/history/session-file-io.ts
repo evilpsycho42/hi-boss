@@ -11,6 +11,10 @@ import type { SessionFile, SessionHistoryEvent } from "./types.js";
 import { SESSION_FILE_VERSION } from "./types.js";
 import { logEvent, errorMessage } from "../../shared/daemon-log.js";
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
 // ── Read ──
 
 /**
@@ -21,7 +25,8 @@ export function readSessionFile(filePath: string): SessionFile | null {
   try {
     if (!fs.existsSync(filePath)) return null;
     const raw = fs.readFileSync(filePath, "utf8");
-    const parsed = JSON.parse(raw) as SessionFile;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+
     if (parsed.version !== SESSION_FILE_VERSION) {
       logEvent("warn", "session-file-version-mismatch", {
         path: filePath,
@@ -30,7 +35,21 @@ export function readSessionFile(filePath: string): SessionFile | null {
       });
       return null;
     }
-    return parsed;
+
+    if (typeof parsed.sessionId !== "string" || parsed.sessionId.trim().length === 0) return null;
+    if (typeof parsed.agentName !== "string" || parsed.agentName.trim().length === 0) return null;
+    if (!isFiniteNumber(parsed.startedAtMs)) return null;
+    if (parsed.endedAtMs !== null && !isFiniteNumber(parsed.endedAtMs)) return null;
+    if (!Array.isArray(parsed.events)) return null;
+
+    return {
+      version: SESSION_FILE_VERSION,
+      sessionId: parsed.sessionId,
+      agentName: parsed.agentName,
+      startedAtMs: parsed.startedAtMs,
+      endedAtMs: parsed.endedAtMs,
+      events: parsed.events as SessionHistoryEvent[],
+    };
   } catch (err) {
     logEvent("warn", "session-file-read-failed", {
       path: filePath,
@@ -70,14 +89,14 @@ export function appendEvent(filePath: string, entry: SessionHistoryEvent): void 
   writeSessionFile(filePath, session);
 }
 
-// ── Update summary ──
+// ── Close session ──
 
 /**
- * Update the summary and endedAtMs fields of a session file.
+ * Set endedAtMs for a session file.
+ * If a session is already closed, preserves the original endedAtMs.
  */
-export function updateSummary(
+export function closeSessionFile(
   filePath: string,
-  summary: string | null,
   endedAtMs: number,
 ): void {
   const session = readSessionFile(filePath);
@@ -85,8 +104,9 @@ export function updateSummary(
     logEvent("warn", "session-file-update-no-file", { path: filePath });
     return;
   }
-  session.summary = summary;
-  session.endedAtMs = endedAtMs;
+  if (session.endedAtMs === null) {
+    session.endedAtMs = endedAtMs;
+  }
   writeSessionFile(filePath, session);
 }
 
@@ -107,7 +127,6 @@ export function createSessionFile(params: {
     agentName: params.agentName,
     startedAtMs: params.startedAtMs,
     endedAtMs: null,
-    summary: null,
     events: [],
   };
   writeSessionFile(params.filePath, session);

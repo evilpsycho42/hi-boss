@@ -47,6 +47,5 @@ export interface SessionFile {
   agentName: string;
   startedAtMs: number;
   endedAtMs: number | null;
-  summary: string | null;
   events: SessionHistoryEvent[];
 }
