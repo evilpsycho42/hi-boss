@@ -21,6 +21,7 @@ import {
   serveMcp,
 } from "./commands/index.js";
 import { registerAgentCommands } from "./cli-agent.js";
+import { registerTeamCommands } from "./cli-team.js";
 
 function readPackageVersion(): string {
   // Works from both `src/` (dev) and `dist/` (built) by walking up until the
@@ -334,6 +335,7 @@ cron
   });
 
 registerAgentCommands(program);
+registerTeamCommands(program);
 
 const mcp = program
   .command("mcp")

@@ -16,11 +16,11 @@ CREATE TABLE IF NOT EXISTS config (
   created_at INTEGER DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000)
 );
 
-	CREATE TABLE IF NOT EXISTS agents (
-	  name TEXT PRIMARY KEY,       -- unique identifier (alphanumeric, hyphens)
-	  token TEXT UNIQUE NOT NULL,  -- agent token (short identifier; stored as plaintext)
-	  description TEXT,
-	  workspace TEXT,
+CREATE TABLE IF NOT EXISTS agents (
+  name TEXT PRIMARY KEY,       -- unique identifier (alphanumeric, hyphens)
+  token TEXT UNIQUE NOT NULL,  -- agent token (short identifier; stored as plaintext)
+  description TEXT,
+  workspace TEXT,
   provider TEXT DEFAULT '${DEFAULT_AGENT_PROVIDER}',
   model TEXT,
   reasoning_effort TEXT,
@@ -29,6 +29,25 @@ CREATE TABLE IF NOT EXISTS config (
   created_at INTEGER DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000),
   last_seen_at INTEGER,
   metadata TEXT
+);
+
+CREATE TABLE IF NOT EXISTS teams (
+  name TEXT PRIMARY KEY,       -- unique identifier (alphanumeric, hyphens)
+  description TEXT,
+  status TEXT NOT NULL DEFAULT 'active', -- active | archived
+  kind TEXT NOT NULL DEFAULT 'manual',   -- manual
+  created_at INTEGER DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000),
+  metadata TEXT
+);
+
+CREATE TABLE IF NOT EXISTS team_members (
+  team_name TEXT NOT NULL,
+  agent_name TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'manual', -- manual
+  created_at INTEGER DEFAULT (CAST(strftime('%s','now') AS INTEGER) * 1000),
+  PRIMARY KEY(team_name, agent_name),
+  FOREIGN KEY (team_name) REFERENCES teams(name) ON DELETE CASCADE,
+  FOREIGN KEY (agent_name) REFERENCES agents(name) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS envelopes (
@@ -134,6 +153,8 @@ CREATE INDEX IF NOT EXISTS idx_envelopes_status_deliver_at ON envelopes(status, 
 CREATE INDEX IF NOT EXISTS idx_cron_schedules_agent ON cron_schedules(agent_name, enabled);
 CREATE INDEX IF NOT EXISTS idx_cron_schedules_pending_envelope ON cron_schedules(pending_envelope_id);
 CREATE INDEX IF NOT EXISTS idx_agents_token ON agents(token);
+CREATE INDEX IF NOT EXISTS idx_teams_status ON teams(status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_team_members_agent_name ON team_members(agent_name, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_agent_bindings_agent ON agent_bindings(agent_name);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_bindings_agent_adapter_unique ON agent_bindings(agent_name, adapter_type);
 CREATE INDEX IF NOT EXISTS idx_agent_bindings_adapter ON agent_bindings(adapter_type, adapter_token);

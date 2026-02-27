@@ -20,9 +20,10 @@ import {
 } from "../../shared/defaults.js";
 import { generateToken, hashToken, verifyToken } from "../../agent/auth.js";
 import { generateUUID } from "../../shared/uuid.js";
-import { assertValidAgentName } from "../../shared/validation.js";
+import { assertValidAgentName, assertValidTeamName } from "../../shared/validation.js";
 import { getDaemonIanaTimeZone } from "../../shared/timezone.js";
 import type { SettingsV4 } from "../../shared/settings.js";
+import type { Team, TeamMember, TeamKind, TeamStatus } from "../../team/types.js";
 
 /**
  * Database row types for SQLite mapping.
@@ -91,6 +92,22 @@ interface AgentRunRow {
   context_length: number | null;
   status: string;
   error: string | null;
+}
+
+interface TeamRow {
+  name: string;
+  description: string | null;
+  status: string;
+  kind: string;
+  created_at: number;
+  metadata: string | null;
+}
+
+interface TeamMemberRow {
+  team_name: string;
+  agent_name: string;
+  source: string;
+  created_at: number;
 }
 
 interface AgentSessionRow {
@@ -266,6 +283,20 @@ export class HiBossDatabase {
         "last_seen_at",
         "metadata",
       ],
+      teams: [
+        "name",
+        "description",
+        "status",
+        "kind",
+        "created_at",
+        "metadata",
+      ],
+      team_members: [
+        "team_name",
+        "agent_name",
+        "source",
+        "created_at",
+      ],
       envelopes: [
         "id",
         "from",
@@ -340,6 +371,8 @@ export class HiBossDatabase {
       { table: "config", column: "created_at" },
       { table: "agents", column: "created_at" },
       { table: "agents", column: "last_seen_at" },
+      { table: "teams", column: "created_at" },
+      { table: "team_members", column: "created_at" },
       { table: "agent_bindings", column: "created_at" },
       { table: "envelopes", column: "created_at" },
       { table: "envelopes", column: "priority" },
@@ -436,6 +469,8 @@ export class HiBossDatabase {
     this.db.prepare("DELETE FROM channel_session_links").run();
     this.db.prepare("DELETE FROM channel_session_bindings").run();
     this.db.prepare("DELETE FROM agent_sessions").run();
+    this.db.prepare("DELETE FROM team_members").run();
+    this.db.prepare("DELETE FROM teams").run();
     this.db.prepare("DELETE FROM agent_bindings").run();
     this.db.prepare("DELETE FROM agent_runs").run();
     this.db.prepare("DELETE FROM agents").run();
@@ -850,6 +885,241 @@ export class HiBossDatabase {
     stmt.run(nextPolicy ? JSON.stringify(nextPolicy) : null, name);
 
     return this.getAgentByName(name)!;
+  }
+
+  // ==================== Team Operations ====================
+
+  createTeam(input: {
+    name: string;
+    description?: string;
+    status?: TeamStatus;
+    kind?: TeamKind;
+    metadata?: Record<string, unknown>;
+  }): Team {
+    assertValidTeamName(input.name);
+    const existing = this.getTeamByNameCaseInsensitive(input.name);
+    if (existing) {
+      throw new Error("Team already exists");
+    }
+
+    const now = Date.now();
+    const stmt = this.db.prepare(`
+      INSERT INTO teams (name, description, status, kind, created_at, metadata)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    stmt.run(
+      input.name,
+      input.description?.trim() ? input.description.trim() : null,
+      input.status ?? "active",
+      input.kind ?? "manual",
+      now,
+      input.metadata ? JSON.stringify(input.metadata) : null
+    );
+
+    return this.getTeamByName(input.name)!;
+  }
+
+  getTeamByName(name: string): Team | null {
+    const stmt = this.db.prepare("SELECT * FROM teams WHERE name = ?");
+    const row = stmt.get(name) as TeamRow | undefined;
+    return row ? this.rowToTeam(row) : null;
+  }
+
+  getTeamByNameCaseInsensitive(name: string): Team | null {
+    const stmt = this.db.prepare("SELECT * FROM teams WHERE name = ? COLLATE NOCASE");
+    const row = stmt.get(name) as TeamRow | undefined;
+    return row ? this.rowToTeam(row) : null;
+  }
+
+  listTeams(options?: { status?: TeamStatus }): Team[] {
+    const status = options?.status;
+    if (status) {
+      const stmt = this.db.prepare("SELECT * FROM teams WHERE status = ? ORDER BY created_at DESC");
+      const rows = stmt.all(status) as TeamRow[];
+      return rows.map((row) => this.rowToTeam(row));
+    }
+
+    const stmt = this.db.prepare("SELECT * FROM teams ORDER BY created_at DESC");
+    const rows = stmt.all() as TeamRow[];
+    return rows.map((row) => this.rowToTeam(row));
+  }
+
+  updateTeam(
+    name: string,
+    update: {
+      description?: string | null;
+      status?: TeamStatus;
+      metadata?: Record<string, unknown> | null;
+    }
+  ): Team {
+    const team = this.getTeamByNameCaseInsensitive(name);
+    if (!team) {
+      throw new Error("Team not found");
+    }
+
+    const updates: string[] = [];
+    const params: Array<string | null> = [];
+
+    if (update.description !== undefined) {
+      updates.push("description = ?");
+      params.push(update.description?.trim() ? update.description.trim() : null);
+    }
+    if (update.status !== undefined) {
+      updates.push("status = ?");
+      params.push(update.status);
+    }
+    if (update.metadata !== undefined) {
+      updates.push("metadata = ?");
+      params.push(update.metadata ? JSON.stringify(update.metadata) : null);
+    }
+
+    if (updates.length === 0) {
+      return this.getTeamByName(team.name)!;
+    }
+
+    const stmt = this.db.prepare(`UPDATE teams SET ${updates.join(", ")} WHERE name = ?`);
+    stmt.run(...params, team.name);
+    return this.getTeamByName(team.name)!;
+  }
+
+  deleteTeam(name: string): boolean {
+    const team = this.getTeamByNameCaseInsensitive(name);
+    if (!team) return false;
+    const stmt = this.db.prepare("DELETE FROM teams WHERE name = ?");
+    const result = stmt.run(team.name);
+    return result.changes > 0;
+  }
+
+  addTeamMember(input: {
+    teamName: string;
+    agentName: string;
+    source?: TeamMember["source"];
+  }): TeamMember {
+    const team = this.getTeamByNameCaseInsensitive(input.teamName);
+    if (!team) {
+      throw new Error("Team not found");
+    }
+    const agent = this.getAgentByNameCaseInsensitive(input.agentName);
+    if (!agent) {
+      throw new Error("Agent not found");
+    }
+
+    const now = Date.now();
+    const stmt = this.db.prepare(`
+      INSERT INTO team_members (team_name, agent_name, source, created_at)
+      VALUES (?, ?, ?, ?)
+    `);
+    stmt.run(team.name, agent.name, input.source ?? "manual", now);
+
+    const created = this.getTeamMember(team.name, agent.name);
+    if (!created) {
+      throw new Error("Failed to add team member");
+    }
+    return created;
+  }
+
+  removeTeamMember(input: { teamName: string; agentName: string }): boolean {
+    const team = this.getTeamByNameCaseInsensitive(input.teamName);
+    if (!team) return false;
+    const agent = this.getAgentByNameCaseInsensitive(input.agentName);
+    if (!agent) return false;
+
+    const stmt = this.db.prepare(`
+      DELETE FROM team_members
+      WHERE team_name = ? AND agent_name = ?
+    `);
+    const result = stmt.run(team.name, agent.name);
+    return result.changes > 0;
+  }
+
+  getTeamMember(teamName: string, agentName: string): TeamMember | null {
+    const stmt = this.db.prepare(`
+      SELECT * FROM team_members
+      WHERE team_name = ? AND agent_name = ?
+    `);
+    const row = stmt.get(teamName, agentName) as TeamMemberRow | undefined;
+    return row ? this.rowToTeamMember(row) : null;
+  }
+
+  listTeamMembers(teamName: string): TeamMember[] {
+    const team = this.getTeamByNameCaseInsensitive(teamName);
+    if (!team) return [];
+
+    const stmt = this.db.prepare(`
+      SELECT * FROM team_members
+      WHERE team_name = ?
+      ORDER BY created_at ASC, agent_name ASC
+    `);
+    const rows = stmt.all(team.name) as TeamMemberRow[];
+    return rows.map((row) => this.rowToTeamMember(row));
+  }
+
+  listTeamMemberAgentNames(teamName: string): string[] {
+    return this.listTeamMembers(teamName).map((item) => item.agentName);
+  }
+
+  listTeamsByAgentName(agentName: string, options?: { activeOnly?: boolean }): Team[] {
+    const agent = this.getAgentByNameCaseInsensitive(agentName);
+    if (!agent) return [];
+
+    const activeOnly = options?.activeOnly !== false;
+    if (activeOnly) {
+      const stmt = this.db.prepare(`
+        SELECT t.*
+        FROM teams t
+        INNER JOIN team_members tm ON tm.team_name = t.name
+        WHERE tm.agent_name = ?
+          AND t.status = 'active'
+        ORDER BY tm.created_at ASC, t.created_at ASC, t.name ASC
+      `);
+      const rows = stmt.all(agent.name) as TeamRow[];
+      return rows.map((row) => this.rowToTeam(row));
+    }
+
+    const stmt = this.db.prepare(`
+      SELECT t.*
+      FROM teams t
+      INNER JOIN team_members tm ON tm.team_name = t.name
+      WHERE tm.agent_name = ?
+      ORDER BY tm.created_at ASC, t.created_at ASC, t.name ASC
+    `);
+    const rows = stmt.all(agent.name) as TeamRow[];
+    return rows.map((row) => this.rowToTeam(row));
+  }
+
+  private rowToTeam(row: TeamRow): Team {
+    let metadata: Record<string, unknown> | undefined;
+    if (row.metadata) {
+      try {
+        const parsed = JSON.parse(row.metadata) as unknown;
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          metadata = parsed as Record<string, unknown>;
+        }
+      } catch {
+        metadata = undefined;
+      }
+    }
+
+    const status: TeamStatus = row.status === "archived" ? "archived" : "active";
+    const kind: TeamKind = row.kind === "manual" ? "manual" : "manual";
+
+    return {
+      name: row.name,
+      description: row.description ?? undefined,
+      status,
+      kind,
+      createdAt: row.created_at,
+      metadata,
+    };
+  }
+
+  private rowToTeamMember(row: TeamMemberRow): TeamMember {
+    return {
+      teamName: row.team_name,
+      agentName: row.agent_name,
+      source: row.source === "manual" ? "manual" : "manual",
+      createdAt: row.created_at,
+    };
   }
 
   private rowToAgent(row: AgentRow): Agent {

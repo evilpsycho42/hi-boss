@@ -314,6 +314,90 @@ export interface AgentSetResult {
   bindings: string[];
 }
 
+export interface TeamRegisterParams {
+  token: string;
+  name: string;
+  description?: string;
+}
+
+export interface TeamSetParams {
+  token: string;
+  teamName: string;
+  description?: string | null;
+  status?: "active" | "archived";
+}
+
+export interface TeamDeleteParams {
+  token: string;
+  teamName: string;
+}
+
+export interface TeamMemberAddParams {
+  token: string;
+  teamName: string;
+  agentName: string;
+}
+
+export interface TeamMemberRemoveParams {
+  token: string;
+  teamName: string;
+  agentName: string;
+}
+
+export interface TeamStatusParams {
+  token: string;
+  teamName: string;
+}
+
+export interface TeamListParams {
+  token: string;
+  status?: "active" | "archived";
+}
+
+export interface TeamRecordResult {
+  name: string;
+  description?: string;
+  status: "active" | "archived";
+  kind: "manual";
+  createdAt: number;
+  members: string[];
+}
+
+export interface TeamRegisterResult {
+  success: boolean;
+  team: TeamRecordResult;
+}
+
+export interface TeamSetResult {
+  success: boolean;
+  team: TeamRecordResult;
+}
+
+export interface TeamDeleteResult {
+  success: boolean;
+  teamName: string;
+}
+
+export interface TeamMemberAddResult {
+  success: boolean;
+  teamName: string;
+  agentName: string;
+}
+
+export interface TeamMemberRemoveResult {
+  success: boolean;
+  teamName: string;
+  agentName: string;
+}
+
+export interface TeamStatusResult {
+  team: TeamRecordResult;
+}
+
+export interface TeamListResult {
+  teams: TeamRecordResult[];
+}
+
 export interface DaemonStatusParams {
   token: string;
 }

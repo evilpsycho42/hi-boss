@@ -118,5 +118,12 @@ export const DEFAULT_PERMISSION_POLICY: PermissionPolicyV1 = {
     "agent.delete": "admin",
     "agent.set": "privileged",
     "agent.session-policy.set": "privileged",
+    "team.register": "privileged",
+    "team.set": "privileged",
+    "team.list": "restricted",
+    "team.status": "restricted",
+    "team.add-member": "privileged",
+    "team.remove-member": "privileged",
+    "team.delete": "admin",
   },
 };

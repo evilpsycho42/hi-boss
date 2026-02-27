@@ -37,6 +37,7 @@ import {
   createCronHandlers,
   createEnvelopeHandlers,
   createSessionHandlers,
+  createTeamHandlers,
   createSetupHandlers,
   createAgentHandlers,
   createAgentSetHandler,
@@ -484,6 +485,7 @@ export class Daemon {
     const methods: RpcMethodRegistry = {
       ...createEnvelopeHandlers(ctx),
       ...createSessionHandlers(ctx),
+      ...createTeamHandlers(ctx),
       ...createReactionHandlers(ctx),
       ...createCronHandlers(ctx),
       ...createAgentHandlers(ctx),
