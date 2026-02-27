@@ -4,9 +4,9 @@ This document describes how Hi-Boss manages agent sessions.
 
 ## Overview
 
-Hi-Boss now supports **channel-scoped active sessions**:
+Hi-Boss now supports **channel-scoped default sessions**:
 
-- `channel:*` envelopes use a per-chat active mapping (`agent + adapter + chat-id -> active session`)
+- `channel:*` envelopes use a per-chat default mapping (`agent + adapter + chat-id -> default session`)
 - multiple chats can intentionally point to the same session
 - non-channel sources (for example agent↔agent / cron inline) use a default per-agent session bucket
 
@@ -20,7 +20,7 @@ Sessions are created on-demand when an agent processes due envelopes:
 
 1. The executor reads due envelopes for an agent.
 2. Envelopes are grouped by target session scope.
-3. For `channel:*` envelopes, Hi-Boss resolves/creates active session via `channel_session_bindings`.
+3. For `channel:*` envelopes, Hi-Boss resolves/creates default session mapping via `channel_session_bindings`.
 4. For non-channel envelopes, Hi-Boss uses the default per-agent session bucket.
 5. A runtime session object is loaded or created and reused for that scope.
 6. Provider session/thread id is updated from CLI output after each successful run.
@@ -40,14 +40,14 @@ Sessions are refreshed when:
 | `dailyResetAt` | Configured time of day |
 | `idleTimeout` | No activity for configured duration |
 | `maxContextLength` | Context-length threshold exceeded |
-| Manual `/new` | Creates and switches current chat to a fresh active session |
+| Manual `/new` | Creates and switches current chat to a fresh default session |
 | Manual `/session <id>` | Switches current chat to a selected visible session |
 | Manual `/provider <claude|codex> [...]` | Switches agent provider, optionally sets model/reasoning overrides, and requests agent-wide session refresh when values change |
 | Daemon restart | Runtime cache is rebuilt from DB state |
 
 ### Session Close
 
-When Hi-Boss closes an active session (manual `/new`, policy refresh, or daemon shutdown), it only marks `endedAtMs` in the session history file. Session close does not generate or inject summaries.
+When Hi-Boss closes the current runtime session (manual `/new`, policy refresh, or daemon shutdown), it only marks `endedAtMs` in the session history file. Session close does not generate or inject summaries.
 
 ## Storage
 
@@ -67,7 +67,7 @@ Core session tables:
 - `agent_sessions`
   - session registry (`provider`, `provider_session_id`, `last_active_at`)
 - `channel_session_bindings`
-  - current active mapping per `(agent_name, adapter_type, chat_id)`
+  - current default mapping per `(agent_name, adapter_type, chat_id)`
 - `channel_session_links`
   - visibility/history links for listing/filtering session scopes
 
@@ -76,8 +76,8 @@ Legacy best-effort default resume handle remains in `agents.metadata.sessionHand
 Per-agent session history files:
 
 - path: `agents/<agent>/internal_space/history/YYYY-MM-DD/<session-id>.json`
-- schema version: `2`
-- payload model: `events[]` (envelope lifecycle), not role/text conversations
+- schema version: `"v0.0.0"`
+- payload model: `events[]` (envelope lifecycle), not chat-turn transcripts
   - `envelope-created` (full envelope snapshot + origin)
   - `envelope-status-changed` (`fromStatus`, `toStatus`, `reason`, `outcome`, `origin`)
 
@@ -94,7 +94,7 @@ Boss-only commands:
   - accepts short id / prefix / full UUID
   - switches current chat binding to target session if visible
 - `/new`
-  - switches current chat to a new fresh session and returns old/new ids
+  - switches current chat to a new fresh default session and returns old/new ids
 - `/trace`
   - shows the current run trace snapshot (current running run if any; otherwise last finished run)
   - no run-id argument

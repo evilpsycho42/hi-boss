@@ -52,7 +52,7 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | `hiboss team list` | List teams | Yes (agent/admin token) | restricted |
 | `hiboss team delete` | Delete a team and remove teamspace | Yes (admin token) | admin |
 
-Note: `hiboss daemon start` prints startup failure guidance directly in CLI when available (for example missing-role remediation), and also writes details to `daemon.log`.
+Note: `hiboss daemon start` prints startup failure guidance directly in CLI when available (for example setup-integrity remediation), and also writes details to `daemon.log`.
 
 ---
 

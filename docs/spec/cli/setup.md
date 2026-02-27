@@ -11,7 +11,7 @@ See also:
 
 Runs the interactive bootstrap wizard and writes canonical config to:
 
-- `{{HIBOSS_DIR}}/settings.json` (`version: 4`)
+- `{{HIBOSS_DIR}}/settings.json` (`version: "v0.0.0"`)
 
 Behavior:
 - If setup is already healthy, prints "Setup is already complete" and exits.
@@ -19,29 +19,29 @@ Behavior:
 - Invalid persisted state should be repaired by editing `settings.json` then restarting daemon.
 - Creates agent home directories under `{{HIBOSS_DIR}}/agents/<agent-name>/`.
 - Creates empty `{{HIBOSS_DIR}}/BOSS.md` (best effort).
-- Creates one speaker and one leader.
-- Prints speaker/leader/admin tokens once.
+- Creates two baseline agents (`primary` and `secondary`).
+- Prints primary/secondary/admin tokens once.
 - Writes `settings.json` with owner-only permissions (`0600`, best effort across platforms).
 
 Interactive defaults:
 - `boss.name`: OS username
 - `boss.timezone`: daemon host timezone (IANA)
-- `speaker.name`: `nex`
-- `speaker.workspace`: user home directory
-- `speaker.permission-level`: `standard`
-- `speaker.model`: `null` (provider default)
-- `speaker.reasoning-effort`: `null` (provider default)
-- `leader.name`: `kai`
-- `leader.workspace`: speaker workspace
-- `leader.permission-level`: speaker value
-- `leader.model`: `null` (provider default)
-- `leader.reasoning-effort`: `null` (provider default)
-- `speaker/leader provider env overrides`: default shared env (no per-agent overrides)
+- `primary-agent.name`: `nex`
+- `primary-agent.workspace`: user home directory
+- `primary-agent.permission-level`: `standard`
+- `primary-agent.model`: `null` (provider default)
+- `primary-agent.reasoning-effort`: `null` (provider default)
+- `secondary-agent.name`: `kai`
+- `secondary-agent.workspace`: primary-agent workspace
+- `secondary-agent.permission-level`: primary-agent value
+- `secondary-agent.model`: `null` (provider default)
+- `secondary-agent.reasoning-effort`: `null` (provider default)
+- `primary/secondary provider env overrides`: default shared env (no per-agent overrides)
 
-## `settings.json` Schema (Version 4)
+## `settings.json` Schema
 
 Top-level required fields:
-- `version: 4`
+- `version: "v0.0.0"`
 - `boss`
 - `admin`
 - `telegram`
@@ -56,7 +56,7 @@ Key fields:
 - `boss.timezone`
 - `admin.token` (plaintext)
 - `telegram.boss-ids[]` (supports multiple boss usernames)
-- `permission-policy` (`version: 1`)
+- `permission-policy` (`version: "v0.0.0"`)
 - `runtime.session-concurrency.per-agent` (default `4`)
 - `runtime.session-concurrency.global` (default `16`, must be `>= per-agent`)
 - `agents[].token` (plaintext)
@@ -64,8 +64,6 @@ Key fields:
 - `agents[].metadata.providerCli.<provider>.env` (optional per-agent provider CLI env overrides)
 
 Invariants:
-- At least one `speaker` and one `leader`.
-- Every `speaker` has at least one binding.
 - Agent names are unique (case-insensitive).
 - Agent tokens are unique.
 - Adapter identity (`adapter-type` + `adapter-token`) is unique across agents.

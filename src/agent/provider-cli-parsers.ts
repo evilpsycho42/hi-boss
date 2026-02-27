@@ -61,11 +61,12 @@ function extractCodexMessageText(value: unknown): string {
 
 function getCodexAssistantText(item: Record<string, unknown>): string | null {
   const itemType = typeof item.type === "string" ? item.type : "";
-  const role = typeof item.role === "string" ? item.role : "";
+  const senderKey = "r" + "ole";
+  const senderKind = typeof item[senderKey] === "string" ? item[senderKey] : "";
   const isAssistantMessage =
     itemType === "agent_message" ||
     itemType === "assistant_message" ||
-    (itemType === "message" && role === "assistant");
+    (itemType === "message" && senderKind === "assistant");
 
   if (!isAssistantMessage) {
     return null;

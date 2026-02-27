@@ -9,7 +9,6 @@ Registers a new agent.
 Flags:
 - `--name <name>` (required)
 - `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
-- `--role <speaker|leader>` (required)
 - `--description <description>` (optional)
 - `--workspace <path>` (optional)
 - `--provider <claude|codex>` (required)
@@ -29,7 +28,6 @@ Flags:
 Behavior when flags are omitted:
 Required flags (validation error):
 - `provider`
-- `role`
 
 Optional flags (defaults):
 - `model`: provider default (`NULL` override)
@@ -41,7 +39,6 @@ Optional flags (defaults):
 - `metadata`: unset
 
 Notes:
-- `--role speaker` requires binding at registration (`--bind-adapter-type` + `--bind-adapter-token`).
 - Supported adapter types for binding are `telegram` and `wechatpadpro`.
 - `--model default` on register clears the model override to provider default (`NULL`).
 - `--reasoning-effort default` on register clears the reasoning-effort override to provider default (`NULL`).
@@ -50,7 +47,6 @@ Provider-home behavior follows `docs/spec/cli/conventions.md#provider-homes`.
 
 Output (parseable):
 - `name:`
-- `role:`
 - `description:` (always; generated default when omitted; may be empty string)
 - `workspace:` (`(none)` when unset)
 - `token:` (printed once)
@@ -67,7 +63,6 @@ Updates agent settings and (optionally) binds/unbinds adapters.
 Flags:
 - `--name <name>` (required)
 - `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
-- `--role <speaker|leader>` (optional; explicit role assignment)
 - `--description <description>` (optional)
 - `--workspace <path>` (optional)
 - `--provider <claude|codex>` (optional)
@@ -91,9 +86,6 @@ Notes:
 - Updating `--provider` may trigger an immediate refresh when an active in-memory session exists for a different provider, to prevent cross-provider session reuse.
 - When switching providers without specifying `--model` / `--reasoning-effort`, Hi-Boss clears these overrides so the new provider can use its defaults when a fresh session is eventually opened.
 - `--clear-metadata` clears user metadata but preserves the internal session resume handle (`metadata.sessionHandle`). The `sessionHandle` key is reserved and is ignored if provided via `--metadata-*`.
-- Role/binding mutations are rejected when they would violate the required role invariant (`>=1 speaker` and `>=1 leader`).
-- Speakers must keep at least one binding.
-- `--role speaker` requires at least one resulting binding in the same command.
 - `--bind-adapter-*` and `--unbind-adapter-type` may be used together for same-command binding swaps.
 - `--bind-adapter-*` alone replaces an existing binding token for that same adapter type on the target agent (atomic replace).
 - Supported adapter types for bind/unbind are `telegram` and `wechatpadpro`.
@@ -103,7 +95,6 @@ Provider-home behavior follows `docs/spec/cli/conventions.md#provider-homes`.
 Output (parseable):
 - `success: true|false`
 - `agent-name:`
-- `role:`
 - `description:` (`(none)` when unset)
 - `workspace:` (`(none)` when unset)
 - `provider:` (`(none)` when unset)
@@ -141,12 +132,10 @@ hiboss agent list
 
 ```text
 name: nex
-role: speaker
 workspace: /path/to/workspace
 created-at: 2026-02-03T14:22:10-08:00
 
 name: ops-bot
-role: leader
 created-at: 2026-02-01T09:05:44-08:00
 ```
 
@@ -158,7 +147,6 @@ no-agents: true
 
 Output (parseable, one block per agent):
 - `name:`
-- `role:` (`speaker|leader`)
 - `workspace:` (optional)
 - `created-at:` (boss timezone offset)
 
@@ -176,7 +164,6 @@ Notes:
 - When called with an agent token, only `--name <self>` is allowed (agents cannot query other agents).
 - `workspace:` in status is the effective runtime workspace. Resolution is: primary active teamspace (if any), then agent workspace, then user's home directory.
 - `agent-state` is a **busy-ness** signal: `running` means the daemon currently has a queued or in-flight task for this agent (so replies may be delayed).
-- `role:` is shown when available (`speaker` or `leader`).
 - `agent-health` is derived from the most recent finished run: `ok` (last run completed or cancelled), `error` (last run failed), `unknown` (no finished runs yet).
 - `pending-count` counts **due** pending envelopes (`status=pending` and `deliver_at` is missing or `<= now`).
 

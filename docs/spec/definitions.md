@@ -51,14 +51,14 @@ Hi-Boss maintains channel-scoped session state in dedicated SQLite tables.
 
 ### `channel_session_bindings`
 
-Active mapping per channel conversation:
+Default mapping per channel conversation:
 
 | Code (TypeScript) | SQLite column | Notes |
 |-------------------|-------------|-------|
 | `binding.agentName` | `agent_name` | Owner agent |
 | `binding.adapterType` | `adapter_type` | e.g. `telegram` |
 | `binding.chatId` | `chat_id` | Channel chat id |
-| `binding.activeSessionId` | `active_session_id` | FK -> `agent_sessions.id` |
+| `binding.defaultSessionId` | `default_session_id` | FK -> `agent_sessions.id` |
 | `binding.ownerUserId` | `owner_user_id` | Boss user id (nullable; adapter-specific) |
 | `binding.updatedAt` | `updated_at` | Unix epoch ms |
 
@@ -216,7 +216,6 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 | `agent.reasoningEffort` | `reasoning_effort` | See `src/agent/types.ts` for allowed values; `NULL` means “use provider default reasoning effort” |
 | `agent.permissionLevel` | `permission_level` | `restricted`, `standard`, `privileged`, `admin` |
 | `agent.sessionPolicy` | `session_policy` | JSON (nullable) |
-| `agent.role` | `metadata.role` | `speaker` or `leader` (stored in metadata JSON) |
 | `agent.createdAt` | `created_at` | Unix epoch ms (UTC) |
 | `agent.lastSeenAt` | `last_seen_at` | Unix epoch ms (UTC) (nullable) |
 | `agent.metadata` | `metadata` | JSON (nullable) |
@@ -226,12 +225,10 @@ Table: `agents` (see `src/daemon/db/schema.ts`)
 `agent.metadata` is user-extensible, but Hi-Boss reserves some keys for internal state:
 
 - `metadata.sessionHandle`: persisted session resume handle (see `docs/spec/components/session.md`). This key is maintained by the daemon, preserved across `hiboss agent set --metadata-*` and `hiboss agent set --clear-metadata`, and ignored if provided by the user.
-- `metadata.role`: logical agent role (`speaker` or `leader`).
 - `metadata.providerCli`: optional per-agent provider CLI overrides. Supported shape:
   - `metadata.providerCli.claude.env` (string env map)
   - `metadata.providerCli.codex.env` (string env map)
   - Common examples: `ANTHROPIC_BASE_URL`, `ANTHROPIC_API_KEY`, `CLAUDE_CONFIG_DIR`, `CODEX_HOME`
-- On daemon startup, legacy agents with missing/invalid `metadata.role` are backfilled from binding state and persisted (`bound => speaker`, `unbound => leader`).
 
 ### CLI
 
@@ -242,19 +239,14 @@ Provider homes and provider-home override env handling are canonical in `docs/sp
 
 Agent defaults:
 - `hiboss agent register` requires `--provider` (`claude` or `codex`).
-- `hiboss agent register --role <speaker|leader>` is required and sets `agent.role` explicitly.
-- `hiboss agent register --role speaker` requires adapter binding flags (`--bind-adapter-type` + `--bind-adapter-token`).
-- System prompt rendering requires `agent.role`; missing role metadata is a hard error.
 - `agent.model` and `agent.reasoningEffort` are nullable overrides; `NULL` means provider defaults.
 - `agent.workspace` is a nullable override; `NULL` means no explicit workspace is stored.
 - Effective runtime workspace resolution order:
   - primary active teamspace (`{{HIBOSS_DIR}}/teamspaces/<team-name>/`) when the agent belongs to active teams
   - otherwise `agent.workspace` (if set)
-  - otherwise user's home directory
+- otherwise user's home directory
 - `agent.permissionLevel` defaults to `standard` when not specified.
 - On `hiboss agent set`, switching provider without passing `--model` / `--reasoning-effort` clears both overrides to `NULL`.
-- `hiboss agent set` rejects role or binding mutations that would violate required role coverage (`>=1 speaker` and `>=1 leader`).
-- Speakers must always have at least one binding.
 - On `hiboss agent set`, passing `--bind-adapter-type` + `--bind-adapter-token` for an already-bound adapter type replaces that type’s token for the agent (atomic replace).
 
 Clearing nullable overrides:
@@ -267,7 +259,6 @@ Clearing nullable overrides:
 
 - `hiboss agent register` prints:
   - `name:`
-  - `role:`
   - `description:` (always; generated default when omitted; may be empty string)
   - `workspace:` (`(none)` when unset)
   - `token:` (printed once; there is no “show token” command)
@@ -277,10 +268,10 @@ Clearing nullable overrides:
 - First-time interactive `hiboss setup` prints setup summary keys including:
   - `daemon-timezone: <iana>`
   - `boss-timezone: <iana>`
-  - `speaker-agent-token:`
-  - `leader-agent-token:`
+  - `primary-agent-token:`
+  - `secondary-agent-token:`
   - `admin-token:`
-- Setup writes canonical config to `{{HIBOSS_DIR}}/settings.json` (`version: 4`) and mirrors to SQLite runtime cache.
+- Setup writes canonical config to `{{HIBOSS_DIR}}/settings.json` (`version: "v0.0.0"`) and mirrors to SQLite runtime cache.
 - `hiboss agent delete` prints:
   - `success: true|false`
   - `agent-name:`
@@ -389,7 +380,6 @@ Binding flags are on `hiboss agent set` (see `docs/spec/cli/agents.md`).
 `hiboss agent set` prints:
 - `success:`
 - `agent-name:`
-- `role:`
 - `description:` (`(none)` when unset)
 - `workspace:` (`(none)` when unset)
 - `provider:` (`(none)` when unset)

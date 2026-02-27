@@ -210,7 +210,7 @@ Behavior (canonical):
   - Claude: `--output-format text` (stdout)
   - Codex: `-o/--output-last-message <file>` (read by daemon)
 - **Concurrency**: background jobs are executed with a default max concurrency of `4` (implementation clamps to `1..32`).
-- **No Hi-Boss system instructions**: background jobs do not receive the Hi-Boss role/system prompt injection.
+- **No Hi-Boss system instructions**: background jobs do not receive the Hi-Boss system prompt injection.
 - **No admin token**: the daemon does not set `HIBOSS_TOKEN` in the background process environment.
 - **Runtime permissions**: runs in the same non-interactive full-access mode as normal agent turns:
   - Codex: `--dangerously-bypass-approvals-and-sandbox`

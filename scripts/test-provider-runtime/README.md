@@ -43,13 +43,13 @@ hiboss daemon start --token "<admin-token>"
 
 Notes:
 - The setup templates include a placeholder Telegram bot token. For envelope-only tests it’s OK to leave it as-is (Telegram will fail to launch but the daemon keeps running). If you want Telegram I/O, replace it with a real bot token.
-- The setup templates are `settings.json` schema `version: 4` and include placeholder admin/agent tokens (`REPLACE_ME_*`) and workspace paths (`REPLACE_ME_WORKSPACE_PATH`) that must be replaced.
+- The setup templates are `settings.json` schema `version: "v0.0.0"` and include placeholder admin/agent tokens (`REPLACE_ME_*`) and workspace paths (`REPLACE_ME_WORKSPACE_PATH`) that must be replaced.
 
 ## Optional: test both providers in one run
 
 If you want to validate **both** providers (Codex + Claude) against the Hi-Boss envelope system in the same `~/hiboss` instance:
 
-1) Run setup with one template (it creates a speaker + leader baseline).
+1) Run setup with one template (it creates a baseline pair of agents).
 2) Register the other provider agent:
 
 ```bash

@@ -57,7 +57,7 @@ Suggested access patterns:
 
 Operational guidance:
 
-- Use dedicated agent tokens per MCP endpoint/client role (least privilege, easy revoke/rotate).
+- Use dedicated agent tokens per MCP endpoint/client (least privilege, easy revoke/rotate).
 - Do not use admin tokens in MCP client configs.
 - Use `hiboss_agent_list` + `hiboss_session_list` to discover targets before send.
 - For deterministic delivery to an existing conversation, prefer:

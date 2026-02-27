@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": "v0.0.0",
   "boss": {
     "name": "Kevin",
     "timezone": "Asia/Shanghai"
@@ -11,7 +11,7 @@
     "boss-ids": ["kky1024"]
   },
   "permission-policy": {
-    "version": 1,
+    "version": "v0.0.0",
     "operations": {
       "envelope.send": "restricted",
       "envelope.list": "restricted",
@@ -22,7 +22,6 @@
     {
       "name": "test-codex",
       "token": "REPLACE_ME_TEST_CODEX_TOKEN",
-      "role": "speaker",
       "provider": "codex",
       "description": "test-codex (codex/gpt-5.2)",
       "workspace": "REPLACE_ME_WORKSPACE_PATH",
@@ -37,11 +36,10 @@
       ]
     },
     {
-      "name": "leader",
-      "token": "REPLACE_ME_LEADER_TOKEN",
-      "role": "leader",
+      "name": "test-helper",
+      "token": "REPLACE_ME_TEST_HELPER_TOKEN",
       "provider": "codex",
-      "description": "leader for provider runtime validation",
+      "description": "helper agent for provider runtime validation",
       "workspace": "REPLACE_ME_WORKSPACE_PATH",
       "model": null,
       "reasoning-effort": null,
