@@ -9,7 +9,7 @@ import type { SetupCheckResult } from "../../../daemon/ipc/types.js";
 import type { SetupConfig } from "./types.js";
 import { generateToken } from "../../../agent/auth.js";
 import { DEFAULT_PERMISSION_POLICY } from "../../../shared/defaults.js";
-import type { SettingsV4 } from "../../../shared/settings.js";
+import { SETTINGS_VERSION, type Settings } from "../../../shared/settings.js";
 import { getSettingsPath, writeSettingsFileAtomic } from "../../../shared/settings-io.js";
 import { syncSettingsToDb } from "../../../daemon/settings-sync.js";
 
@@ -204,8 +204,8 @@ async function executeSetupDirect(config: SetupConfig): Promise<{ primaryAgentTo
     const primaryAgentToken = generateToken();
     const secondaryAgentToken = generateToken();
 
-    const settings: SettingsV4 = {
-      version: 4,
+    const settings: Settings = {
+      version: SETTINGS_VERSION,
       boss: {
         name: config.bossName,
         timezone: config.bossTimezone,

@@ -1,9 +1,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ProviderTraceEntry } from "../agent/provider-cli-parsers.js";
+import { INTERNAL_VERSION } from "./version.js";
+
+const AGENT_RUN_TRACE_VERSION = INTERNAL_VERSION;
 
 export interface AgentRunTraceRecord {
-  version: 1;
+  version: typeof AGENT_RUN_TRACE_VERSION;
   runId: string;
   agentName: string;
   provider: "claude" | "codex";
@@ -40,7 +43,7 @@ export function readAgentRunTrace(hibossDir: string, runId: string): AgentRunTra
     }
     const rec = parsed as Record<string, unknown>;
     if (
-      rec.version !== 1 ||
+      rec.version !== AGENT_RUN_TRACE_VERSION ||
       typeof rec.runId !== "string" ||
       typeof rec.agentName !== "string" ||
       (rec.provider !== "claude" && rec.provider !== "codex") ||
@@ -70,7 +73,7 @@ export function readAgentRunTrace(hibossDir: string, runId: string): AgentRunTra
       .filter((item): item is ProviderTraceEntry => item !== null);
 
     return {
-      version: 1,
+      version: AGENT_RUN_TRACE_VERSION,
       runId: rec.runId,
       agentName: rec.agentName,
       provider: rec.provider,

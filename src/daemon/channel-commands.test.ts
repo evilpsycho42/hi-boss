@@ -7,6 +7,7 @@ import test from "node:test";
 import { createChannelCommandHandler } from "./channel-commands.js";
 import { HiBossDatabase } from "./db/database.js";
 import { writeAgentRunTrace } from "../shared/agent-run-trace.js";
+import { INTERNAL_VERSION } from "../shared/version.js";
 
 function withTempDb(run: (db: HiBossDatabase) => Promise<void> | void): Promise<void> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hiboss-channel-cmd-test-"));
@@ -20,10 +21,10 @@ function withTempDb(run: (db: HiBossDatabase) => Promise<void> | void): Promise<
     });
 }
 
-test("/new switches current chat session and returns old/new ids", async () => {
+test("/new switches current chat default session and returns old/new ids", async () => {
   await withTempDb(async (db) => {
     db.registerAgent({ name: "nex", provider: "codex" });
-    const initial = db.getOrCreateChannelActiveSession({
+    const initial = db.getOrCreateChannelDefaultSession({
       agentName: "nex",
       adapterType: "telegram",
       chatId: "chat-1",
@@ -58,14 +59,14 @@ test("/new switches current chat session and returns old/new ids", async () => {
 
     const binding = db.getChannelSessionBinding("nex", "telegram", "chat-1");
     assert.ok(binding);
-    assert.notEqual(binding.activeSessionId, initial.session.id);
+    assert.notEqual(binding.defaultSessionId, initial.session.id);
   });
 });
 
 test("/sessions returns keyboard with tabs and pager", async () => {
   await withTempDb(async (db) => {
     db.registerAgent({ name: "nex", provider: "codex" });
-    db.getOrCreateChannelActiveSession({
+    db.getOrCreateChannelDefaultSession({
       agentName: "nex",
       adapterType: "telegram",
       chatId: "chat-1",
@@ -204,8 +205,8 @@ test("/provider switches provider, clears overrides, and requests refresh", asyn
     const updated = db.getAgentByNameCaseInsensitive("nex");
     assert.ok(updated);
     assert.equal(updated?.provider, "claude");
-    assert.equal(updated?.model, null);
-    assert.equal(updated?.reasoningEffort, null);
+    assert.equal(updated?.model, undefined);
+    assert.equal(updated?.reasoningEffort, undefined);
     assert.equal(refreshReason, "telegram:/provider");
   });
 });
@@ -324,7 +325,7 @@ test("/trace reads latest finished run trace", async () => {
       const run = db.createAgentRun("nex", ["env-1"]);
       db.completeAgentRun(run.id, "done", 1234);
       writeAgentRunTrace(hibossDir, {
-        version: 1,
+        version: INTERNAL_VERSION,
         runId: run.id,
         agentName: "nex",
         provider: "claude",
@@ -374,7 +375,7 @@ test("/trace shows live entries when current run is in progress", async () => {
       db.registerAgent({ name: "nex", provider: "claude" });
       const run = db.createAgentRun("nex", ["env-1"]);
       writeAgentRunTrace(hibossDir, {
-        version: 1,
+        version: INTERNAL_VERSION,
         runId: run.id,
         agentName: "nex",
         provider: "claude",
@@ -424,7 +425,7 @@ test("/trace reads Codex run traces", async () => {
       const run = db.createAgentRun("nex", ["env-1"]);
       db.completeAgentRun(run.id, "done", 1234);
       writeAgentRunTrace(hibossDir, {
-        version: 1,
+        version: INTERNAL_VERSION,
         runId: run.id,
         agentName: "nex",
         provider: "codex",
@@ -543,7 +544,7 @@ test("/status resolves effective codex model/reasoning from CODEX_HOME config", 
 test("/session not-found uses distinct message from invalid-id", async () => {
   await withTempDb(async (db) => {
     db.registerAgent({ name: "nex", provider: "codex" });
-    db.getOrCreateChannelActiveSession({
+    db.getOrCreateChannelDefaultSession({
       agentName: "nex",
       adapterType: "telegram",
       chatId: "chat-1",

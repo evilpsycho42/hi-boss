@@ -6,7 +6,7 @@ import {
   DEFAULT_PERMISSION_POLICY,
   getRequiredPermissionLevel,
   isAtLeastPermissionLevel,
-  parsePermissionPolicyV1OrDefault,
+  parsePermissionPolicyOrDefault,
 } from "../shared/permissions.js";
 import { DEFAULT_AGENT_PERMISSION_LEVEL } from "../shared/defaults.js";
 
@@ -41,7 +41,7 @@ export function authorizeCliOperation(operation: string, token: string): Princip
       };
     }
 
-    const policy = parsePermissionPolicyV1OrDefault(
+    const policy = parsePermissionPolicyOrDefault(
       db.getConfig("permission_policy"),
       DEFAULT_PERMISSION_POLICY
     );

@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
+import { SESSION_FILE_VERSION } from "./types.js";
 
 const DATE_DIR_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -23,14 +24,17 @@ function formatArchiveTimestamp(date: Date): string {
 function isLegacySessionFile(filePath: string): boolean {
   try {
     const raw = fs.readFileSync(filePath, "utf8");
-    const parsed = JSON.parse(raw) as { version?: unknown };
-    return parsed.version === 1;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false;
+    const withVersion = parsed as { version?: unknown };
+    if (withVersion.version === undefined) return false;
+    return withVersion.version !== SESSION_FILE_VERSION;
   } catch {
     return false;
   }
 }
 
-function historyContainsLegacyV1(historyDir: string): boolean {
+function historyContainsLegacyHistory(historyDir: string): boolean {
   let dateDirs: string[];
   try {
     dateDirs = fs
@@ -60,17 +64,17 @@ function historyContainsLegacyV1(historyDir: string): boolean {
 }
 
 /**
- * Move legacy history v1 directories under HIBOSS_DIR/_archive.
+ * Move legacy history directories under HIBOSS_DIR/_archive.
  * This is intentionally destructive for active history location and is designed
  * for single-operator manual migration workflows.
  */
-export function archiveLegacyHistoryV1(params: { dataDir: string; agentsDir: string }): void {
+export function archiveLegacyHistory(params: { dataDir: string; agentsDir: string }): void {
   if (!fs.existsSync(params.agentsDir)) return;
 
   const archiveRoot = path.join(
     params.dataDir,
     "_archive",
-    `history-v1-${formatArchiveTimestamp(new Date())}`,
+    `history-legacy-${formatArchiveTimestamp(new Date())}`,
   );
 
   let entries: string[];
@@ -87,19 +91,19 @@ export function archiveLegacyHistoryV1(params: { dataDir: string; agentsDir: str
   for (const agentName of entries) {
     const historyDir = path.join(params.agentsDir, agentName, "internal_space", "history");
     if (!fs.existsSync(historyDir)) continue;
-    if (!historyContainsLegacyV1(historyDir)) continue;
+    if (!historyContainsLegacyHistory(historyDir)) continue;
 
     const destination = path.join(archiveRoot, agentName, "history");
     try {
       fs.mkdirSync(path.dirname(destination), { recursive: true });
       fs.renameSync(historyDir, destination);
-      logEvent("info", "history-v1-archived", {
+      logEvent("info", "history-legacy-archived", {
         "agent-name": agentName,
         from: historyDir,
         to: destination,
       });
     } catch (err) {
-      logEvent("warn", "history-v1-archive-failed", {
+      logEvent("warn", "history-legacy-archive-failed", {
         "agent-name": agentName,
         from: historyDir,
         to: destination,

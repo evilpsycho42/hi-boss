@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { HiBossDatabase } from "../daemon/db/database.js";
+import { INTERNAL_VERSION } from "../shared/version.js";
 import type { AgentSession } from "./executor-support.js";
 import { getOrCreateAgentSession } from "./executor-session.js";
 import { readPersistedAgentSession } from "./persisted-session.js";
@@ -28,7 +29,7 @@ test("getOrCreateAgentSession refreshes in-memory session on provider mismatch",
   await withTempDb(async ({ db, hibossDir }) => {
     db.registerAgent({ name: "nex", provider: "claude" });
     db.setAgentMetadataSessionHandle("nex", {
-      version: 1,
+      version: INTERNAL_VERSION,
       provider: "codex",
       handle: { provider: "codex", sessionId: "thread-old" },
       createdAtMs: Date.now() - 10_000,

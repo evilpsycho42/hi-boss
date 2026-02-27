@@ -6,8 +6,9 @@
  */
 
 import type { Envelope, EnvelopeOrigin, EnvelopeStatus } from "../../envelope/types.js";
+import { INTERNAL_VERSION } from "../../shared/version.js";
 
-export const SESSION_FILE_VERSION = 2 as const;
+export const SESSION_FILE_VERSION = INTERNAL_VERSION;
 
 export interface SessionEnvelopeCreatedEvent {
   type: "envelope-created";

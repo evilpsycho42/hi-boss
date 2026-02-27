@@ -1,6 +1,7 @@
 import * as os from "os";
 import * as path from "path";
-import type { PermissionPolicyV1 } from "./permissions.js";
+import type { PermissionPolicy } from "./permissions.js";
+import { INTERNAL_VERSION } from "./version.js";
 
 // ==================== Hi-Boss Paths ====================
 
@@ -74,8 +75,8 @@ export function getDefaultSetupWorkspace(): string {
 
 // ==================== Permissions ====================
 
-export const DEFAULT_PERMISSION_POLICY: PermissionPolicyV1 = {
-  version: 1,
+export const DEFAULT_PERMISSION_POLICY: PermissionPolicy = {
+  version: INTERNAL_VERSION,
   operations: {
     // Envelope operations (agents)
     "envelope.send": "restricted",
@@ -114,7 +115,9 @@ export const DEFAULT_PERMISSION_POLICY: PermissionPolicyV1 = {
     "team.register": "privileged",
     "team.set": "privileged",
     "team.list": "restricted",
+    "team.list-members": "restricted",
     "team.status": "restricted",
+    "team.send": "restricted",
     "team.add-member": "privileged",
     "team.remove-member": "privileged",
     "team.delete": "admin",

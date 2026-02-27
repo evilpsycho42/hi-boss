@@ -6,12 +6,13 @@ import {
   DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
   DEFAULT_SETUP_PERMISSION_LEVEL,
 } from "./defaults.js";
-import { isPermissionLevel, parsePermissionPolicyV1FromObject } from "./permissions.js";
+import { isPermissionLevel, parsePermissionPolicyFromObject, type PermissionPolicy } from "./permissions.js";
 import { parseDailyResetAt, parseDurationToMs } from "./session-policy.js";
 import { isValidIanaTimeZone } from "./timezone.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "./validation.js";
+import { INTERNAL_VERSION } from "./version.js";
 
-export const SETTINGS_VERSION = 4 as const;
+export const SETTINGS_VERSION = INTERNAL_VERSION;
 export const SETTINGS_FILENAME = "settings.json" as const;
 export const SETTINGS_FILE_MODE = 0o600 as const;
 
@@ -20,18 +21,18 @@ export type SettingsReasoningEffort = "none" | "low" | "medium" | "high" | "xhig
 const AGENT_TOKEN_REGEX = /^[0-9a-f]{32}$/;
 const MIN_ADMIN_TOKEN_LENGTH = 16;
 
-export interface SettingsBindingV4 {
+export interface SettingsBinding {
   adapterType: string;
   adapterToken: string;
 }
 
-export interface SettingsSessionPolicyV4 {
+export interface SettingsSessionPolicy {
   dailyResetAt?: string;
   idleTimeout?: string;
   maxContextLength?: number;
 }
 
-export interface SettingsAgentV4 {
+export interface SettingsAgent {
   name: string;
   token: string;
   provider: SettingsProvider;
@@ -40,20 +41,20 @@ export interface SettingsAgentV4 {
   model: string | null;
   reasoningEffort: SettingsReasoningEffort | null;
   permissionLevel: "restricted" | "standard" | "privileged" | "admin";
-  sessionPolicy?: SettingsSessionPolicyV4;
+  sessionPolicy?: SettingsSessionPolicy;
   metadata?: Record<string, unknown>;
-  bindings: SettingsBindingV4[];
+  bindings: SettingsBinding[];
 }
 
-export interface SettingsRuntimeV4 {
+export interface SettingsRuntime {
   sessionConcurrency?: {
     perAgent?: number;
     global?: number;
   };
 }
 
-export interface SettingsV4 {
-  version: 4;
+export interface Settings {
+  version: typeof SETTINGS_VERSION;
   boss: {
     name: string;
     timezone: string;
@@ -64,12 +65,9 @@ export interface SettingsV4 {
   telegram: {
     bossIds: string[];
   };
-  permissionPolicy: {
-    version: 1;
-    operations: Record<string, "restricted" | "standard" | "privileged" | "admin">;
-  };
-  runtime?: SettingsRuntimeV4;
-  agents: SettingsAgentV4[];
+  permissionPolicy: PermissionPolicy;
+  runtime?: SettingsRuntime;
+  agents: SettingsAgent[];
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -116,12 +114,12 @@ function parseBossIds(raw: unknown): string[] {
   return validateBossIds(raw);
 }
 
-function parsePermissionPolicy(raw: unknown): SettingsV4["permissionPolicy"] {
+function parsePermissionPolicy(raw: unknown): Settings["permissionPolicy"] {
   if (!isObject(raw)) {
     fail("permission-policy", "must be an object");
   }
   try {
-    const parsed = parsePermissionPolicyV1FromObject(raw);
+    const parsed = parsePermissionPolicyFromObject(raw);
     return parsed;
   } catch (err) {
     fail("permission-policy", (err as Error).message);
@@ -145,7 +143,7 @@ function parsePositiveInt(
   return n;
 }
 
-function parseRuntime(raw: unknown): SettingsRuntimeV4 {
+function parseRuntime(raw: unknown): SettingsRuntime {
   if (raw === undefined || raw === null) {
     return {
       sessionConcurrency: {
@@ -185,13 +183,13 @@ function parseRuntime(raw: unknown): SettingsRuntimeV4 {
   };
 }
 
-function parseSessionPolicy(raw: unknown, agentName: string): SettingsSessionPolicyV4 | undefined {
+function parseSessionPolicy(raw: unknown, agentName: string): SettingsSessionPolicy | undefined {
   if (raw === undefined) return undefined;
   if (!isObject(raw)) {
     fail(`agents[${agentName}].session-policy`, "must be an object");
   }
 
-  const next: SettingsSessionPolicyV4 = {};
+  const next: SettingsSessionPolicy = {};
 
   if (raw["daily-reset-at"] !== undefined) {
     if (typeof raw["daily-reset-at"] !== "string") {
@@ -221,7 +219,7 @@ function parseSessionPolicy(raw: unknown, agentName: string): SettingsSessionPol
   return Object.keys(next).length > 0 ? next : undefined;
 }
 
-function parseBindings(raw: unknown, agentName: string): SettingsBindingV4[] {
+function parseBindings(raw: unknown, agentName: string): SettingsBinding[] {
   if (raw === undefined) {
     return [];
   }
@@ -255,7 +253,7 @@ function parseBindings(raw: unknown, agentName: string): SettingsBindingV4[] {
   return bindings;
 }
 
-function parseAgent(raw: unknown, index: number): SettingsAgentV4 {
+function parseAgent(raw: unknown, index: number): SettingsAgent {
   if (!isObject(raw)) {
     fail(`agents[${index}]`, "must be an object");
   }
@@ -351,7 +349,7 @@ function parseAgent(raw: unknown, index: number): SettingsAgentV4 {
   };
 }
 
-export function assertValidSettingsV4(settings: SettingsV4): void {
+export function assertValidSettings(settings: Settings): void {
   if (settings.admin.token.trim().length < MIN_ADMIN_TOKEN_LENGTH) {
     fail("admin.token", `must be at least ${MIN_ADMIN_TOKEN_LENGTH} characters`);
   }
@@ -399,7 +397,7 @@ export function assertValidSettingsV4(settings: SettingsV4): void {
 
 }
 
-export function parseSettingsV4Json(json: string): SettingsV4 {
+export function parseSettingsJson(json: string): Settings {
   let raw: unknown;
   try {
     raw = JSON.parse(json);
@@ -446,7 +444,7 @@ export function parseSettingsV4Json(json: string): SettingsV4 {
     fail("agents", "must be a non-empty array");
   }
 
-  const settings: SettingsV4 = {
+  const settings: Settings = {
     version: SETTINGS_VERSION,
     boss: {
       name: bossName,
@@ -463,12 +461,12 @@ export function parseSettingsV4Json(json: string): SettingsV4 {
     agents: agentsRaw.map((agent, index) => parseAgent(agent, index)),
   };
 
-  assertValidSettingsV4(settings);
+  assertValidSettings(settings);
   return settings;
 }
 
-export function stringifySettingsV4(settings: SettingsV4): string {
-  assertValidSettingsV4(settings);
+export function stringifySettings(settings: Settings): string {
+  assertValidSettings(settings);
   return `${JSON.stringify({
     version: SETTINGS_VERSION,
     boss: {

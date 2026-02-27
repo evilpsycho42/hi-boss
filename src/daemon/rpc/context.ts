@@ -14,7 +14,7 @@ import type { ChatAdapter } from "../../adapters/types.js";
 import type { Agent } from "../../agent/types.js";
 import type { RpcMethodHandler, RpcMethodRegistry } from "../ipc/types.js";
 import { RPC_ERRORS } from "../ipc/types.js";
-import type { PermissionLevel, PermissionPolicyV1 } from "../../shared/permissions.js";
+import type { PermissionLevel, PermissionPolicy } from "../../shared/permissions.js";
 import type { DaemonConfig } from "../daemon.js";
 
 /**
@@ -44,7 +44,7 @@ export interface DaemonContext {
   // Methods
   resolvePrincipal(token: string): Principal;
   assertOperationAllowed(operation: string, principal: { level: PermissionLevel }): void;
-  getPermissionPolicy(): PermissionPolicyV1;
+  getPermissionPolicy(): PermissionPolicy;
 
   // Adapter management
   createAdapterForBinding(adapterType: string, adapterToken: string): Promise<ChatAdapter | null>;

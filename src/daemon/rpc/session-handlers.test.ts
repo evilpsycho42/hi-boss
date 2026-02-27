@@ -5,6 +5,7 @@ import { createSessionHandlers } from "./session-handlers.js";
 import { RPC_ERRORS } from "../ipc/types.js";
 import type { DaemonContext } from "./context.js";
 import type { Agent } from "../../agent/types.js";
+import { INTERNAL_VERSION } from "../../shared/version.js";
 
 function makeAgent(name: string): Agent {
   return {
@@ -52,7 +53,7 @@ function makeContext(params: {
       agent: params.principal,
     }),
     assertOperationAllowed: () => undefined,
-    getPermissionPolicy: () => ({ version: 1, operations: { "session.list": "restricted" } }),
+    getPermissionPolicy: () => ({ version: INTERNAL_VERSION, operations: { "session.list": "restricted" } }),
     createAdapterForBinding: async () => null,
     removeAdapter: async () => undefined,
     registerAgentHandler: () => undefined,
@@ -123,4 +124,3 @@ test("session.list rejects invalid limit", async () => {
     "Invalid limit"
   );
 });
-

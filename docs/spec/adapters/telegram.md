@@ -26,7 +26,7 @@ Outbound (agent -> Telegram):
 
 Telegram commands are boss-only (non-boss receives no reply):
 
-- `/new` -> switch current chat to a fresh active session
+- `/new` -> switch current chat to a fresh default session
 - `/sessions` -> list recent sessions (tabs + pager)
 - `/session <id>` -> switch current chat to selected session
 - `/trace` -> show current run trace (no run-id required)

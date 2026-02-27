@@ -135,8 +135,8 @@ export class ChannelBridge {
     const toAddress = formatAgentAddress(binding.agentName);
     const agent = this.db.getAgentByNameCaseInsensitive(binding.agentName);
     const ownerUserId = fromBoss ? message.author.id : undefined;
-    const channelSession = agent
-      ? this.db.getOrCreateChannelActiveSession({
+    const channelDefaultSession = agent
+      ? this.db.getOrCreateChannelDefaultSession({
           agentName: binding.agentName,
           adapterType: platform,
           chatId: message.chat.id,
@@ -161,7 +161,7 @@ export class ChannelBridge {
         origin: "channel",
         platform,
         channelMessageId: message.id,
-        ...(channelSession ? { channelSessionId: channelSession.session.id } : {}),
+        ...(channelDefaultSession ? { channelSessionId: channelDefaultSession.session.id } : {}),
         author: message.author,
         chat: message.chat,
         ...(message.inReplyTo ? { inReplyTo: message.inReplyTo } : {}),

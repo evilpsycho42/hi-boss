@@ -16,7 +16,7 @@ Tables (high level):
 - `cron_schedules` — durable cron definitions (materialize envelopes)
 - `agent_runs` — run audit records
 - `agent_sessions` — session registry (provider session/thread handles)
-- `channel_session_bindings` — active session mapping per channel chat
+- `channel_session_bindings` — default session mapping per channel chat
 - `channel_session_links` — historical/visibility links for session browser scopes
 
 ## `config` keys (selected)

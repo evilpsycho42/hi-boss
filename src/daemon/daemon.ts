@@ -10,7 +10,7 @@ import type { Agent } from "../agent/types.js";
 import { EnvelopeScheduler } from "./scheduler/envelope-scheduler.js";
 import { CronScheduler } from "./scheduler/cron-scheduler.js";
 import { ConversationHistory } from "./history/conversation-history.js";
-import { archiveLegacyHistoryV1 } from "./history/legacy-history-archive.js";
+import { archiveLegacyHistory } from "./history/legacy-history-archive.js";
 import { bindHistoryHooks } from "./history/history-runtime-hooks.js";
 import { purgeSessionSummaryFields } from "./history/purge-session-summaries.js";
 import type { RpcMethodRegistry } from "./ipc/types.js";
@@ -22,10 +22,10 @@ import { getHiBossPaths } from "../shared/hiboss-paths.js";
 import {
   DEFAULT_PERMISSION_POLICY,
   type PermissionLevel,
-  type PermissionPolicyV1,
+  type PermissionPolicy,
   getRequiredPermissionLevel,
   isAtLeastPermissionLevel,
-  parsePermissionPolicyV1OrDefault,
+  parsePermissionPolicyOrDefault,
 } from "../shared/permissions.js";
 import { errorMessage, logEvent, setDaemonLogTimeZone } from "../shared/daemon-log.js";
 import { getEnvelopeSourceFromEnvelope } from "../envelope/source.js";
@@ -109,7 +109,7 @@ export class Daemon {
   private running = false;
   private startTimeMs: number | null = null;
   private pidLock: PidLock;
-  private defaultPermissionPolicy: PermissionPolicyV1 = DEFAULT_PERMISSION_POLICY;
+  private defaultPermissionPolicy: PermissionPolicy = DEFAULT_PERMISSION_POLICY;
 
   constructor(private config: DaemonConfig = getDefaultConfig()) {
     const dbPath = path.join(config.daemonDir, "hiboss.db");
@@ -155,9 +155,9 @@ export class Daemon {
     this.registerRpcMethods();
   }
 
-  private getPermissionPolicy(): PermissionPolicyV1 {
+  private getPermissionPolicy(): PermissionPolicy {
     const raw = this.db.getConfig("permission_policy");
-    return parsePermissionPolicyV1OrDefault(raw, this.defaultPermissionPolicy);
+    return parsePermissionPolicyOrDefault(raw, this.defaultPermissionPolicy);
   }
 
   private getAgentPermissionLevel(agent: Agent): PermissionLevel {
@@ -241,7 +241,7 @@ export class Daemon {
         return;
       }
 
-      archiveLegacyHistoryV1({
+      archiveLegacyHistory({
         dataDir: this.config.dataDir,
         agentsDir: path.join(this.config.dataDir, "agents"),
       });
@@ -250,7 +250,7 @@ export class Daemon {
       });
 
       // Canonical startup path: load settings.json and mirror into DB runtime cache.
-      // Compatibility path: pre-v3 installs may have DB state without settings.json.
+      // Compatibility path: early installs may have DB state without settings.json.
       const settingsPath = getSettingsPath(this.config.dataDir);
       if (fs.existsSync(settingsPath)) {
         const settings = loadSettingsOrThrow(this.config.dataDir);

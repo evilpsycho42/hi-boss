@@ -22,7 +22,7 @@ import { generateToken, hashToken, verifyToken } from "../../agent/auth.js";
 import { generateUUID } from "../../shared/uuid.js";
 import { assertValidAgentName, assertValidTeamName } from "../../shared/validation.js";
 import { getDaemonIanaTimeZone } from "../../shared/timezone.js";
-import type { SettingsV4 } from "../../shared/settings.js";
+import type { Settings } from "../../shared/settings.js";
 import type { Team, TeamMember, TeamKind, TeamStatus } from "../../team/types.js";
 
 /**
@@ -126,7 +126,7 @@ interface ChannelSessionBindingRow {
   agent_name: string;
   adapter_type: string;
   chat_id: string;
-  active_session_id: string;
+  default_session_id: string;
   owner_user_id: string | null;
   updated_at: number;
 }
@@ -190,7 +190,7 @@ export interface ChannelSessionBinding {
   agentName: string;
   adapterType: string;
   chatId: string;
-  activeSessionId: string;
+  defaultSessionId: string;
   ownerUserId?: string;
   updatedAt: number;
 }
@@ -351,7 +351,7 @@ export class HiBossDatabase {
         "agent_name",
         "adapter_type",
         "chat_id",
-        "active_session_id",
+        "default_session_id",
         "owner_user_id",
         "updated_at",
       ],
@@ -480,7 +480,7 @@ export class HiBossDatabase {
    * Apply settings snapshot into runtime cache tables.
    * Keeps envelopes and agent run history intact.
    */
-  applySettingsSnapshot(settings: SettingsV4): void {
+  applySettingsSnapshot(settings: Settings): void {
     this.runInTransaction(() => {
       this.setBossName(settings.boss.name);
       this.setConfig("boss_timezone", settings.boss.timezone);
@@ -1428,7 +1428,6 @@ export class HiBossDatabase {
     const raw = metadata?.origin;
     if (
       raw === "cli" ||
-      raw === "mcp" ||
       raw === "channel" ||
       raw === "cron" ||
       raw === "internal"
@@ -2075,7 +2074,7 @@ export class HiBossDatabase {
       agentName: row.agent_name,
       adapterType: row.adapter_type,
       chatId: row.chat_id,
-      activeSessionId: row.active_session_id,
+      defaultSessionId: row.default_session_id,
       ownerUserId: row.owner_user_id ?? undefined,
       updatedAt: row.updated_at,
     };
@@ -2263,11 +2262,11 @@ export class HiBossDatabase {
   }): void {
     const stmt = this.db.prepare(`
       INSERT INTO channel_session_bindings
-        (id, agent_name, adapter_type, chat_id, active_session_id, owner_user_id, updated_at)
+        (id, agent_name, adapter_type, chat_id, default_session_id, owner_user_id, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(agent_name, adapter_type, chat_id)
       DO UPDATE SET
-        active_session_id = excluded.active_session_id,
+        default_session_id = excluded.default_session_id,
         owner_user_id = COALESCE(excluded.owner_user_id, channel_session_bindings.owner_user_id),
         updated_at = excluded.updated_at
     `);
@@ -2282,7 +2281,7 @@ export class HiBossDatabase {
     );
   }
 
-  getOrCreateChannelActiveSession(input: {
+  getOrCreateChannelDefaultSession(input: {
     agentName: string;
     adapterType: string;
     chatId: string;
@@ -2293,7 +2292,7 @@ export class HiBossDatabase {
       const nowMs = Date.now();
       const currentBinding = this.getChannelSessionBinding(input.agentName, input.adapterType, input.chatId);
       if (currentBinding) {
-        const existingSession = this.getAgentSessionById(currentBinding.activeSessionId);
+        const existingSession = this.getAgentSessionById(currentBinding.defaultSessionId);
         if (existingSession && existingSession.agentName === input.agentName) {
           this.upsertChannelSessionBinding({
             agentName: input.agentName,
@@ -2354,7 +2353,7 @@ export class HiBossDatabase {
     });
   }
 
-  switchChannelActiveSession(input: {
+  switchChannelDefaultSession(input: {
     agentName: string;
     adapterType: string;
     chatId: string;
@@ -2390,11 +2389,11 @@ export class HiBossDatabase {
         adapterType: input.adapterType,
         chatId: input.chatId,
       });
-      return { oldSessionId: current?.activeSessionId, newSessionId: target.id };
+      return { oldSessionId: current?.defaultSessionId, newSessionId: target.id };
     });
   }
 
-  createFreshChannelSessionAndSwitch(input: {
+  createFreshChannelSessionAndSetDefault(input: {
     agentName: string;
     adapterType: string;
     chatId: string;
@@ -2426,7 +2425,7 @@ export class HiBossDatabase {
         ownerUserId: input.ownerUserId,
         nowMs,
       });
-      return { oldSessionId: current?.activeSessionId, newSession: fresh };
+      return { oldSessionId: current?.defaultSessionId, newSession: fresh };
     });
   }
 

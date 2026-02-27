@@ -19,14 +19,14 @@ function withTempDb(run: (db: HiBossDatabase) => void): void {
   }
 }
 
-test("channel session mapping creates once and switches active session", () => {
+test("channel session mapping creates once and switches default session", () => {
   withTempDb((db) => {
     db.registerAgent({
       name: "nex",
       provider: "codex",
     });
 
-    const first = db.getOrCreateChannelActiveSession({
+    const first = db.getOrCreateChannelDefaultSession({
       agentName: "nex",
       adapterType: "telegram",
       chatId: "chat-1",
@@ -35,7 +35,7 @@ test("channel session mapping creates once and switches active session", () => {
     });
     assert.equal(first.created, true);
 
-    const second = db.getOrCreateChannelActiveSession({
+    const second = db.getOrCreateChannelDefaultSession({
       agentName: "nex",
       adapterType: "telegram",
       chatId: "chat-1",
@@ -45,7 +45,7 @@ test("channel session mapping creates once and switches active session", () => {
     assert.equal(second.created, false);
     assert.equal(second.session.id, first.session.id);
 
-    const other = db.getOrCreateChannelActiveSession({
+    const other = db.getOrCreateChannelDefaultSession({
       agentName: "nex",
       adapterType: "telegram",
       chatId: "chat-2",
@@ -53,7 +53,7 @@ test("channel session mapping creates once and switches active session", () => {
       provider: "codex",
     });
 
-    const switched = db.switchChannelActiveSession({
+    const switched = db.switchChannelDefaultSession({
       agentName: "nex",
       adapterType: "telegram",
       chatId: "chat-1",
@@ -66,7 +66,7 @@ test("channel session mapping creates once and switches active session", () => {
 
     const binding = db.getChannelSessionBinding("nex", "telegram", "chat-1");
     assert.ok(binding);
-    assert.equal(binding.activeSessionId, other.session.id);
+    assert.equal(binding.defaultSessionId, other.session.id);
   });
 });
 
@@ -77,21 +77,21 @@ test("list sessions scope respects current chat, owner, and agent-wide visibilit
       provider: "codex",
     });
 
-    const s1 = db.getOrCreateChannelActiveSession({
+    const s1 = db.getOrCreateChannelDefaultSession({
       agentName: "nex",
       adapterType: "telegram",
       chatId: "chat-1",
       ownerUserId: "u-1",
       provider: "codex",
     }).session;
-    const s2 = db.getOrCreateChannelActiveSession({
+    const s2 = db.getOrCreateChannelDefaultSession({
       agentName: "nex",
       adapterType: "telegram",
       chatId: "chat-2",
       ownerUserId: "u-1",
       provider: "codex",
     }).session;
-    const s3 = db.getOrCreateChannelActiveSession({
+    const s3 = db.getOrCreateChannelDefaultSession({
       agentName: "nex",
       adapterType: "telegram",
       chatId: "chat-3",

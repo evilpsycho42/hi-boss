@@ -18,8 +18,10 @@ import {
   DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
 } from "../shared/defaults.js";
 import { errorMessage, logEvent } from "../shared/daemon-log.js";
+import { INTERNAL_VERSION } from "../shared/version.js";
 import {
   getRefreshReasonForPolicy,
+  getBossInfo,
   queueAgentTask,
   type AgentSession,
   type SessionRefreshRequest,
@@ -34,6 +36,8 @@ import { getProviderCliEnvOverrides } from "./provider-env.js";
 import type { ConversationHistory } from "../daemon/history/conversation-history.js";
 import { closeAllActiveSessions, closeSessionByPath } from "../daemon/history/session-close.js";
 import { writeAgentRunTrace } from "../shared/agent-run-trace.js";
+import { generateSystemInstructions } from "./instruction-generator.js";
+import { buildAgentTeamPromptContext, resolveAgentWorkspace } from "../team/runtime.js";
 
 /**
  * Maximum number of pending envelopes to process in a single turn.
@@ -107,6 +111,7 @@ export class AgentExecutor {
   private concurrencyPerAgent: number = DEFAULT_SESSION_CONCURRENCY_PER_AGENT;
   private concurrencyGlobal: number = DEFAULT_SESSION_CONCURRENCY_GLOBAL;
   private pendingSessionRefresh: Map<string, SessionRefreshRequest> = new Map();
+  private pendingSessionContextReload: Map<string, SessionRefreshRequest> = new Map();
   private db: HiBossDatabase | null;
   private hibossDir: string;
   private conversationHistory: ConversationHistory | null;
@@ -281,6 +286,38 @@ export class AgentExecutor {
     });
   }
 
+  /**
+   * Request a hot reload of session context (team/workspace prompt context) for an agent.
+   *
+   * This does not reset provider sessions or conversation history; it only updates
+   * in-memory session instructions/workspace for subsequent turns.
+   */
+  requestSessionContextReload(agentName: string, reason: string): void {
+    const existing = this.pendingSessionContextReload.get(agentName);
+    if (existing) {
+      existing.reasons.push(reason);
+    } else {
+      this.pendingSessionContextReload.set(agentName, {
+        requestedAtMs: Date.now(),
+        reasons: [reason],
+      });
+    }
+
+    queueAgentTask({
+      agentLocks: this.agentDispatchLocks,
+      agentName,
+      log: () => undefined,
+      task: async () => {
+        await this.applyPendingSessionContextReload(agentName);
+      },
+    }).catch((err) => {
+      logEvent("error", "agent-session-context-reload-queue-failed", {
+        "agent-name": agentName,
+        error: errorMessage(err),
+      });
+    });
+  }
+
   private getSessionPolicy(agent: Agent) {
     return parseSessionPolicyConfig(agent.sessionPolicy, { strict: false });
   }
@@ -297,6 +334,84 @@ export class AgentExecutor {
     if (reasons.length === 0) return [];
     await this.refreshSession(agentName, reasons.join(","));
     return reasons;
+  }
+
+  private getAndClearPendingSessionContextReloadReasons(agentName: string): string[] {
+    const pending = this.pendingSessionContextReload.get(agentName);
+    if (!pending) return [];
+    this.pendingSessionContextReload.delete(agentName);
+    return pending.reasons;
+  }
+
+  private async applyPendingSessionContextReload(agentName: string): Promise<string[]> {
+    const reasons = this.getAndClearPendingSessionContextReloadReasons(agentName);
+    if (reasons.length === 0) return [];
+    await this.reloadSessionContext(agentName, reasons.join(","));
+    return reasons;
+  }
+
+  private async reloadSessionContext(agentName: string, reason?: string): Promise<void> {
+    const db = this.db;
+    if (!db) return;
+
+    const agent = db.getAgentByNameCaseInsensitive(agentName);
+    if (!agent) return;
+
+    const defaultSession = this.sessions.get(agent.name);
+    const scopedSessionKeys = [...this.channelSessions.keys()].filter((key) => (
+      key.startsWith(`channel-session:${agent.name}:`) ||
+      key.startsWith(`agent-session:${agent.name}:`)
+    ));
+    if (!defaultSession && scopedSessionKeys.length === 0) {
+      return;
+    }
+
+    const agentRecord = db.getAgentByName(agent.name);
+    if (!agentRecord) return;
+
+    const workspace = resolveAgentWorkspace({
+      db,
+      hibossDir: this.hibossDir,
+      agent,
+    });
+    const bindings = db.getBindingsByAgentName(agent.name);
+    const boss = getBossInfo(db, bindings);
+    const teams = buildAgentTeamPromptContext({
+      db,
+      hibossDir: this.hibossDir,
+      agent,
+    });
+    const instructions = generateSystemInstructions({
+      agent,
+      agentToken: agentRecord.token,
+      bindings,
+      workspaceDir: workspace,
+      bossTimezone: db.getBossTimezone(),
+      hibossDir: this.hibossDir,
+      boss,
+      teams,
+    });
+
+    let updatedCount = 0;
+    if (defaultSession) {
+      defaultSession.systemInstructions = instructions;
+      defaultSession.workspace = workspace;
+      updatedCount += 1;
+    }
+    for (const key of scopedSessionKeys) {
+      const scoped = this.channelSessions.get(key);
+      if (!scoped) continue;
+      scoped.systemInstructions = instructions;
+      scoped.workspace = workspace;
+      updatedCount += 1;
+    }
+
+    logEvent("info", "agent-session-context-reload", {
+      "agent-name": agent.name,
+      reason,
+      "updated-session-count": updatedCount,
+      state: "success",
+    });
   }
 
   /**
@@ -421,7 +536,7 @@ export class AgentExecutor {
         }
       }
 
-      const active = db.getOrCreateChannelActiveSession({
+      const defaultSession = db.getOrCreateChannelDefaultSession({
         agentName: agent.name,
         adapterType: parsedFrom.adapter,
         chatId: parsedFrom.chatId,
@@ -431,8 +546,8 @@ export class AgentExecutor {
 
       return {
         kind: "channel",
-        cacheKey: this.buildChannelSessionKey(agent.name, active.session.id),
-        agentSessionId: active.session.id,
+        cacheKey: this.buildChannelSessionKey(agent.name, defaultSession.session.id),
+        agentSessionId: defaultSession.session.id,
         adapterType: parsedFrom.adapter,
         chatId: parsedFrom.chatId,
         ownerUserId,
@@ -553,7 +668,7 @@ export class AgentExecutor {
 
       try {
         writeAgentRunTrace(this.hibossDir, {
-          version: 1,
+          version: INTERNAL_VERSION,
           runId: run.id,
           agentName: params.agent.name,
           provider: trace.provider,
@@ -681,7 +796,7 @@ export class AgentExecutor {
         if (session.sessionId) {
           try {
             writePersistedAgentSession(params.db, params.agent.name, {
-              version: 1,
+              version: INTERNAL_VERSION,
               provider: session.provider,
               handle: {
                 provider: session.provider,
@@ -821,7 +936,7 @@ export class AgentExecutor {
         const traceRecord = traceToWrite as CapturedRunTrace;
         try {
           writeAgentRunTrace(this.hibossDir, {
-            version: 1,
+            version: INTERNAL_VERSION,
             runId: run.id,
             agentName: params.agent.name,
             provider: traceRecord.provider,
@@ -959,6 +1074,7 @@ export class AgentExecutor {
    */
   async refreshSession(agentName: string, reason?: string): Promise<void> {
     this.pendingSessionRefresh.delete(agentName);
+    this.pendingSessionContextReload.delete(agentName);
 
     if (this.conversationHistory) {
       // Recover old session so we can capture its file path.
@@ -1059,6 +1175,8 @@ export class AgentExecutor {
     this.agentQueuedTaskCount.clear();
     this.inFlightRuns.clear();
     this.abortGenerationByAgent.clear();
+    this.pendingSessionRefresh.clear();
+    this.pendingSessionContextReload.clear();
   }
 }
 

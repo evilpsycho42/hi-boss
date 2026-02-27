@@ -4,9 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { archiveLegacyHistoryV1 } from "./legacy-history-archive.js";
+import { archiveLegacyHistory } from "./legacy-history-archive.js";
+import { SESSION_FILE_VERSION } from "./types.js";
 
-function writeSessionFile(filePath: string, version: number): void {
+function writeSessionFile(filePath: string, version: string): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(
     filePath,
@@ -23,17 +24,17 @@ function writeSessionFile(filePath: string, version: number): void {
   );
 }
 
-test("archiveLegacyHistoryV1 moves only legacy v1 history directories", () => {
+test("archiveLegacyHistory moves only legacy history directories", () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hiboss-history-archive-test-"));
   try {
     const agentsDir = path.join(root, "agents");
     const alphaHistory = path.join(agentsDir, "alpha", "internal_space", "history");
     const betaHistory = path.join(agentsDir, "beta", "internal_space", "history");
 
-    writeSessionFile(path.join(alphaHistory, "2026-02-26", "s1.json"), 1);
-    writeSessionFile(path.join(betaHistory, "2026-02-26", "s2.json"), 2);
+    writeSessionFile(path.join(alphaHistory, "2026-02-26", "s1.json"), "legacy-version");
+    writeSessionFile(path.join(betaHistory, "2026-02-26", "s2.json"), SESSION_FILE_VERSION);
 
-    archiveLegacyHistoryV1({ dataDir: root, agentsDir });
+    archiveLegacyHistory({ dataDir: root, agentsDir });
 
     assert.equal(fs.existsSync(alphaHistory), false);
     assert.equal(fs.existsSync(betaHistory), true);

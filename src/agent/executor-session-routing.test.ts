@@ -136,11 +136,11 @@ test("abortCurrentRun skips old queued tasks but allows new tasks queued after a
   assert.deepEqual(calls, ["e1", "e3"]);
 });
 
-test("resolveExecutionScope respects envelope channelSessionId pin even after active mapping changed", () => {
+test("resolveExecutionScope respects envelope channelSessionId pin even after default mapping changed", () => {
   withTempDb((db) => {
     db.registerAgent({ name: "nex", provider: "codex" });
 
-    const first = db.getOrCreateChannelActiveSession({
+    const first = db.getOrCreateChannelDefaultSession({
       agentName: "nex",
       adapterType: "telegram",
       chatId: "chat-1",
@@ -148,7 +148,7 @@ test("resolveExecutionScope respects envelope channelSessionId pin even after ac
       provider: "codex",
     }).session;
 
-    const fresh = db.createFreshChannelSessionAndSwitch({
+    const fresh = db.createFreshChannelSessionAndSetDefault({
       agentName: "nex",
       adapterType: "telegram",
       chatId: "chat-1",

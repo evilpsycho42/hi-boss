@@ -127,11 +127,11 @@ CREATE TABLE IF NOT EXISTS channel_session_bindings (
   agent_name TEXT NOT NULL,
   adapter_type TEXT NOT NULL,
   chat_id TEXT NOT NULL,
-  active_session_id TEXT NOT NULL,
+  default_session_id TEXT NOT NULL,
   owner_user_id TEXT,
   updated_at INTEGER NOT NULL,
   UNIQUE(agent_name, adapter_type, chat_id),
-  FOREIGN KEY (active_session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE
+  FOREIGN KEY (default_session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS channel_session_links (

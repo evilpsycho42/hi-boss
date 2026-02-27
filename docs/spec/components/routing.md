@@ -24,7 +24,7 @@ Key files:
 
 Session scope resolution:
 
-- Channel source (`from = channel:<adapter>:<chat-id>`): resolve active session via `channel_session_bindings`.
+- Channel source (`from = channel:<adapter>:<chat-id>`): resolve default session via `channel_session_bindings`.
 - Non-channel source: use default per-agent scope.
 
 Execution semantics:
@@ -53,7 +53,7 @@ Boss-only command flow:
    - `/sessions` (tabbed, paged session list)
    - `/session <id>` (switch current chat mapping)
    - `/provider <claude|codex> [model=<name|default>] [reasoning-effort=<none|low|medium|high|xhigh|default>]` (switch provider and/or provider overrides + request full session refresh on change)
-   - `/isolated`, `/clone` (one-shot; active mapping unchanged)
+   - `/isolated`, `/clone` (one-shot; default mapping unchanged)
 4. Adapter replies in parseable text format; `/sessions` includes inline keyboard for tabs/pager.
 
 ## Scheduled Delivery

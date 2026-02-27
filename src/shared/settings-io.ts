@@ -3,11 +3,11 @@ import * as path from "node:path";
 import * as lockfile from "proper-lockfile";
 
 import {
-  parseSettingsV4Json,
+  parseSettingsJson,
   SETTINGS_FILENAME,
   SETTINGS_FILE_MODE,
-  stringifySettingsV4,
-  type SettingsV4,
+  stringifySettings,
+  type Settings,
 } from "./settings.js";
 
 export function getSettingsPath(hibossDir: string): string {
@@ -25,21 +25,21 @@ export function ensureSettingsFileMode(filePath: string): void {
 /**
  * Intentionally synchronous: used in startup/command paths, not hot loops.
  */
-export function readSettingsFile(hibossDir: string): SettingsV4 {
+export function readSettingsFile(hibossDir: string): Settings {
   const settingsPath = getSettingsPath(hibossDir);
   if (!fs.existsSync(settingsPath)) {
     throw new Error(`Settings file not found: ${settingsPath}`);
   }
   const json = fs.readFileSync(settingsPath, "utf8");
-  const settings = parseSettingsV4Json(json);
+  const settings = parseSettingsJson(json);
   ensureSettingsFileMode(settingsPath);
   return settings;
 }
 
-export async function writeSettingsFileAtomic(hibossDir: string, settings: SettingsV4): Promise<void> {
+export async function writeSettingsFileAtomic(hibossDir: string, settings: Settings): Promise<void> {
   const settingsPath = getSettingsPath(hibossDir);
   const tmpPath = `${settingsPath}.tmp-${process.pid}-${Date.now()}`;
-  const json = stringifySettingsV4(settings);
+  const json = stringifySettings(settings);
 
   await fs.promises.mkdir(path.dirname(settingsPath), { recursive: true });
   try {

@@ -1,7 +1,9 @@
 import type { HiBossDatabase } from "../daemon/db/database.js";
+import { INTERNAL_VERSION } from "../shared/version.js";
 import type { Agent } from "./types.js";
 
 const AGENT_PERSISTED_SESSION_KEY = "sessionHandle";
+const PERSISTED_AGENT_SESSION_VERSION = INTERNAL_VERSION;
 
 /**
  * Session handle for CLI-based session persistence.
@@ -13,8 +15,8 @@ export type SessionHandle = {
   metadata?: Record<string, unknown>;
 };
 
-export type PersistedAgentSessionV1 = {
-  version: 1;
+export type PersistedAgentSession = {
+  version: typeof PERSISTED_AGENT_SESSION_VERSION;
   provider: "claude" | "codex";
   handle: SessionHandle;
   createdAtMs: number;
@@ -44,10 +46,10 @@ function parseSessionHandle(value: unknown): SessionHandle | null {
   return handle;
 }
 
-export function readPersistedAgentSession(agent: Agent): PersistedAgentSessionV1 | null {
+export function readPersistedAgentSession(agent: Agent): PersistedAgentSession | null {
   if (!isRecord(agent.metadata)) return null;
   const raw = agent.metadata[AGENT_PERSISTED_SESSION_KEY];
-  if (!isRecord(raw) || raw.version !== 1) return null;
+  if (!isRecord(raw) || raw.version !== PERSISTED_AGENT_SESSION_VERSION) return null;
 
   if (raw.provider !== "claude" && raw.provider !== "codex") return null;
   if (typeof raw.createdAtMs !== "number" || !Number.isFinite(raw.createdAtMs)) return null;
@@ -60,7 +62,7 @@ export function readPersistedAgentSession(agent: Agent): PersistedAgentSessionV1
   if (!handle) return null;
 
   return {
-    version: 1,
+    version: PERSISTED_AGENT_SESSION_VERSION,
     provider: raw.provider,
     handle,
     createdAtMs: raw.createdAtMs,
@@ -72,7 +74,7 @@ export function readPersistedAgentSession(agent: Agent): PersistedAgentSessionV1
 export function writePersistedAgentSession(
   db: HiBossDatabase,
   agentName: string,
-  session: PersistedAgentSessionV1 | null
+  session: PersistedAgentSession | null
 ): void {
   if (session) {
     db.setAgentMetadataSessionHandle(agentName, session);

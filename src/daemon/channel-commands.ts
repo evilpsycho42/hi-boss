@@ -206,7 +206,7 @@ async function handleSessionsCommand(params: {
     offset,
   });
 
-  const active = params.db.getChannelSessionBinding(agentName, adapterType, c.chatId);
+  const defaultBinding = params.db.getChannelSessionBinding(agentName, adapterType, c.chatId);
   const tz = params.db.getBossTimezone();
 
   const lines: string[] = [];
@@ -216,7 +216,7 @@ async function handleSessionsCommand(params: {
   lines.push(`page-size: ${SESSIONS_PAGE_SIZE}`);
   lines.push(`total: ${total}`);
   lines.push(`total-pages: ${totalPages}`);
-  lines.push(`active-session-id: ${active ? formatShortId(active.activeSessionId) : "(none)"}`);
+  lines.push(`default-session-id: ${defaultBinding ? formatShortId(defaultBinding.defaultSessionId) : "(none)"}`);
   lines.push(`session-count: ${items.length}`);
 
   for (let i = 0; i < items.length; i++) {
@@ -225,7 +225,7 @@ async function handleSessionsCommand(params: {
     lines.push(`session-${n}-id: ${formatShortId(item.session.id)}`);
     lines.push(`session-${n}-last-active-at: ${formatUnixMsAsTimeZoneOffset(item.session.lastActiveAt, tz)}`);
     lines.push(`session-${n}-source: channel:${item.link.adapterType}:${item.link.chatId}`);
-    lines.push(`session-${n}-is-active: ${active?.activeSessionId === item.session.id ? "true" : "false"}`);
+    lines.push(`session-${n}-is-default: ${defaultBinding?.defaultSessionId === item.session.id ? "true" : "false"}`);
   }
 
   return {
@@ -287,7 +287,7 @@ async function handleSessionSwitchCommand(params: {
     return { text: params.ui.channel.sessionSwitchNotVisible };
   }
 
-  const switched = params.db.switchChannelActiveSession({
+  const switched = params.db.switchChannelDefaultSession({
     agentName: c.agentName!,
     adapterType,
     chatId: c.chatId,
@@ -322,7 +322,7 @@ export function createChannelCommandHandler(params: {
       if (!agent) return { text: ui.channel.agentNotFound };
       const adapterType = c.adapterType ?? "telegram";
 
-      const switched = params.db.createFreshChannelSessionAndSwitch({
+      const switched = params.db.createFreshChannelSessionAndSetDefault({
         agentName: agent.name,
         adapterType,
         chatId: c.chatId,
@@ -460,7 +460,7 @@ async function handleOneshotCommand(
     text: [
       ui.channel.turnInitiated(mode),
       `oneshot-mode: ${mode}`,
-      "active-session-changed: false",
+      "default-session-changed: false",
     ].join("\n"),
   };
 }

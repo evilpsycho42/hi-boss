@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { purgeSessionSummaryFields } from "./purge-session-summaries.js";
+import { SESSION_FILE_VERSION } from "./types.js";
 
 function writeJson(filePath: string, payload: unknown): void {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
@@ -19,7 +20,7 @@ test("purgeSessionSummaryFields removes summary field from history files", () =>
     const untouched = path.join(agentsDir, "beta", "internal_space", "history", "2026-02-27", "s2.json");
 
     writeJson(target, {
-      version: 2,
+      version: SESSION_FILE_VERSION,
       sessionId: "s1",
       agentName: "alpha",
       startedAtMs: 1,
@@ -28,7 +29,7 @@ test("purgeSessionSummaryFields removes summary field from history files", () =>
       events: [],
     });
     writeJson(untouched, {
-      version: 2,
+      version: SESSION_FILE_VERSION,
       sessionId: "s2",
       agentName: "beta",
       startedAtMs: 1,

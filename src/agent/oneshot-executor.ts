@@ -171,7 +171,7 @@ export class OneShotExecutor {
           "",
           `oneshot-mode: ${effectiveMode}`,
           `execution-session-id: ${executionSessionId ?? "(none)"}`,
-          "active-session-changed: false",
+          "default-session-changed: false",
         ].join("\n");
 
         logEvent("info", "oneshot-job-complete", {
@@ -189,7 +189,7 @@ export class OneShotExecutor {
           "",
           `oneshot-mode: ${effectiveMode}`,
           `execution-session-id: ${executionSessionId ?? "(none)"}`,
-          "active-session-changed: false",
+          "default-session-changed: false",
         ].join("\n");
 
         logEvent("info", "oneshot-job-complete", {

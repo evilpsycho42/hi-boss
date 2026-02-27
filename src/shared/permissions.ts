@@ -1,9 +1,11 @@
 import { DEFAULT_PERMISSION_POLICY } from "./defaults.js";
+import { INTERNAL_VERSION } from "./version.js";
 
 export type PermissionLevel = "restricted" | "standard" | "privileged" | "admin";
+export const PERMISSION_POLICY_VERSION = INTERNAL_VERSION;
 
-export interface PermissionPolicyV1 {
-  version: 1;
+export interface PermissionPolicy {
+  version: typeof PERMISSION_POLICY_VERSION;
   operations: Record<string, PermissionLevel>;
 }
 
@@ -41,14 +43,14 @@ export function isAtLeastPermissionLevel(
 }
 
 export function getRequiredPermissionLevel(
-  policy: PermissionPolicyV1,
+  policy: PermissionPolicy,
   operation: string
 ): PermissionLevel {
   const value = policy.operations[operation];
   return value ?? "admin";
 }
 
-export function parsePermissionPolicyV1(json: string): PermissionPolicyV1 {
+export function parsePermissionPolicy(json: string): PermissionPolicy {
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
@@ -56,17 +58,17 @@ export function parsePermissionPolicyV1(json: string): PermissionPolicyV1 {
     throw new Error("Invalid permission policy JSON");
   }
 
-  return parsePermissionPolicyV1FromObject(parsed);
+  return parsePermissionPolicyFromObject(parsed);
 }
 
-export function parsePermissionPolicyV1FromObject(parsed: unknown): PermissionPolicyV1 {
+export function parsePermissionPolicyFromObject(parsed: unknown): PermissionPolicy {
   if (typeof parsed !== "object" || parsed === null) {
     throw new Error("Invalid permission policy (expected object)");
   }
 
   const obj = parsed as Record<string, unknown>;
-  if (obj.version !== 1) {
-    throw new Error("Invalid permission policy version (expected 1)");
+  if (obj.version !== PERMISSION_POLICY_VERSION) {
+    throw new Error(`Invalid permission policy version (expected ${PERMISSION_POLICY_VERSION})`);
   }
 
   if (typeof obj.operations !== "object" || obj.operations === null) {
@@ -86,17 +88,17 @@ export function parsePermissionPolicyV1FromObject(parsed: unknown): PermissionPo
     operations[key] = value;
   }
 
-  return { version: 1, operations };
+  return { version: PERMISSION_POLICY_VERSION, operations };
 }
 
-export function parsePermissionPolicyV1OrDefault(
+export function parsePermissionPolicyOrDefault(
   json: string | null | undefined,
-  fallback: PermissionPolicyV1 = DEFAULT_PERMISSION_POLICY
-): PermissionPolicyV1 {
+  fallback: PermissionPolicy = DEFAULT_PERMISSION_POLICY
+): PermissionPolicy {
   if (!json || !json.trim()) return fallback;
 
   try {
-    return parsePermissionPolicyV1(json);
+    return parsePermissionPolicy(json);
   } catch {
     return fallback;
   }
