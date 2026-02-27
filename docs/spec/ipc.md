@@ -78,6 +78,16 @@ Agents:
 - `agent.session-policy.set`
 - `agent.status`
 
+Teams:
+
+- `team.register`
+- `team.set`
+- `team.add-member`
+- `team.remove-member`
+- `team.status`
+- `team.list`
+- `team.delete`
+
 Sessions:
 
 - `session.list`

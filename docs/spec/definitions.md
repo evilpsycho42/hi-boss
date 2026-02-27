@@ -246,7 +246,11 @@ Agent defaults:
 - `hiboss agent register --role speaker` requires adapter binding flags (`--bind-adapter-type` + `--bind-adapter-token`).
 - System prompt rendering requires `agent.role`; missing role metadata is a hard error.
 - `agent.model` and `agent.reasoningEffort` are nullable overrides; `NULL` means provider defaults.
-- `agent.workspace` is a nullable override; `NULL` means no explicit workspace is stored. Runtime fallback resolves to the user's home directory.
+- `agent.workspace` is a nullable override; `NULL` means no explicit workspace is stored.
+- Effective runtime workspace resolution order:
+  - primary active teamspace (`{{HIBOSS_DIR}}/teamspaces/<team-name>/`) when the agent belongs to active teams
+  - otherwise `agent.workspace` (if set)
+  - otherwise user's home directory
 - `agent.permissionLevel` defaults to `standard` when not specified.
 - On `hiboss agent set`, switching provider without passing `--model` / `--reasoning-effort` clears both overrides to `NULL`.
 - `hiboss agent set` rejects role or binding mutations that would violate required role coverage (`>=1 speaker` and `>=1 leader`).
@@ -297,6 +301,66 @@ Clearing nullable overrides:
   - `agent-name:`
   - `cancelled-run: true|false`
   - `cleared-pending-count: <n>`
+
+---
+
+## Team
+
+A team groups agents and provides a shared teamspace directory for collaboration context.
+
+### Storage (Code ↔ SQLite)
+
+Tables: `teams`, `team_members` (see `src/daemon/db/schema.ts`)
+
+`teams`:
+
+| Code (TypeScript) | SQLite column | Notes |
+|-------------------|-------------|-------|
+| `team.name` | `name` | Primary key |
+| `team.description` | `description` | Nullable |
+| `team.status` | `status` | `active` or `archived` |
+| `team.kind` | `kind` | `manual` |
+| `team.createdAt` | `created_at` | Unix epoch ms (UTC) |
+| `team.metadata` | `metadata` | JSON (nullable) |
+
+`team_members`:
+
+| Code (TypeScript) | SQLite column | Notes |
+|-------------------|-------------|-------|
+| `teamMember.teamName` | `team_name` | FK -> `teams.name` |
+| `teamMember.agentName` | `agent_name` | FK -> `agents.name` |
+| `teamMember.source` | `source` | `manual` |
+| `teamMember.createdAt` | `created_at` | Unix epoch ms (UTC) |
+
+### Teamspace layout
+
+- Teamspaces are sibling to `agents/`:
+  - `{{HIBOSS_DIR}}/teamspaces/<team-name>/`
+- Team register initializes teamspace directory.
+- Team delete removes teamspace directory.
+- Team archive does not remove the directory.
+
+### CLI
+
+Command flags:
+- `hiboss team ...`: `docs/spec/cli/teams.md`
+
+### CLI Output Keys
+
+- `hiboss team register|set|status|list` print:
+  - `team-name:`
+  - `team-status:`
+  - `team-kind:`
+  - `description:` (`(none)` when unset)
+  - `created-at:` (boss timezone offset)
+  - `members:` (comma-separated agent names or `(none)`)
+- `hiboss team add-member|remove-member` print:
+  - `success: true|false`
+  - `team-name:`
+  - `agent-name:`
+- `hiboss team delete` prints:
+  - `success: true|false`
+  - `team-name:`
 
 ---
 

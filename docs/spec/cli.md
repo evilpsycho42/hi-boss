@@ -44,6 +44,13 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | `hiboss agent status` | Show agent state/health | Yes (agent/admin token) | restricted |
 | `hiboss agent abort` | Cancel current run + clear pending inbox | Yes (admin token) | admin |
 | `hiboss agent delete` | Delete an agent | Yes (admin-privileged token) | admin |
+| `hiboss team register` | Create a team and initialize teamspace | Yes (agent/admin token) | privileged |
+| `hiboss team set` | Update team metadata/status | Yes (agent/admin token) | privileged |
+| `hiboss team add-member` | Add an agent to a team | Yes (agent/admin token) | privileged |
+| `hiboss team remove-member` | Remove an agent from a team | Yes (agent/admin token) | privileged |
+| `hiboss team status` | Show one team and its members | Yes (agent/admin token) | restricted |
+| `hiboss team list` | List teams | Yes (agent/admin token) | restricted |
+| `hiboss team delete` | Delete a team and remove teamspace | Yes (admin token) | admin |
 
 Note: `hiboss daemon start` prints startup failure guidance directly in CLI when available (for example missing-role remediation), and also writes details to `daemon.log`.
 
@@ -57,4 +64,5 @@ Note: `hiboss daemon start` prints startup failure guidance directly in CLI when
 - Cron: `docs/spec/cli/cron.md`
 - Reactions: `docs/spec/cli/reactions.md`
 - Agents: `docs/spec/cli/agents.md`
+- Teams: `docs/spec/cli/teams.md`
 - MCP: `docs/spec/cli/mcp.md`

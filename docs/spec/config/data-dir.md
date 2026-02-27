@@ -6,6 +6,7 @@ Default root:
 Operator-visible files:
 - `{{HIBOSS_DIR}}/BOSS.md` — optional boss profile
 - `{{HIBOSS_DIR}}/media/` — downloaded attachments (e.g., Telegram)
+- `{{HIBOSS_DIR}}/teamspaces/<team-name>/` — shared team workspace directory
 - `{{HIBOSS_DIR}}/agents/<agent-name>/SOUL.md` — optional per-agent persona
 - `{{HIBOSS_DIR}}/agents/<agent-name>/internal_space/MEMORY.md` — per-agent memory file injected into system instructions (may be truncated)
 - `{{HIBOSS_DIR}}/agents/<agent-name>/internal_space/memories/` — per-agent daily memory files (`YYYY-MM-DD.md`)

@@ -57,7 +57,7 @@ Output (parseable):
 - `dry-run: true` (only when `--dry-run` is set)
 
 Note:
-- In `agent register` output, `workspace: (none)` means no explicit override is stored. Effective runtime workspace falls back to the user's home directory.
+- In `agent register` output, `workspace: (none)` means no explicit override is stored. Effective runtime workspace resolution is: primary active teamspace (if any), then agent workspace, then user's home directory.
 - In dry-run mode, `token:` is rendered as `(dry-run)` and no agent/token is persisted.
 
 ## `hiboss agent set`
@@ -174,7 +174,7 @@ Shows runtime status for a single agent (intended for operator UX and dashboards
 Notes:
 - Requires a token (agent or admin). The output must not include secrets (agent token, adapter token).
 - When called with an agent token, only `--name <self>` is allowed (agents cannot query other agents).
-- `workspace:` in status is the effective runtime workspace. If unset on the agent record, it falls back to the user's home directory.
+- `workspace:` in status is the effective runtime workspace. Resolution is: primary active teamspace (if any), then agent workspace, then user's home directory.
 - `agent-state` is a **busy-ness** signal: `running` means the daemon currently has a queued or in-flight task for this agent (so replies may be delayed).
 - `role:` is shown when available (`speaker` or `leader`).
 - `agent-health` is derived from the most recent finished run: `ok` (last run completed or cancelled), `error` (last run failed), `unknown` (no finished runs yet).

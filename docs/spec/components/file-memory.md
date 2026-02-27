@@ -2,7 +2,7 @@
 
 Hi-Boss agent memory is stored as **plain Markdown files** inside each agent’s `internal_space/`. These files are the durable, human-editable source of truth; indexes/caches (SQLite, vector DBs, search indexes) are optional accelerators and are rebuildable.
 
-This document specifies the **v1 private memory protocol** (per-agent). Shared/team memory is intentionally deferred.
+This document specifies the **v1 private memory protocol** (per-agent). Team shared workspace is handled separately via `{{HIBOSS_DIR}}/teamspaces/<team-name>/`.
 
 ## Goals
 

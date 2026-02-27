@@ -9,6 +9,8 @@ Schema source of truth:
 Tables (high level):
 - `config` — global configuration key/value
 - `agents` — agent records + settings
+- `teams` — team metadata (status, description)
+- `team_members` — team membership links (team ↔ agent)
 - `agent_bindings` — adapter credentials bound to agents (e.g., Telegram bot token)
 - `envelopes` — durable message queue + audit
 - `cron_schedules` — durable cron definitions (materialize envelopes)

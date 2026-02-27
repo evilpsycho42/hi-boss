@@ -27,6 +27,7 @@ Built-in defaults are centralized in:
 - Setup: `docs/spec/cli/setup.md`
 - Daemon: `docs/spec/cli/daemon.md`
 - Agents: `docs/spec/cli/agents.md`
+- Teams: `docs/spec/cli/teams.md`
 - Envelopes: `docs/spec/cli/envelopes.md`
 - Cron: `docs/spec/cli/cron.md`
 - Reactions: `docs/spec/cli/reactions.md`
@@ -82,3 +83,10 @@ If an operation is missing from the policy, it defaults to `admin` (safe-by-defa
 | `agent.abort` | `admin` |
 | `agent.set` | `privileged` |
 | `agent.session-policy.set` | `privileged` |
+| `team.register` | `privileged` |
+| `team.set` | `privileged` |
+| `team.add-member` | `privileged` |
+| `team.remove-member` | `privileged` |
+| `team.status` | `restricted` |
+| `team.list` | `restricted` |
+| `team.delete` | `admin` |
