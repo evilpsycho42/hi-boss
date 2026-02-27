@@ -46,11 +46,19 @@ export async function generateSessionSummary(params: {
 }): Promise<string | null> {
   const { sessionFile, timeoutMs = DEFAULT_SESSION_SUMMARY_TIMEOUT_MS, options } = params;
 
-  if (sessionFile.conversations.length === 0) return null;
+  const conversationLines = sessionFile.events
+    .filter((event) => event.type === "envelope-created")
+    .map((event) => {
+      const text = event.envelope.content.text?.trim();
+      if (!text) return null;
+      const sanitized = text.replace(/<[^>]+>/g, "");
+      return `${event.envelope.from} -> ${event.envelope.to}: ${sanitized}`;
+    })
+    .filter((line): line is string => Boolean(line));
 
-  const conversationText = sessionFile.conversations
-    .map((c) => `${c.role}: ${c.text}`)
-    .join("\n");
+  if (conversationLines.length === 0) return null;
+
+  const conversationText = conversationLines.join("\n");
 
   const prompt = SUMMARY_PROMPT.replace("{{CONVERSATIONS}}", conversationText);
 
@@ -82,7 +90,7 @@ export async function summarizeAndCloseSession(params: {
 
   const sessionFile = readSessionFile(filePath);
   if (!sessionFile) return;
-  if (sessionFile.conversations.length === 0) {
+  if (sessionFile.events.length === 0) {
     // Close without summary for empty sessions.
     history.withFileLock(agentName, () => {
       updateSummary(filePath, null, Date.now());
@@ -117,7 +125,7 @@ export async function summarizeAndCloseSessionByPath(params: {
 
   const sessionFile = readSessionFile(filePath);
   if (!sessionFile) return;
-  if (sessionFile.conversations.length === 0) {
+  if (sessionFile.events.length === 0) {
     updateSummary(filePath, null, Date.now());
     return;
   }

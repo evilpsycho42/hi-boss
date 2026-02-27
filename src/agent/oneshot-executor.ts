@@ -61,7 +61,11 @@ export class OneShotExecutor {
    */
   enqueue(envelope: Envelope, agent: Agent, mode: OneshotType): void {
     try {
-      this.deps.db.updateEnvelopeStatus(envelope.id, "done");
+      this.deps.db.updateEnvelopeStatus(envelope.id, "done", {
+        reason: "oneshot-enqueue-ack",
+        origin: "internal",
+        outcome: "queued-for-oneshot",
+      });
     } catch (err) {
       logEvent("error", "oneshot-envelope-ack-failed", {
         "envelope-id": envelope.id,
@@ -213,6 +217,7 @@ export class OneShotExecutor {
         fromBoss: false,
         content: { text: finalText },
         metadata: {
+          origin: "internal",
           ...(cronResponseTo ? {} : { replyToEnvelopeId: envelope.id }),
           oneshotResponse: true,
           oneshotMode: effectiveMode,

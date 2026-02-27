@@ -1,10 +1,10 @@
 /**
- * Conversation history — appends every envelope to a per-session JSON file.
+ * Conversation history — appends envelope lifecycle events to per-session JSON files.
  *
  * Layout:
  *   {{agentsDir}}/<agent>/internal_space/history/YYYY-MM-DD/<sessionId>.json
  *
- * Each session is a self-contained JSON file with conversations array.
+ * Each session is a self-contained JSON file with an events array.
  * Session IDs are 8-char hex short IDs (UUID-based).
  */
 
@@ -12,14 +12,14 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import type { Envelope } from "../../envelope/types.js";
+import type { Envelope, EnvelopeOrigin } from "../../envelope/types.js";
 import { parseAddress } from "../../adapters/types.js";
 import { logEvent, errorMessage } from "../../shared/daemon-log.js";
 import { formatShortId } from "../../shared/id-format.js";
-import type { SessionConversationEntry } from "./types.js";
+import type { SessionStatusChangeInput, SessionHistoryEvent } from "./types.js";
 import {
   createSessionFile,
-  appendConversation,
+  appendEvent,
   readSessionFile,
   listSessionFiles,
 } from "./session-file-io.js";
@@ -50,37 +50,62 @@ export class ConversationHistory {
   }
 
   /**
-   * Append an envelope to the relevant agent's session file.
+   * Backward-compatible entrypoint for envelope-created writes.
    */
   append(envelope: Envelope): void {
+    this.appendEnvelopeCreated({
+      envelope,
+      origin: this.resolveOrigin(envelope, "internal"),
+      timestampMs: envelope.createdAt,
+    });
+  }
+
+  appendEnvelopeCreated(params: {
+    envelope: Envelope;
+    origin: EnvelopeOrigin;
+    timestampMs?: number;
+  }): void {
     try {
-      const agentName = this.resolveAgentName(envelope);
-      if (!agentName) return;
+      const { envelope } = params;
+      const participants = this.resolveParticipantAgentNames(envelope);
+      if (participants.length === 0) return;
 
-      const text = envelope.content.text;
-      if (!text) return;
-
-      if (!this.activeSessionIds.has(agentName)) {
-        this.ensureActiveSession(agentName);
-      }
-
-      const sessionId = this.activeSessionIds.get(agentName)!;
-      const dateStr = this.activeSessionDates.get(agentName)!;
-      const filePath = this.buildSessionFilePath(agentName, dateStr, sessionId);
-
-      const isAgent = this.isFromAgent(envelope);
-      const entry: SessionConversationEntry = {
-        role: isAgent ? "Agent" : "User",
-        text: this.stripMarkup(text),
-        timestampMs: envelope.createdAt,
+      const event: SessionHistoryEvent = {
+        type: "envelope-created",
+        timestampMs: params.timestampMs ?? envelope.createdAt,
+        origin: params.origin,
+        envelope,
       };
 
-      this.withFileLock(agentName, () => {
-        appendConversation(filePath, entry);
-      });
+      this.appendEventForAgents(participants, event);
     } catch (err) {
       logEvent("error", "history-append-failed", {
-        "envelope-id": envelope.id,
+        "envelope-id": params.envelope.id,
+        error: errorMessage(err),
+      });
+    }
+  }
+
+  appendStatusChange(input: SessionStatusChangeInput): void {
+    try {
+      const participants = this.resolveParticipantAgentNames(input.envelope);
+      if (participants.length === 0) return;
+
+      const event: SessionHistoryEvent = {
+        type: "envelope-status-changed",
+        timestampMs: input.timestampMs,
+        origin: input.origin,
+        envelopeId: input.envelope.id,
+        fromStatus: input.fromStatus,
+        toStatus: input.toStatus,
+        reason: input.reason,
+        outcome: input.outcome,
+      };
+
+      this.appendEventForAgents(participants, event);
+    } catch (err) {
+      logEvent("error", "history-status-append-failed", {
+        "envelope-id": input.envelope.id,
         error: errorMessage(err),
       });
     }
@@ -155,6 +180,22 @@ export class ConversationHistory {
   }
 
   // ── Internals ──
+
+  private appendEventForAgents(agentNames: string[], event: SessionHistoryEvent): void {
+    for (const agentName of agentNames) {
+      if (!this.activeSessionIds.has(agentName)) {
+        this.ensureActiveSession(agentName);
+      }
+
+      const sessionId = this.activeSessionIds.get(agentName)!;
+      const dateStr = this.activeSessionDates.get(agentName)!;
+      const filePath = this.buildSessionFilePath(agentName, dateStr, sessionId);
+
+      this.withFileLock(agentName, () => {
+        appendEvent(filePath, event);
+      });
+    }
+  }
 
   private buildSessionFilePath(agentName: string, dateStr: string, sessionId: string): string {
     return path.join(
@@ -259,31 +300,41 @@ export class ConversationHistory {
     });
   }
 
-  private resolveAgentName(envelope: Envelope): string | null {
+  private resolveParticipantAgentNames(envelope: Envelope): string[] {
+    const participants = new Set<string>();
+
     try {
       const to = parseAddress(envelope.to);
-      if (to.type === "agent") return to.agentName;
-    } catch { /* ignore */ }
-
-    try {
-      const from = parseAddress(envelope.from);
-      if (from.type === "agent") return from.agentName;
-    } catch { /* ignore */ }
-
-    return null;
-  }
-
-  private isFromAgent(envelope: Envelope): boolean {
-    try {
-      const from = parseAddress(envelope.from);
-      return from.type === "agent";
+      if (to.type === "agent") participants.add(to.agentName);
     } catch {
-      return false;
+      // ignore invalid address
     }
+
+    try {
+      const from = parseAddress(envelope.from);
+      if (from.type === "agent") participants.add(from.agentName);
+    } catch {
+      // ignore invalid address
+    }
+
+    return [...participants];
   }
 
-  private stripMarkup(text: string): string {
-    return text.replace(/<[^>]+>/g, "");
+  private resolveOrigin(envelope: Envelope, fallback: EnvelopeOrigin): EnvelopeOrigin {
+    const md = envelope.metadata;
+    if (md && typeof md === "object") {
+      const origin = (md as Record<string, unknown>).origin;
+      if (
+        origin === "cli" ||
+        origin === "mcp" ||
+        origin === "channel" ||
+        origin === "cron" ||
+        origin === "internal"
+      ) {
+        return origin;
+      }
+    }
+    return fallback;
   }
 
   private getDateString(unixMs: number): string {

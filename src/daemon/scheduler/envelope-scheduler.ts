@@ -140,7 +140,11 @@ export class EnvelopeScheduler {
             },
           };
           this.db.updateEnvelopeMetadata(env.id, next);
-          this.db.updateEnvelopeStatus(env.id, "done");
+          this.db.updateEnvelopeStatus(env.id, "done", {
+            reason: "scheduler-orphan-agent-cleanup",
+            origin: "internal",
+            outcome: "agent-not-found",
+          });
         }
       });
 

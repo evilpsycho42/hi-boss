@@ -47,6 +47,7 @@ export class CronScheduler {
 
     return {
       ...template,
+      origin: "cron",
       cronScheduleId: schedule.id,
       ...(oneshotType ? { oneshotType } : {}),
     };
@@ -178,7 +179,11 @@ export class CronScheduler {
 
       // Cancel any existing pending envelope (best-effort) and materialize a fresh next occurrence.
       if (schedule.pendingEnvelopeId) {
-        this.db.updateEnvelopeStatus(schedule.pendingEnvelopeId, "done");
+        this.db.updateEnvelopeStatus(schedule.pendingEnvelopeId, "done", {
+          reason: "cron-enable-replace-pending",
+          origin: "cron",
+          outcome: "superseded-by-new-pending",
+        });
       }
 
       this.db.updateCronScheduleEnabled(schedule.id, true);
@@ -198,7 +203,11 @@ export class CronScheduler {
       const schedule = this.getSchedule(agentName, id);
 
       if (schedule.pendingEnvelopeId) {
-        this.db.updateEnvelopeStatus(schedule.pendingEnvelopeId, "done");
+        this.db.updateEnvelopeStatus(schedule.pendingEnvelopeId, "done", {
+          reason: "cron-disable-clear-pending",
+          origin: "cron",
+          outcome: "cleared-by-disable",
+        });
       }
 
       this.db.updateCronScheduleEnabled(schedule.id, false);
@@ -215,7 +224,11 @@ export class CronScheduler {
       const schedule = this.getSchedule(agentName, id);
 
       if (schedule.pendingEnvelopeId) {
-        this.db.updateEnvelopeStatus(schedule.pendingEnvelopeId, "done");
+        this.db.updateEnvelopeStatus(schedule.pendingEnvelopeId, "done", {
+          reason: "cron-delete-clear-pending",
+          origin: "cron",
+          outcome: "cleared-by-delete",
+        });
       }
 
       deleted = this.db.deleteCronSchedule(schedule.id);
@@ -266,7 +279,11 @@ export class CronScheduler {
           // Disabled schedules must not have pending envelopes.
           if (!current.enabled) {
             if (current.pendingEnvelopeId) {
-              this.db.updateEnvelopeStatus(current.pendingEnvelopeId, "done");
+              this.db.updateEnvelopeStatus(current.pendingEnvelopeId, "done", {
+                reason: "cron-reconcile-disable-clear",
+                origin: "cron",
+                outcome: "cleared-by-reconcile-disable",
+              });
               this.db.updateCronSchedulePendingEnvelopeId(current.id, null);
             }
             return;
@@ -291,7 +308,11 @@ export class CronScheduler {
           }
 
           if (current.pendingEnvelopeId) {
-            this.db.updateEnvelopeStatus(current.pendingEnvelopeId, "done");
+            this.db.updateEnvelopeStatus(current.pendingEnvelopeId, "done", {
+              reason: "cron-reconcile-replace-pending",
+              origin: "cron",
+              outcome: "superseded-by-reconcile",
+            });
             this.db.updateCronSchedulePendingEnvelopeId(current.id, null);
           }
 

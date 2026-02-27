@@ -158,6 +158,7 @@ export class ChannelBridge {
         })),
       },
       metadata: {
+        origin: "channel",
         platform,
         channelMessageId: message.id,
         ...(channelSession ? { channelSessionId: channelSession.session.id } : {}),

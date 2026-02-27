@@ -110,7 +110,7 @@ export class MessageRouter {
         kind: "invalid-address",
         message: msg,
       });
-      this.markEnvelopeDoneBestEffort(envelope);
+      this.markEnvelopeDoneBestEffort(envelope, "router-invalid-address");
       this.throwDeliveryFailed(msg, {
         envelopeId: envelope.id,
         to: envelope.to,
@@ -169,7 +169,7 @@ export class MessageRouter {
         adapterType,
         chatId,
       });
-      this.markEnvelopeDoneBestEffort(envelope);
+      this.markEnvelopeDoneBestEffort(envelope, "router-invalid-sender-address");
       this.throwDeliveryFailed(msg, {
         envelopeId: envelope.id,
         adapterType,
@@ -193,7 +193,7 @@ export class MessageRouter {
         adapterType,
         chatId,
       });
-      this.markEnvelopeDoneBestEffort(envelope);
+      this.markEnvelopeDoneBestEffort(envelope, "router-invalid-sender");
       this.throwDeliveryFailed(msg, {
         envelopeId: envelope.id,
         adapterType,
@@ -214,7 +214,7 @@ export class MessageRouter {
         chatId,
         senderAgentName: sender.agentName,
       });
-      this.markEnvelopeDoneBestEffort(envelope);
+      this.markEnvelopeDoneBestEffort(envelope, "router-no-binding");
       this.throwDeliveryFailed(msg, {
         envelopeId: envelope.id,
         adapterType,
@@ -235,7 +235,7 @@ export class MessageRouter {
         chatId,
         senderAgentName: sender.agentName,
       });
-      this.markEnvelopeDoneBestEffort(envelope);
+      this.markEnvelopeDoneBestEffort(envelope, "router-adapter-not-loaded");
       this.throwDeliveryFailed(msg, {
         envelopeId: envelope.id,
         adapterType,
@@ -260,7 +260,11 @@ export class MessageRouter {
         parseMode,
         replyToMessageId,
       });
-      this.db.updateEnvelopeStatus(envelope.id, "done");
+      this.db.updateEnvelopeStatus(envelope.id, "done", {
+        reason: "channel-delivered",
+        origin: "internal",
+        outcome: "delivered",
+      });
 
       if (this.onEnvelopeDone) {
         try {
@@ -290,7 +294,7 @@ export class MessageRouter {
         senderAgentName: sender.agentName,
         details,
       });
-      this.markEnvelopeDoneBestEffort(envelope);
+      this.markEnvelopeDoneBestEffort(envelope, "channel-send-failed");
       this.throwDeliveryFailed(msg, {
         envelopeId: envelope.id,
         adapterType,
@@ -304,9 +308,13 @@ export class MessageRouter {
     }
   }
 
-  private markEnvelopeDoneBestEffort(envelope: Envelope): void {
+  private markEnvelopeDoneBestEffort(envelope: Envelope, reason: string): void {
     try {
-      this.db.updateEnvelopeStatus(envelope.id, "done");
+      this.db.updateEnvelopeStatus(envelope.id, "done", {
+        reason,
+        origin: "internal",
+        outcome: "marked-done-best-effort",
+      });
     } catch (err) {
       logEvent("error", "envelope-status-update-failed", {
         "envelope-id": envelope.id,

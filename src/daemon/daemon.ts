@@ -1,7 +1,3 @@
-/**
- * Hi-Boss daemon - manages agents, messages, and platform integrations.
- */
-
 import * as fs from "node:fs";
 import * as path from "path";
 import { HiBossDatabase } from "./db/database.js";
@@ -14,6 +10,8 @@ import type { Agent } from "../agent/types.js";
 import { EnvelopeScheduler } from "./scheduler/envelope-scheduler.js";
 import { CronScheduler } from "./scheduler/cron-scheduler.js";
 import { ConversationHistory } from "./history/conversation-history.js";
+import { archiveLegacyHistoryV1 } from "./history/legacy-history-archive.js";
+import { bindHistoryHooks } from "./history/history-runtime-hooks.js";
 import type { RpcMethodRegistry } from "./ipc/types.js";
 import { RPC_ERRORS } from "./ipc/types.js";
 import type { ChatAdapter } from "../adapters/types.js";
@@ -30,7 +28,6 @@ import {
 } from "../shared/permissions.js";
 import { errorMessage, logEvent, setDaemonLogTimeZone } from "../shared/daemon-log.js";
 import { getEnvelopeSourceFromEnvelope } from "../envelope/source.js";
-import type { Envelope } from "../envelope/types.js";
 import { PidLock, isDaemonRunning, isSocketAcceptingConnections } from "./pid-lock.js";
 import type { DaemonContext, Principal } from "./rpc/context.js";
 import { rpcError } from "./rpc/context.js";
@@ -39,6 +36,7 @@ import {
   createReactionHandlers,
   createCronHandlers,
   createEnvelopeHandlers,
+  createSessionHandlers,
   createSetupHandlers,
   createAgentHandlers,
   createAgentSetHandler,
@@ -52,7 +50,6 @@ import { loadSettingsOrThrow, syncSettingsToDb } from "./settings-sync.js";
 
 // Re-export for CLI and external use
 export { isDaemonRunning, isSocketAcceptingConnections };
-
 /**
  * Hi-Boss daemon configuration.
  */
@@ -124,9 +121,8 @@ export class Daemon {
       agentsDir: path.join(config.dataDir, "agents"),
       timezone: this.db.getBossTimezone() ?? undefined,
     });
-    const historyAppend = (envelope: Envelope) => this.conversationHistory.append(envelope);
+    bindHistoryHooks(this.db, this.conversationHistory);
     this.router = new MessageRouter(this.db, {
-      onEnvelopeCreated: historyAppend,
       onEnvelopeDone: (envelope) => this.cronScheduler?.onEnvelopeDone(envelope),
     });
     this.bridge = new ChannelBridge(this.router, this.db, config);
@@ -152,9 +148,7 @@ export class Daemon {
       onEnvelopeDone: (envelope) => this.cronScheduler?.onEnvelopeDone(envelope),
     });
     this.scheduler = new EnvelopeScheduler(this.db, this.router, this.executor);
-    this.cronScheduler = new CronScheduler(this.db, this.scheduler, {
-      onEnvelopeCreated: historyAppend,
-    });
+    this.cronScheduler = new CronScheduler(this.db, this.scheduler);
 
     this.registerRpcMethods();
   }
@@ -244,6 +238,11 @@ export class Daemon {
         logEvent("info", "daemon-started", { "data-dir": this.config.dataDir, "adapters-count": 0, mode: "examples" });
         return;
       }
+
+      archiveLegacyHistoryV1({
+        dataDir: this.config.dataDir,
+        agentsDir: path.join(this.config.dataDir, "agents"),
+      });
 
       // Canonical startup path: load settings.json and mirror into DB runtime cache.
       // Compatibility path: pre-v3 installs may have DB state without settings.json.
@@ -484,6 +483,7 @@ export class Daemon {
 
     const methods: RpcMethodRegistry = {
       ...createEnvelopeHandlers(ctx),
+      ...createSessionHandlers(ctx),
       ...createReactionHandlers(ctx),
       ...createCronHandlers(ctx),
       ...createAgentHandlers(ctx),

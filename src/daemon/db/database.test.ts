@@ -119,3 +119,86 @@ test("legacy envelopes table without priority is auto-migrated on startup", () =
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("envelope lifecycle hooks emit created and status-changed events", () => {
+  withTempDb((db) => {
+    const created: Array<{ id: string; origin: string }> = [];
+    const statusChanged: Array<{ id: string; fromStatus: string; toStatus: string; reason?: string; outcome?: string }> = [];
+
+    db.setEnvelopeLifecycleHooks({
+      onEnvelopeCreated: (event) => {
+        created.push({
+          id: event.envelope.id,
+          origin: event.origin,
+        });
+      },
+      onEnvelopeStatusChanged: (event) => {
+        statusChanged.push({
+          id: event.envelopeId,
+          fromStatus: event.fromStatus,
+          toStatus: event.toStatus,
+          reason: event.reason,
+          outcome: event.outcome,
+        });
+      },
+    });
+
+    const env = db.createEnvelope({
+      from: "agent:sender",
+      to: "agent:receiver",
+      content: { text: "hi" },
+      metadata: { origin: "cli" },
+    });
+    db.updateEnvelopeStatus(env.id, "done", {
+      reason: "test-status",
+      outcome: "ok",
+      origin: "internal",
+    });
+
+    assert.deepEqual(created, [{ id: env.id, origin: "cli" }]);
+    assert.deepEqual(statusChanged, [{
+      id: env.id,
+      fromStatus: "pending",
+      toStatus: "done",
+      reason: "test-status",
+      outcome: "ok",
+    }]);
+  });
+});
+
+test("markEnvelopesDone emits only pending->done status transitions", () => {
+  withTempDb((db) => {
+    const statusChanged: Array<{ id: string; fromStatus: string; toStatus: string }> = [];
+    db.setEnvelopeLifecycleHooks({
+      onEnvelopeStatusChanged: (event) => {
+        statusChanged.push({
+          id: event.envelopeId,
+          fromStatus: event.fromStatus,
+          toStatus: event.toStatus,
+        });
+      },
+    });
+
+    const e1 = db.createEnvelope({
+      from: "agent:a",
+      to: "agent:b",
+      content: { text: "p1" },
+    });
+    const e2 = db.createEnvelope({
+      from: "agent:a",
+      to: "agent:b",
+      content: { text: "p2" },
+    });
+    db.updateEnvelopeStatus(e2.id, "done");
+
+    db.markEnvelopesDone([e1.id, e2.id], { reason: "bulk-ack" });
+
+    assert.deepEqual(
+      statusChanged.map((item) => `${item.id}:${item.fromStatus}->${item.toStatus}`),
+      [
+        `${e2.id}:pending->done`,
+        `${e1.id}:pending->done`,
+      ]
+    );
+  });
+});

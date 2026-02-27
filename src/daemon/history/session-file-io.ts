@@ -7,7 +7,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import type { SessionFile, SessionConversationEntry } from "./types.js";
+import type { SessionFile, SessionHistoryEvent } from "./types.js";
 import { SESSION_FILE_VERSION } from "./types.js";
 import { logEvent, errorMessage } from "../../shared/daemon-log.js";
 
@@ -54,22 +54,19 @@ export function writeSessionFile(filePath: string, session: SessionFile): void {
   fs.renameSync(tmpPath, filePath);
 }
 
-// ── Append conversation entry ──
+// ── Append history event ──
 
 /**
- * Append a conversation entry to an existing session file.
+ * Append a history event to an existing session file.
  * Creates the file if it doesn't exist (shouldn't happen in normal flow).
  */
-export function appendConversation(
-  filePath: string,
-  entry: SessionConversationEntry,
-): void {
+export function appendEvent(filePath: string, entry: SessionHistoryEvent): void {
   const session = readSessionFile(filePath);
   if (!session) {
     logEvent("warn", "session-file-append-no-file", { path: filePath });
     return;
   }
-  session.conversations.push(entry);
+  session.events.push(entry);
   writeSessionFile(filePath, session);
 }
 
@@ -111,7 +108,7 @@ export function createSessionFile(params: {
     startedAtMs: params.startedAtMs,
     endedAtMs: null,
     summary: null,
-    conversations: [],
+    events: [],
   };
   writeSessionFile(params.filePath, session);
 }

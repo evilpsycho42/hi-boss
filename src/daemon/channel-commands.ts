@@ -385,7 +385,11 @@ export function createChannelCommandHandler(params: {
 
     if (c.command === "abort" && typeof c.agentName === "string" && c.agentName) {
       const cancelledRun = params.executor.abortCurrentRun(c.agentName, `${c.adapterType ?? "telegram"}:/abort`);
-      const clearedPendingCount = params.db.markDuePendingNonCronEnvelopesDoneForAgent(c.agentName);
+      const clearedPendingCount = params.db.markDuePendingNonCronEnvelopesDoneForAgent(c.agentName, {
+        reason: "abort-clear",
+        origin: "internal",
+        outcome: "cleared-by-abort-command",
+      });
       const lines = [
         ui.channel.abortOk,
         `agent-name: ${c.agentName}`,
@@ -429,6 +433,7 @@ async function handleOneshotCommand(
       fromBoss: true,
       content: { text },
       metadata: {
+        origin: "channel",
         oneshotType: mode,
         platform: adapterType,
         channelMessageId: command.messageId,

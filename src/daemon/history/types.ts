@@ -5,12 +5,40 @@
  *   {{agentsDir}}/<agent>/internal_space/history/YYYY-MM-DD/<sessionId>.json
  */
 
-export const SESSION_FILE_VERSION = 1 as const;
+import type { Envelope, EnvelopeOrigin, EnvelopeStatus } from "../../envelope/types.js";
 
-export interface SessionConversationEntry {
-  role: "User" | "Agent";
-  text: string;
+export const SESSION_FILE_VERSION = 2 as const;
+
+export interface SessionEnvelopeCreatedEvent {
+  type: "envelope-created";
   timestampMs: number;
+  origin: EnvelopeOrigin;
+  envelope: Envelope;
+}
+
+export interface SessionEnvelopeStatusChangedEvent {
+  type: "envelope-status-changed";
+  timestampMs: number;
+  origin: EnvelopeOrigin;
+  envelopeId: string;
+  fromStatus: EnvelopeStatus;
+  toStatus: EnvelopeStatus;
+  reason?: string;
+  outcome?: string;
+}
+
+export type SessionHistoryEvent =
+  | SessionEnvelopeCreatedEvent
+  | SessionEnvelopeStatusChangedEvent;
+
+export interface SessionStatusChangeInput {
+  envelope: Envelope;
+  fromStatus: EnvelopeStatus;
+  toStatus: EnvelopeStatus;
+  timestampMs: number;
+  origin: EnvelopeOrigin;
+  reason?: string;
+  outcome?: string;
 }
 
 export interface SessionFile {
@@ -20,5 +48,5 @@ export interface SessionFile {
   startedAtMs: number;
   endedAtMs: number | null;
   summary: string | null;
-  conversations: SessionConversationEntry[];
+  events: SessionHistoryEvent[];
 }
