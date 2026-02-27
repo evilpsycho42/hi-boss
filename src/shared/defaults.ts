@@ -88,6 +88,7 @@ export const DEFAULT_PERMISSION_POLICY: PermissionPolicyV1 = {
     "envelope.send": "restricted",
     "envelope.list": "restricted",
     "envelope.thread": "restricted",
+    "session.list": "restricted",
 
     // Reactions
     "reaction.set": "restricted",

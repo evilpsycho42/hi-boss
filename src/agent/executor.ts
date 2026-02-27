@@ -66,6 +66,11 @@ type SessionExecutionScope =
       adapterType: string;
       chatId: string;
       ownerUserId?: string;
+    }
+  | {
+      kind: "pinned";
+      cacheKey: string;
+      agentSessionId: string;
     };
 
 type AgentRunStartedHook = (params: {
@@ -96,7 +101,7 @@ type CapturedRunTrace = {
  */
 export class AgentExecutor {
   private sessions: Map<string, AgentSession> = new Map(); // default:<agent>
-  private channelSessions: Map<string, AgentSession> = new Map(); // channel-session:<agent>:<session-id>
+  private channelSessions: Map<string, AgentSession> = new Map(); // channel-session:<agent>:<session-id> | agent-session:<agent>:<session-id>
   private agentDispatchLocks: Map<string, Promise<void>> = new Map();
   private sessionLocks: Map<string, Promise<void>> = new Map();
   private inFlightRuns: Map<string, Set<InFlightAgentRun>> = new Map();
@@ -141,7 +146,12 @@ export class AgentExecutor {
     }
 
     for (const [cacheKey, cachedChannelSession] of this.channelSessions.entries()) {
-      if (!cacheKey.startsWith(`channel-session:${agentName}:`)) continue;
+      if (
+        !cacheKey.startsWith(`channel-session:${agentName}:`) &&
+        !cacheKey.startsWith(`agent-session:${agentName}:`)
+      ) {
+        continue;
+      }
       return {
         provider: cachedChannelSession.provider,
         workspace: cachedChannelSession.workspace,
@@ -231,6 +241,10 @@ export class AgentExecutor {
 
   private buildChannelSessionKey(agentName: string, sessionId: string): string {
     return `channel-session:${agentName}:${sessionId}`;
+  }
+
+  private buildPinnedSessionKey(agentName: string, sessionId: string): string {
+    return `agent-session:${agentName}:${sessionId}`;
   }
 
   invalidateChannelSessionCache(agentName: string, adapterType: string, chatId: string): void {
@@ -358,7 +372,14 @@ export class AgentExecutor {
       if (envelopes.length === 0) return;
 
       const envelopeIds = envelopes.map((item) => item.id);
-      db.markEnvelopesDone(envelopeIds);
+      db.markEnvelopesDone(envelopeIds, {
+        reason: "executor-read-batch",
+        origin: "internal",
+        outcome: "queued-for-execution",
+      });
+      for (const env of envelopes) {
+        env.status = "done";
+      }
       if (this.onEnvelopesDone) {
         try {
           await this.onEnvelopesDone(envelopeIds, db);
@@ -401,6 +422,22 @@ export class AgentExecutor {
   }
 
   private resolveExecutionScope(agent: Agent, db: HiBossDatabase, envelope: Envelope): SessionExecutionScope {
+    const metadata = envelope.metadata as Record<string, unknown> | undefined;
+    const pinnedTargetSessionId =
+      typeof metadata?.targetSessionId === "string" && metadata.targetSessionId.trim().length > 0
+        ? metadata.targetSessionId.trim()
+        : undefined;
+    if (pinnedTargetSessionId) {
+      const pinnedSession = db.getAgentSessionById(pinnedTargetSessionId);
+      if (pinnedSession && pinnedSession.agentName === agent.name) {
+        return {
+          kind: "pinned",
+          cacheKey: this.buildPinnedSessionKey(agent.name, pinnedSession.id),
+          agentSessionId: pinnedSession.id,
+        };
+      }
+    }
+
     const parsedFrom = (() => {
       try {
         return parseAddress(envelope.from);
@@ -411,7 +448,7 @@ export class AgentExecutor {
 
     if (parsedFrom && parsedFrom.type === "channel") {
       const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
-      const md = envelope.metadata as Record<string, unknown> | undefined;
+      const md = metadata;
       const authorRaw = md && typeof md.author === "object" && md.author ? md.author as Record<string, unknown> : undefined;
       const ownerUserId = envelope.fromBoss && typeof authorRaw?.id === "string" && authorRaw.id.trim()
         ? authorRaw.id.trim()
@@ -514,6 +551,16 @@ export class AgentExecutor {
     const pendingRemainingCount = countDuePendingEnvelopesForAgent(params.db, params.agent.name);
     const triggerFields = getTriggerFields(params.trigger);
     if (!this.isAbortGenerationCurrent(params.agent.name, params.abortGeneration)) {
+      for (const env of params.envelopes) {
+        params.db.recordEnvelopeStatusEvent({
+          envelope: env,
+          fromStatus: env.status,
+          toStatus: env.status,
+          reason: "executor-skip-aborted",
+          outcome: "skipped-after-abort-generation",
+          origin: "internal",
+        });
+      }
       logEvent("info", "agent-run-skip-aborted", {
         "agent-name": params.agent.name,
         "envelopes-read-count": envelopeIds.length,
@@ -704,7 +751,7 @@ export class AgentExecutor {
             });
           }
         }
-      } else {
+      } else if (params.scope.kind === "channel") {
         try {
           params.db.updateAgentSessionProviderSessionId(
             params.scope.agentSessionId,
@@ -718,6 +765,24 @@ export class AgentExecutor {
           });
         } catch (err) {
           logEvent("warn", "agent-session-channel-persist-failed", {
+            "agent-name": params.agent.name,
+            "agent-session-id": params.scope.agentSessionId,
+            provider: session.provider,
+            error: errorMessage(err),
+          });
+        }
+      } else {
+        try {
+          params.db.updateAgentSessionProviderSessionId(
+            params.scope.agentSessionId,
+            session.sessionId ?? null,
+            { provider: session.provider }
+          );
+          params.db.touchAgentSession(params.scope.agentSessionId, {
+            lastActiveAt: Date.now(),
+          });
+        } catch (err) {
+          logEvent("warn", "agent-session-pinned-persist-failed", {
             "agent-name": params.agent.name,
             "agent-session-id": params.scope.agentSessionId,
             provider: session.provider,
@@ -836,7 +901,10 @@ export class AgentExecutor {
     if (scope.kind === "default") {
       return this.getOrCreateDefaultSession(agent, db, trigger);
     }
-    return this.getOrCreateChannelSession(agent, db, scope);
+    if (scope.kind === "channel") {
+      return this.getOrCreateChannelSession(agent, db, scope);
+    }
+    return this.getOrCreatePinnedSession(agent, db, scope);
   }
 
   private async getOrCreateDefaultSession(
@@ -862,6 +930,44 @@ export class AgentExecutor {
     agent: Agent,
     db: HiBossDatabase,
     scope: Extract<SessionExecutionScope, { kind: "channel" }>
+  ): Promise<AgentSession> {
+    const cached = this.channelSessions.get(scope.cacheKey);
+    const policy = this.getSessionPolicy(agent);
+    if (cached) {
+      const reason = getRefreshReasonForPolicy(cached, policy, new Date());
+      if (!reason) return cached;
+      this.channelSessions.delete(scope.cacheKey);
+      db.updateAgentSessionProviderSessionId(scope.agentSessionId, null, {
+        provider: cached.provider,
+      });
+    }
+
+    const persistedRow = db.getAgentSessionById(scope.agentSessionId);
+    const provider = persistedRow?.provider ?? (agent.provider ?? DEFAULT_AGENT_PROVIDER);
+    const providerEnvOverrides = getProviderCliEnvOverrides(agent.metadata, provider);
+
+    const baseSession = await this.getOrCreateDefaultSession(agent, db);
+    const session: AgentSession = {
+      provider,
+      agentToken: baseSession.agentToken,
+      systemInstructions: baseSession.systemInstructions,
+      workspace: agent.workspace ?? baseSession.workspace,
+      providerEnvOverrides,
+      model: agent.model,
+      reasoningEffort: agent.reasoningEffort,
+      sessionId: persistedRow?.providerSessionId ?? undefined,
+      createdAtMs: persistedRow?.createdAt ?? Date.now(),
+      ...(persistedRow ? { lastRunCompletedAtMs: persistedRow.lastActiveAt } : {}),
+    };
+    this.channelSessions.set(scope.cacheKey, session);
+    this.conversationHistory?.ensureActiveSession(agent.name);
+    return session;
+  }
+
+  private async getOrCreatePinnedSession(
+    agent: Agent,
+    db: HiBossDatabase,
+    scope: Extract<SessionExecutionScope, { kind: "pinned" }>
   ): Promise<AgentSession> {
     const cached = this.channelSessions.get(scope.cacheKey);
     const policy = this.getSessionPolicy(agent);
@@ -946,7 +1052,10 @@ export class AgentExecutor {
 
     this.sessions.delete(agentName);
     for (const key of [...this.channelSessions.keys()]) {
-      if (key.startsWith(`channel-session:${agentName}:`)) {
+      if (
+        key.startsWith(`channel-session:${agentName}:`) ||
+        key.startsWith(`agent-session:${agentName}:`)
+      ) {
         this.channelSessions.delete(key);
       }
     }

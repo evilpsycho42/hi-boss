@@ -3,7 +3,12 @@ import * as fs from "fs";
 import * as path from "path";
 import { SCHEMA_SQL } from "./schema.js";
 import type { Agent, AgentPermissionLevel, RegisterAgentInput } from "../../agent/types.js";
-import type { Envelope, CreateEnvelopeInput, EnvelopeStatus } from "../../envelope/types.js";
+import type {
+  Envelope,
+  CreateEnvelopeInput,
+  EnvelopeStatus,
+  EnvelopeOrigin,
+} from "../../envelope/types.js";
 import type { CronSchedule, CreateCronScheduleInput } from "../../cron/types.js";
 import type { SessionPolicyConfig } from "../../shared/session-policy.js";
 import {
@@ -186,11 +191,34 @@ export interface SessionListItem {
   };
 }
 
+export interface EnvelopeCreatedEvent {
+  envelope: Envelope;
+  origin: EnvelopeOrigin;
+  timestampMs: number;
+}
+
+export interface EnvelopeStatusChangedEvent {
+  envelope: Envelope;
+  envelopeId: string;
+  fromStatus: EnvelopeStatus;
+  toStatus: EnvelopeStatus;
+  reason?: string;
+  outcome?: string;
+  origin: EnvelopeOrigin;
+  timestampMs: number;
+}
+
+export interface EnvelopeLifecycleHooks {
+  onEnvelopeCreated?: (event: EnvelopeCreatedEvent) => void;
+  onEnvelopeStatusChanged?: (event: EnvelopeStatusChangedEvent) => void;
+}
+
 /**
  * SQLite database wrapper for Hi-Boss.
  */
 export class HiBossDatabase {
   private db: Database.Database;
+  private envelopeLifecycleHooks: EnvelopeLifecycleHooks = {};
 
   constructor(dbPath: string) {
     const dir = path.dirname(dbPath);
@@ -202,6 +230,10 @@ export class HiBossDatabase {
     this.db.pragma("journal_mode = WAL");
     this.db.pragma("foreign_keys = ON");
     this.initSchema();
+  }
+
+  setEnvelopeLifecycleHooks(hooks: EnvelopeLifecycleHooks): void {
+    this.envelopeLifecycleHooks = hooks;
   }
 
   private initSchema(): void {
@@ -901,7 +933,13 @@ export class HiBossDatabase {
       input.metadata ? JSON.stringify(input.metadata) : null
     );
 
-    return this.getEnvelopeById(id)!;
+    const envelope = this.getEnvelopeById(id)!;
+    this.emitEnvelopeCreated({
+      envelope,
+      origin: this.resolveEnvelopeOrigin(envelope.metadata, "internal"),
+      timestampMs: createdAt,
+    });
+    return envelope;
   }
 
   /**
@@ -1017,9 +1055,34 @@ export class HiBossDatabase {
   /**
    * Update envelope status.
    */
-  updateEnvelopeStatus(id: string, status: EnvelopeStatus): void {
+  updateEnvelopeStatus(
+    id: string,
+    status: EnvelopeStatus,
+    options?: {
+      reason?: string;
+      outcome?: string;
+      origin?: EnvelopeOrigin;
+    }
+  ): void {
+    const before = this.getEnvelopeById(id);
+    if (!before) return;
+    if (before.status === status) return;
+
     const stmt = this.db.prepare("UPDATE envelopes SET status = ? WHERE id = ?");
     stmt.run(status, id);
+    const after = this.getEnvelopeById(id);
+    if (!after) return;
+
+    this.emitEnvelopeStatusChanged({
+      envelope: after,
+      envelopeId: after.id,
+      fromStatus: before.status,
+      toStatus: after.status,
+      reason: options?.reason,
+      outcome: options?.outcome,
+      origin: options?.origin ?? this.resolveEnvelopeOrigin(after.metadata, "internal"),
+      timestampMs: Date.now(),
+    });
   }
 
   /**
@@ -1049,6 +1112,60 @@ export class HiBossDatabase {
       createdAt: row.created_at,
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
     };
+  }
+
+  recordEnvelopeStatusEvent(input: {
+    envelope: Envelope;
+    fromStatus: EnvelopeStatus;
+    toStatus: EnvelopeStatus;
+    reason?: string;
+    outcome?: string;
+    origin?: EnvelopeOrigin;
+    timestampMs?: number;
+  }): void {
+    this.emitEnvelopeStatusChanged({
+      envelope: input.envelope,
+      envelopeId: input.envelope.id,
+      fromStatus: input.fromStatus,
+      toStatus: input.toStatus,
+      reason: input.reason,
+      outcome: input.outcome,
+      origin: input.origin ?? this.resolveEnvelopeOrigin(input.envelope.metadata, "internal"),
+      timestampMs: input.timestampMs ?? Date.now(),
+    });
+  }
+
+  private emitEnvelopeCreated(event: EnvelopeCreatedEvent): void {
+    try {
+      this.envelopeLifecycleHooks.onEnvelopeCreated?.(event);
+    } catch {
+      // Non-blocking side-effect hook.
+    }
+  }
+
+  private emitEnvelopeStatusChanged(event: EnvelopeStatusChangedEvent): void {
+    try {
+      this.envelopeLifecycleHooks.onEnvelopeStatusChanged?.(event);
+    } catch {
+      // Non-blocking side-effect hook.
+    }
+  }
+
+  private resolveEnvelopeOrigin(
+    metadata: Record<string, unknown> | undefined,
+    fallback: EnvelopeOrigin,
+  ): EnvelopeOrigin {
+    const raw = metadata?.origin;
+    if (
+      raw === "cli" ||
+      raw === "mcp" ||
+      raw === "channel" ||
+      raw === "cron" ||
+      raw === "internal"
+    ) {
+      return raw;
+    }
+    return fallback;
   }
 
   // ==================== Cron Schedule Operations ====================
@@ -1563,14 +1680,44 @@ export class HiBossDatabase {
   /**
    * Mark multiple envelopes as done.
    */
-  markEnvelopesDone(envelopeIds: string[]): void {
+  markEnvelopesDone(
+    envelopeIds: string[],
+    options?: {
+      reason?: string;
+      outcome?: string;
+      origin?: EnvelopeOrigin;
+    }
+  ): void {
     if (envelopeIds.length === 0) return;
 
     const placeholders = envelopeIds.map(() => "?").join(", ");
-    const stmt = this.db.prepare(`
-      UPDATE envelopes SET status = 'done' WHERE id IN (${placeholders})
+    const beforeStmt = this.db.prepare(`
+      SELECT * FROM envelopes
+      WHERE id IN (${placeholders})
     `);
+    const beforeRows = beforeStmt.all(...envelopeIds) as EnvelopeRow[];
+    if (beforeRows.length === 0) return;
+
+    const stmt = this.db.prepare(`UPDATE envelopes SET status = 'done' WHERE id IN (${placeholders})`);
     stmt.run(...envelopeIds);
+
+    for (const row of beforeRows) {
+      if (row.status === "done") continue;
+      const envelope = this.rowToEnvelope({
+        ...row,
+        status: "done",
+      });
+      this.emitEnvelopeStatusChanged({
+        envelope,
+        envelopeId: row.id,
+        fromStatus: row.status as EnvelopeStatus,
+        toStatus: "done",
+        reason: options?.reason,
+        outcome: options?.outcome,
+        origin: options?.origin ?? this.resolveEnvelopeOrigin(envelope.metadata, "internal"),
+        timestampMs: Date.now(),
+      });
+    }
   }
 
   /**
@@ -1578,9 +1725,24 @@ export class HiBossDatabase {
    *
    * Used by operator abort flows to clear the agent's inbox immediately.
    */
-  markDuePendingNonCronEnvelopesDoneForAgent(agentName: string): number {
+  markDuePendingNonCronEnvelopesDoneForAgent(
+    agentName: string,
+    options?: {
+      reason?: string;
+      outcome?: string;
+      origin?: EnvelopeOrigin;
+    }
+  ): number {
     const address = `agent:${agentName}`;
     const nowMs = Date.now();
+    const rows = this.db.prepare(`
+      SELECT * FROM envelopes
+      WHERE "to" = ?
+        AND status = 'pending'
+        AND (deliver_at IS NULL OR deliver_at <= ?)
+        AND json_type(metadata, '$.cronScheduleId') IS NULL
+    `).all(address, nowMs) as EnvelopeRow[];
+
     const stmt = this.db.prepare(`
       UPDATE envelopes
       SET status = 'done'
@@ -1590,6 +1752,23 @@ export class HiBossDatabase {
         AND json_type(metadata, '$.cronScheduleId') IS NULL
     `);
     const result = stmt.run(address, nowMs);
+
+    for (const row of rows) {
+      const envelope = this.rowToEnvelope({
+        ...row,
+        status: "done",
+      });
+      this.emitEnvelopeStatusChanged({
+        envelope,
+        envelopeId: row.id,
+        fromStatus: "pending",
+        toStatus: "done",
+        reason: options?.reason,
+        outcome: options?.outcome,
+        origin: options?.origin ?? this.resolveEnvelopeOrigin(envelope.metadata, "internal"),
+        timestampMs: Date.now(),
+      });
+    }
     return result.changes;
   }
 
@@ -1678,6 +1857,50 @@ export class HiBossDatabase {
       LIMIT ?
     `);
     const rows = stmt.all(agentName, `${prefix}%`, n) as AgentSessionRow[];
+    return rows.map((row) => this.rowToAgentSession(row));
+  }
+
+  findAgentSessionByProviderSessionId(input: {
+    agentName: string;
+    providerSessionId: string;
+    provider?: "claude" | "codex";
+  }): AgentSessionRecord | null {
+    const providerSessionId = input.providerSessionId.trim();
+    if (!providerSessionId) return null;
+
+    if (input.provider) {
+      const stmt = this.db.prepare(`
+        SELECT * FROM agent_sessions
+        WHERE agent_name = ?
+          AND provider_session_id = ?
+          AND provider = ?
+        ORDER BY last_active_at DESC
+        LIMIT 1
+      `);
+      const row = stmt.get(input.agentName, providerSessionId, input.provider) as AgentSessionRow | undefined;
+      return row ? this.rowToAgentSession(row) : null;
+    }
+
+    const stmt = this.db.prepare(`
+      SELECT * FROM agent_sessions
+      WHERE agent_name = ?
+        AND provider_session_id = ?
+      ORDER BY last_active_at DESC
+      LIMIT 1
+    `);
+    const row = stmt.get(input.agentName, providerSessionId) as AgentSessionRow | undefined;
+    return row ? this.rowToAgentSession(row) : null;
+  }
+
+  listAgentSessionsByAgent(agentName: string, limit = 20): AgentSessionRecord[] {
+    const n = Number.isFinite(limit) ? Math.max(1, Math.min(200, Math.trunc(limit))) : 20;
+    const stmt = this.db.prepare(`
+      SELECT * FROM agent_sessions
+      WHERE agent_name = ?
+      ORDER BY last_active_at DESC
+      LIMIT ?
+    `);
+    const rows = stmt.all(agentName, n) as AgentSessionRow[];
     return rows.map((row) => this.rowToAgentSession(row));
   }
 

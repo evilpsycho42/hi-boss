@@ -195,3 +195,48 @@ test("resolveExecutionScope respects envelope channelSessionId pin even after ac
     assert.equal(bossScope.ownerUserId, "boss-1");
   });
 });
+
+test("resolveExecutionScope respects metadata.targetSessionId for non-channel and channel envelopes", () => {
+  withTempDb((db) => {
+    db.registerAgent({ name: "nex", provider: "claude" });
+    const pinned = db.createAgentSession({
+      agentName: "nex",
+      provider: "claude",
+    });
+
+    const executor = new AgentExecutor();
+    const agent = { name: "nex", provider: "claude" } as any;
+
+    const directEnvelope = {
+      id: "env-direct",
+      from: "agent:other",
+      to: "agent:nex",
+      fromBoss: false,
+      metadata: {
+        targetSessionId: pinned.id,
+      },
+    } as any;
+    const directScope = (executor as any).resolveExecutionScope(agent, db, directEnvelope) as {
+      kind: string;
+      agentSessionId?: string;
+    };
+    assert.equal(directScope.kind, "pinned");
+    assert.equal(directScope.agentSessionId, pinned.id);
+
+    const channelEnvelope = {
+      id: "env-channel",
+      from: "channel:telegram:chat-1",
+      to: "agent:nex",
+      fromBoss: false,
+      metadata: {
+        targetSessionId: pinned.id,
+      },
+    } as any;
+    const channelScope = (executor as any).resolveExecutionScope(agent, db, channelEnvelope) as {
+      kind: string;
+      agentSessionId?: string;
+    };
+    assert.equal(channelScope.kind, "pinned");
+    assert.equal(channelScope.agentSessionId, pinned.id);
+  });
+});

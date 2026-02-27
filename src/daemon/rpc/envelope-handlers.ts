@@ -15,7 +15,8 @@ import { requireToken, rpcError } from "./context.js";
 import { formatAgentAddress, parseAddress } from "../../adapters/types.js";
 import { parseDateTimeInputToUnixMsInTimeZone } from "../../shared/time.js";
 import { resolveEnvelopeIdInput } from "./resolve-envelope-id.js";
-import type { Envelope } from "../../envelope/types.js";
+import type { Envelope, EnvelopeOrigin } from "../../envelope/types.js";
+import { DEFAULT_ID_PREFIX_LEN, isHexLower, normalizeIdPrefixInput } from "../../shared/id-format.js";
 
 function parseEnvelopeListTimeBoundary(params: {
   raw: unknown;
@@ -34,6 +35,105 @@ function parseEnvelopeListTimeBoundary(params: {
     const message = rawMessage.replace(/^Invalid deliver-at:/, `Invalid ${params.flag}:`);
     rpcError(RPC_ERRORS.INVALID_PARAMS, message);
   }
+}
+
+function resolveTargetSessionIdForSend(params: {
+  ctx: DaemonContext;
+  toSessionId: unknown;
+  toProviderSessionId: unknown;
+  toProvider: unknown;
+  destination: ReturnType<typeof parseAddress>;
+  destinationAgentName?: string;
+}): string | undefined {
+  const hasToSessionId = params.toSessionId !== undefined;
+  const hasToProviderSessionId = params.toProviderSessionId !== undefined;
+  const hasToProvider = params.toProvider !== undefined;
+
+  if (!hasToSessionId && !hasToProviderSessionId && !hasToProvider) {
+    return undefined;
+  }
+
+  if (params.destination.type !== "agent") {
+    rpcError(
+      RPC_ERRORS.INVALID_PARAMS,
+      "Session targeting is only supported for agent destinations"
+    );
+  }
+
+  if (!params.destinationAgentName) {
+    rpcError(RPC_ERRORS.INTERNAL_ERROR, "Missing destination agent context");
+  }
+
+  if (hasToSessionId && hasToProviderSessionId) {
+    rpcError(
+      RPC_ERRORS.INVALID_PARAMS,
+      "Provide only one of: to-session-id, to-provider-session-id"
+    );
+  }
+
+  if (!hasToSessionId && !hasToProviderSessionId && hasToProvider) {
+    rpcError(
+      RPC_ERRORS.INVALID_PARAMS,
+      "to-provider can only be used with to-provider-session-id"
+    );
+  }
+
+  if (hasToSessionId) {
+    if (typeof params.toSessionId !== "string" || !params.toSessionId.trim()) {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to-session-id");
+    }
+
+    const raw = params.toSessionId.trim();
+    const direct = params.ctx.db.getAgentSessionById(raw);
+    if (direct && direct.agentName === params.destinationAgentName) {
+      return direct.id;
+    }
+
+    const compactPrefix = normalizeIdPrefixInput(raw);
+    if (compactPrefix.length < DEFAULT_ID_PREFIX_LEN || !isHexLower(compactPrefix)) {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to-session-id");
+    }
+
+    const matches = params.ctx.db.findAgentSessionsByIdPrefix(
+      params.destinationAgentName,
+      compactPrefix,
+      20
+    );
+    if (matches.length === 1) {
+      return matches[0]!.id;
+    }
+    if (matches.length === 0) {
+      rpcError(RPC_ERRORS.NOT_FOUND, "Session not found");
+    }
+
+    rpcError(
+      RPC_ERRORS.INVALID_PARAMS,
+      "Ambiguous to-session-id (matches multiple sessions)"
+    );
+  }
+
+  if (typeof params.toProviderSessionId !== "string" || !params.toProviderSessionId.trim()) {
+    rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to-provider-session-id");
+  }
+
+  let provider: "claude" | "codex" | undefined;
+  if (params.toProvider !== undefined) {
+    if (params.toProvider !== "claude" && params.toProvider !== "codex") {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to-provider (expected claude or codex)");
+    }
+    provider = params.toProvider;
+  }
+
+  const byProviderSession = params.ctx.db.findAgentSessionByProviderSessionId({
+    agentName: params.destinationAgentName,
+    providerSessionId: params.toProviderSessionId.trim(),
+    provider,
+  });
+  if (!byProviderSession) {
+    rpcError(RPC_ERRORS.NOT_FOUND, "Session not found");
+  }
+
+  return byProviderSession.id;
 }
 
 /**
@@ -70,6 +170,7 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
     let fromBoss = false;
     let interruptNow = false;
     const metadata: Record<string, unknown> = {};
+    let origin: EnvelopeOrigin = "cli";
 
     if (p.from !== undefined || p.fromBoss !== undefined || p.fromName !== undefined) {
       rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
@@ -86,6 +187,15 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
       interruptNow = p.interruptNow;
     }
 
+    if (p.origin !== undefined) {
+      if (p.origin !== "cli" && p.origin !== "mcp" && p.origin !== "internal") {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid origin");
+      }
+      origin = p.origin;
+    }
+    metadata.origin = origin;
+
+    let destinationAgentName: string | undefined;
     const to = (() => {
       if (destination.type !== "agent") return toInput;
 
@@ -93,6 +203,7 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
       if (!destAgent) {
         rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
       }
+      destinationAgentName = destAgent.name;
       return formatAgentAddress(destAgent.name);
     })();
 
@@ -147,6 +258,18 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
         rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid reply-to-envelope-id");
       }
       metadata.replyToEnvelopeId = resolveEnvelopeIdInput(ctx.db, p.replyToEnvelopeId.trim());
+    }
+
+    const targetSessionId = resolveTargetSessionIdForSend({
+      ctx,
+      toSessionId: p.toSessionId,
+      toProviderSessionId: p.toProviderSessionId,
+      toProvider: p.toProvider,
+      destination,
+      destinationAgentName,
+    });
+    if (targetSessionId) {
+      metadata.targetSessionId = targetSessionId;
     }
 
     let deliverAt: number | undefined;
@@ -305,7 +428,11 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
 
     if (shouldAckIncomingPending && envelopes.length > 0) {
       const ids = envelopes.map((e) => e.id);
-      ctx.db.markEnvelopesDone(ids);
+      ctx.db.markEnvelopesDone(ids, {
+        reason: "envelope-list-read-ack",
+        origin: "internal",
+        outcome: "acked-by-list",
+      });
       for (const env of envelopes) {
         env.status = "done";
       }

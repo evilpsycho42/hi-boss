@@ -64,6 +64,10 @@ export interface EnvelopeSendParams {
   interruptNow?: boolean;
   parseMode?: "plain" | "markdownv2" | "html";
   replyToEnvelopeId?: string;
+  toSessionId?: string;
+  toProviderSessionId?: string;
+  toProvider?: "claude" | "codex";
+  origin?: "cli" | "mcp" | "internal";
 }
 
 export interface EnvelopeListParams {
@@ -88,6 +92,25 @@ export interface EnvelopeThreadResult {
   truncated: boolean;
   truncatedIntermediateCount: number;
   envelopes: Envelope[];
+}
+
+export interface SessionListParams {
+  token: string;
+  agentName?: string;
+  limit?: number;
+}
+
+export interface SessionListResult {
+  sessions: Array<{
+    id: string;
+    agentName: string;
+    provider: "claude" | "codex";
+    providerSessionId?: string;
+    createdAt: number;
+    lastActiveAt: number;
+    lastAdapterType?: string;
+    lastChatId?: string;
+  }>;
 }
 
 export interface CronCreateParams {
