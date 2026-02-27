@@ -67,7 +67,7 @@ export interface EnvelopeSendParams {
   toSessionId?: string;
   toProviderSessionId?: string;
   toProvider?: "claude" | "codex";
-  origin?: "cli" | "mcp" | "internal";
+  origin?: "cli" | "internal";
 }
 
 export interface EnvelopeListParams {
@@ -354,6 +354,25 @@ export interface TeamListParams {
   status?: "active" | "archived";
 }
 
+export interface TeamListMembersParams {
+  token: string;
+  teamName: string;
+}
+
+export interface TeamSendParams {
+  token: string;
+  teamName: string;
+  text?: string;
+  attachments?: Array<{ source: string; filename?: string; telegramFileId?: string }>;
+  deliverAt?: string;
+  interruptNow?: boolean;
+  replyToEnvelopeId?: string;
+  toSessionId?: string;
+  toProviderSessionId?: string;
+  toProvider?: "claude" | "codex";
+  origin?: "cli" | "internal";
+}
+
 export interface TeamRecordResult {
   name: string;
   description?: string;
@@ -396,6 +415,29 @@ export interface TeamStatusResult {
 
 export interface TeamListResult {
   teams: TeamRecordResult[];
+}
+
+export interface TeamListMembersResult {
+  teamName: string;
+  members: Array<{
+    agentName: string;
+    source: "manual";
+    createdAt: number;
+  }>;
+}
+
+export interface TeamSendResult {
+  teamName: string;
+  requestedCount: number;
+  sentCount: number;
+  failedCount: number;
+  results: Array<{
+    agentName: string;
+    success: boolean;
+    envelopeId?: string;
+    error?: string;
+    interruptedWork?: boolean;
+  }>;
 }
 
 export interface DaemonStatusParams {

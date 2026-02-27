@@ -106,6 +106,64 @@ Output (parseable):
 Default permission:
 - `restricted`
 
+## `hiboss team list-members`
+
+Lists member records for one team.
+
+Flags:
+- `--name <name>` (required)
+- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
+
+Output:
+- `team-name:`
+- `member-count:`
+- Empty result: `no-members: true`
+- Non-empty: repeated blocks with:
+  - `agent-name:`
+  - `source:` (`manual`)
+  - `joined-at:` (boss timezone offset)
+
+Default permission:
+- `restricted`
+
+## `hiboss team send`
+
+Sends one envelope to each member of a team (fan-out singlecast).
+
+Flags:
+- `--name <name>` (required)
+- `--text <text>` (optional; use `-` to read from stdin)
+- `--text-file <path>` (optional)
+- `--attachment <path>` (optional; repeatable)
+- `--deliver-at <time>` (optional)
+- `--interrupt-now` (optional; mutually exclusive with `--deliver-at`)
+- `--reply-to <envelope-id>` (optional)
+- `--to-session-id <id>` (optional)
+- `--to-provider-session-id <id>` (optional)
+- `--to-provider <claude|codex>` (optional; only valid with `--to-provider-session-id`)
+- `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
+
+Output:
+- `team-name:`
+- `requested-count:`
+- `sent-count:`
+- `failed-count:`
+- No recipients: `no-recipients: true`
+- Per-recipient block:
+  - `agent-name:`
+  - `status:` (`sent|failed`)
+  - `id:` (short envelope id or `none`)
+  - `error:` (`none` when sent)
+
+Notes:
+- Sender is excluded from recipient set.
+- Archived teams reject `team send`.
+- Best-effort fan-out: one recipient failure does not abort remaining sends.
+- CLI exits non-zero when `failed-count > 0`.
+
+Default permission:
+- `restricted`
+
 ## `hiboss team list`
 
 Lists teams.

@@ -2,9 +2,11 @@ import type { Command } from "commander";
 import {
   addTeamMember,
   deleteTeam,
+  listTeamMembers,
   listTeams,
   registerTeam,
   removeTeamMember,
+  sendTeam,
   setTeam,
   teamStatus,
 } from "./commands/index.js";
@@ -101,6 +103,56 @@ export function registerTeamCommands(program: Command): void {
       teamStatus({
         token: options.token,
         name: options.name,
+      });
+    });
+
+  team
+    .command("list-members")
+    .description("List team members")
+    .requiredOption("--name <name>", "Team name")
+    .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+    .action((options) => {
+      listTeamMembers({
+        token: options.token,
+        name: options.name,
+      });
+    });
+
+  team
+    .command("send")
+    .description("Send an envelope to all team members")
+    .requiredOption("--name <name>", "Team name")
+    .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+    .option("--text <text>", "Envelope text (use - to read from stdin)")
+    .option("--text-file <path>", "Read envelope text from file")
+    .option(
+      "--attachment <path>",
+      "Attachment path (can be used multiple times)",
+      (value: string, previous: string[] = []) => previous.concat(value),
+      [] as string[],
+    )
+    .option(
+      "--deliver-at <time>",
+      "Schedule delivery time (ISO 8601 or relative: +2h, +30m, +1Y2M, -15m; units: Y/M/D/h/m/s)"
+    )
+    .option("--interrupt-now", "Interrupt current run and prioritize this envelope")
+    .option("--reply-to <envelope-id>", "Reply to an envelope")
+    .option("--to-session-id <id>", "Pin delivery to a specific target agent session (short id/prefix/full UUID)")
+    .option("--to-provider-session-id <id>", "Pin delivery by provider session/thread id on the target agent")
+    .option("--to-provider <provider>", "Provider for --to-provider-session-id: claude or codex")
+    .action((options) => {
+      sendTeam({
+        token: options.token,
+        name: options.name,
+        text: options.text,
+        textFile: options.textFile,
+        attachment: options.attachment,
+        deliverAt: options.deliverAt,
+        interruptNow: options.interruptNow,
+        replyTo: options.replyTo,
+        toSessionId: options.toSessionId,
+        toProviderSessionId: options.toProviderSessionId,
+        toProvider: options.toProvider,
       });
     });
 

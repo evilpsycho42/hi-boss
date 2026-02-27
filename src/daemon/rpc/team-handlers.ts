@@ -3,6 +3,8 @@ import type {
   TeamDeleteParams,
   TeamDeleteResult,
   TeamListParams,
+  TeamListMembersParams,
+  TeamListMembersResult,
   TeamListResult,
   TeamMemberAddParams,
   TeamMemberAddResult,
@@ -13,6 +15,8 @@ import type {
   TeamRegisterResult,
   TeamSetParams,
   TeamSetResult,
+  TeamSendParams,
+  TeamSendResult,
   TeamStatusParams,
   TeamStatusResult,
 } from "../ipc/types.js";
@@ -20,6 +24,7 @@ import { RPC_ERRORS } from "../ipc/types.js";
 import type { DaemonContext } from "./context.js";
 import { requireToken, rpcError } from "./context.js";
 import type { Team } from "../../team/types.js";
+import { formatAgentAddress } from "../../adapters/types.js";
 import {
   AGENT_NAME_ERROR_MESSAGE,
   TEAM_NAME_ERROR_MESSAGE,
@@ -28,6 +33,25 @@ import {
 } from "../../shared/validation.js";
 import { ensureTeamspaceDir, removeTeamspaceDir } from "../../team/teamspace.js";
 import { errorMessage } from "../../shared/daemon-log.js";
+import { sendEnvelopeFromAgent } from "./envelope-send-core.js";
+import { validateTeamSendParams } from "./team-send-params.js";
+
+function requestSessionContextReloadForAgents(
+  ctx: DaemonContext,
+  agentNames: string[],
+  reason: string,
+): void {
+  const unique = Array.from(
+    new Set(
+      agentNames
+        .map((name) => name.trim())
+        .filter((name) => name.length > 0),
+    ),
+  );
+  for (const agentName of unique) {
+    ctx.executor.requestSessionContextReload(agentName, reason);
+  }
+}
 
 function toTeamRecordResult(ctx: DaemonContext, team: Team): TeamRecordResult {
   return {
@@ -104,6 +128,13 @@ export function createTeamHandlers(ctx: DaemonContext): RpcMethodRegistry {
         ...(p.description !== undefined ? { description: p.description } : {}),
         ...(p.status !== undefined ? { status: p.status } : {}),
       });
+      if (team.status !== updated.status) {
+        requestSessionContextReloadForAgents(
+          ctx,
+          ctx.db.listTeamMemberAgentNames(updated.name),
+          `rpc:team.set:status:${team.status}->${updated.status}:${updated.name}`,
+        );
+      }
 
       return {
         success: true,
@@ -125,6 +156,7 @@ export function createTeamHandlers(ctx: DaemonContext): RpcMethodRegistry {
       if (!team) {
         rpcError(RPC_ERRORS.NOT_FOUND, "Team not found");
       }
+      const membersBeforeDelete = ctx.db.listTeamMemberAgentNames(team.name);
 
       const removed = removeTeamspaceDir({
         hibossDir: ctx.config.dataDir,
@@ -140,6 +172,13 @@ export function createTeamHandlers(ctx: DaemonContext): RpcMethodRegistry {
       const ok = ctx.db.deleteTeam(team.name);
       if (!ok) {
         rpcError(RPC_ERRORS.INTERNAL_ERROR, "Failed to delete team");
+      }
+      if (team.status === "active") {
+        requestSessionContextReloadForAgents(
+          ctx,
+          membersBeforeDelete,
+          `rpc:team.delete:${team.name}`,
+        );
       }
 
       return {
@@ -184,6 +223,13 @@ export function createTeamHandlers(ctx: DaemonContext): RpcMethodRegistry {
       } catch (err) {
         rpcError(RPC_ERRORS.INTERNAL_ERROR, errorMessage(err));
       }
+      if (team.status === "active") {
+        requestSessionContextReloadForAgents(
+          ctx,
+          ctx.db.listTeamMemberAgentNames(team.name),
+          `rpc:team.add-member:${team.name}`,
+        );
+      }
 
       return {
         success: true,
@@ -218,6 +264,7 @@ export function createTeamHandlers(ctx: DaemonContext): RpcMethodRegistry {
       if (!existing) {
         rpcError(RPC_ERRORS.NOT_FOUND, "Member not found");
       }
+      const membersBeforeRemove = ctx.db.listTeamMemberAgentNames(team.name);
 
       const ok = ctx.db.removeTeamMember({
         teamName: team.name,
@@ -225,6 +272,13 @@ export function createTeamHandlers(ctx: DaemonContext): RpcMethodRegistry {
       });
       if (!ok) {
         rpcError(RPC_ERRORS.INTERNAL_ERROR, "Failed to remove team member");
+      }
+      if (team.status === "active") {
+        requestSessionContextReloadForAgents(
+          ctx,
+          membersBeforeRemove,
+          `rpc:team.remove-member:${team.name}`,
+        );
       }
 
       return {
@@ -251,6 +305,124 @@ export function createTeamHandlers(ctx: DaemonContext): RpcMethodRegistry {
 
       return {
         team: toTeamRecordResult(ctx, team),
+      };
+    },
+
+    "team.list-members": async (params): Promise<TeamListMembersResult> => {
+      const p = params as unknown as TeamListMembersParams;
+      const token = requireToken(p.token);
+      const principal = ctx.resolvePrincipal(token);
+      ctx.assertOperationAllowed("team.list-members", principal);
+
+      if (typeof p.teamName !== "string" || !isValidTeamName(p.teamName.trim())) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, TEAM_NAME_ERROR_MESSAGE);
+      }
+
+      const team = ctx.db.getTeamByNameCaseInsensitive(p.teamName.trim());
+      if (!team) {
+        rpcError(RPC_ERRORS.NOT_FOUND, "Team not found");
+      }
+
+      const members = ctx.db.listTeamMembers(team.name);
+      return {
+        teamName: team.name,
+        members: members.map((member) => ({
+          agentName: member.agentName,
+          source: member.source,
+          createdAt: member.createdAt,
+        })),
+      };
+    },
+
+    "team.send": async (params): Promise<TeamSendResult> => {
+      const p = params as unknown as TeamSendParams;
+      const token = requireToken(p.token);
+      const principal = ctx.resolvePrincipal(token);
+      ctx.assertOperationAllowed("team.send", principal);
+
+      if (principal.kind === "admin") {
+        rpcError(
+          RPC_ERRORS.UNAUTHORIZED,
+          "Admin tokens cannot send envelopes (use an agent token or send via a channel adapter)"
+        );
+      }
+
+      if (typeof p.teamName !== "string" || !isValidTeamName(p.teamName.trim())) {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, TEAM_NAME_ERROR_MESSAGE);
+      }
+
+      const team = ctx.db.getTeamByNameCaseInsensitive(p.teamName.trim());
+      if (!team) {
+        rpcError(RPC_ERRORS.NOT_FOUND, "Team not found");
+      }
+      if (team.status !== "active") {
+        rpcError(RPC_ERRORS.INVALID_PARAMS, "Cannot send to archived team");
+      }
+
+      validateTeamSendParams(ctx, p);
+
+      const sender = principal.agent;
+      ctx.db.updateAgentLastSeen(sender.name);
+      const recipients = Array.from(
+        new Set(
+          ctx.db
+            .listTeamMemberAgentNames(team.name)
+            .filter((name) => name !== sender.name),
+        ),
+      );
+      if (recipients.length === 0) {
+        return {
+          teamName: team.name,
+          requestedCount: 0,
+          sentCount: 0,
+          failedCount: 0,
+          results: [],
+        };
+      }
+
+      const results: TeamSendResult["results"] = [];
+      for (const agentName of recipients) {
+        try {
+          const sendResult = await sendEnvelopeFromAgent({
+            ctx,
+            senderAgent: sender,
+            input: {
+              to: formatAgentAddress(agentName),
+              text: p.text,
+              attachments: p.attachments,
+              deliverAt: p.deliverAt,
+              interruptNow: p.interruptNow,
+              replyToEnvelopeId: p.replyToEnvelopeId,
+              toSessionId: p.toSessionId,
+              toProviderSessionId: p.toProviderSessionId,
+              toProvider: p.toProvider,
+              origin: p.origin,
+            },
+            interruptReason: "rpc:team.send:interrupt-now",
+          });
+          results.push({
+            agentName,
+            success: true,
+            envelopeId: sendResult.id,
+            interruptedWork: sendResult.interruptedWork,
+          });
+        } catch (err) {
+          results.push({
+            agentName,
+            success: false,
+            error: errorMessage(err),
+          });
+        }
+      }
+
+      const sentCount = results.filter((item) => item.success).length;
+      const failedCount = results.length - sentCount;
+      return {
+        teamName: team.name,
+        requestedCount: recipients.length,
+        sentCount,
+        failedCount,
+        results,
       };
     },
 

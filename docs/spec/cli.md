@@ -27,7 +27,6 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | `hiboss daemon start` | Start the daemon | Yes (admin-privileged token) | admin |
 | `hiboss daemon stop` | Stop the daemon | Yes (admin-privileged token) | admin |
 | `hiboss daemon status` | Show daemon status | Yes (admin-privileged token) | admin |
-| `hiboss mcp serve` | Start stdio MCP server for Claude/Codex clients | Yes (agent/admin token) | n/a (RPC methods enforce permissions) |
 | `hiboss envelope send` | Send an envelope | Yes (agent token) | restricted |
 | `hiboss envelope list` | List envelopes | Yes (agent token) | restricted |
 | `hiboss envelope thread` | Show envelope thread | Yes (agent token) | restricted |
@@ -50,6 +49,8 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | `hiboss team remove-member` | Remove an agent from a team | Yes (agent/admin token) | privileged |
 | `hiboss team status` | Show one team and its members | Yes (agent/admin token) | restricted |
 | `hiboss team list` | List teams | Yes (agent/admin token) | restricted |
+| `hiboss team list-members` | List member records for one team | Yes (agent/admin token) | restricted |
+| `hiboss team send` | Fan out one message to all active team members (excluding sender) | Yes (agent token) | restricted |
 | `hiboss team delete` | Delete a team and remove teamspace | Yes (admin token) | admin |
 
 Note: `hiboss daemon start` prints startup failure guidance directly in CLI when available (for example setup-integrity remediation), and also writes details to `daemon.log`.
@@ -65,4 +66,3 @@ Note: `hiboss daemon start` prints startup failure guidance directly in CLI when
 - Reactions: `docs/spec/cli/reactions.md`
 - Agents: `docs/spec/cli/agents.md`
 - Teams: `docs/spec/cli/teams.md`
-- MCP: `docs/spec/cli/mcp.md`

@@ -152,7 +152,7 @@ Notes:
 - Channel platform message ids (e.g., Telegram `message_id`) are stored internally in `envelope.metadata.channelMessageId` for adapter delivery, but are intentionally **not rendered** in agent prompts/CLI envelope instructions.
 - Agents should use `envelope-id:` + `hiboss envelope send --reply-to <envelope-id>` for quoting (channels) and threading (agent↔agent).
 - Session-pinned delivery stores `envelope.metadata.targetSessionId` (internal agent session id) and routes execution to that session when valid for the destination agent.
-- Envelope creation source is tracked in `envelope.metadata.origin` (`cli | mcp | channel | cron | internal`) for history/audit.
+- Envelope creation source is tracked in `envelope.metadata.origin` (`cli | channel | cron | internal`) for history/audit.
 
 ### CLI Output (Cron Schedules)
 
@@ -349,6 +349,25 @@ Command flags:
   - `success: true|false`
   - `team-name:`
   - `agent-name:`
+- `hiboss team list-members` prints:
+  - `team-name:`
+  - `member-count:`
+  - `no-members: true` (only when empty)
+  - repeated records:
+    - `agent-name:`
+    - `source:`
+    - `joined-at:`
+- `hiboss team send` prints:
+  - `team-name:`
+  - `requested-count:`
+  - `sent-count:`
+  - `failed-count:`
+  - `no-recipients: true` (only when recipient set is empty)
+  - repeated records:
+    - `agent-name:`
+    - `status:` (`sent|failed`)
+    - `id:` (short envelope id or `none`)
+    - `error:` (error message or `none`)
 - `hiboss team delete` prints:
   - `success: true|false`
   - `team-name:`

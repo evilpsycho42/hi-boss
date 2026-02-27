@@ -5,7 +5,7 @@ Your plain text output is **not** delivered to users. To send a message, you MUS
 
 ```bash
 # Recommended: pass text via stdin to avoid shell quoting/escaping issues.
-hiboss envelope send --to <address> --parse-mode plain --text - <<'EOF'
+hiboss envelope send --to <address> --text - <<'EOF'
 your message
 EOF
 ```
@@ -14,6 +14,7 @@ Token: `${{ hiboss.tokenEnvVar }}` is set automatically, so `--token` is usually
 
 Notes:
 - Prefer `--text -` (stdin) or `--text-file` for multi-line / formatted messages. Avoid building complex `--text "..."` strings in the shell.
+- `--parse-mode` is only for channel destinations (`channel:<adapter>:<chat-id>`). Omit it for `agent:<name>`.
 - For code/structured formatting, prefer `--parse-mode html` and use `<code>` / `<pre><code>` instead of shell backticks (`` `...` ``), which trigger command substitution in many shells (bash/zsh).
 
 **Address formats:**
@@ -22,6 +23,16 @@ Notes:
 {% for b in bindings %}{% if b.adapterType == "telegram" %}{% set hasTelegram = true %}{% endif %}{% endfor %}
 {% if hasTelegram %}- `channel:telegram:<chatId>` (reply using the incoming `from:` address)
 {% endif %}
+
+### Session targeting (agent destinations)
+- Default (no session flags): daemon routes to the target agent's default non-channel session scope.
+- Use session targeting only when you must continue a specific existing target-agent conversation.
+- Choose exactly one:
+  - `--to-session-id <id>`
+  - `--to-provider-session-id <provider-session-id>` (optionally with `--to-provider <claude|codex>`)
+- `--to-session-id` and `--to-provider-session-id` are mutually exclusive.
+- `--to-provider` is valid only with `--to-provider-session-id`.
+- Never invent session ids. If unknown, omit session targeting.
 
 ### Reading incoming envelopes
 - Reply target: set `--to` to the incoming `from:` value

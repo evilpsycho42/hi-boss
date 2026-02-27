@@ -35,6 +35,9 @@ Notes:
 | `agent.name` | string | Agent name |
 | `agent.description` | string | Agent description (or empty) |
 | `agent.workspace` | string | Effective workspace directory used for the run (active teamspace if member of an active team, otherwise agent workspace or runtime default) |
+| `agent.workspaceConfigured` | string | Agent's configured personal workspace (`agent.workspace` setting) or empty |
+| `agent.teamWorkspaces` | array | Active team workspace directories for this agent |
+| `agent.allWorkspaces` | array | All available workspaces for the run (effective + configured + active team workspaces; deduplicated) |
 | `agent.provider` | string | `claude` or `codex` |
 | `agent.model` | string | Model id/alias (or empty) |
 | `agent.reasoningEffort` | string | one of: `none`, `low`, `medium`, `high`, `xhigh` (or empty) |
@@ -55,6 +58,9 @@ Notes:
 | `teams[].members` | array | Team member agent names |
 | `teams[].teamspaceDir` | string | Team shared workspace directory (`{{hiboss.dir}}/teamspaces/<team-name>/`) |
 | `workspace.dir` | string | Effective workspace directory (same as `agent.workspace`) |
+| `workspace.configuredDir` | string | Agent's configured personal workspace (or empty) |
+| `workspace.teamDirs` | array | Active team workspace directories |
+| `workspace.allDirs` | array | All available workspaces for the run (deduplicated) |
 
 ---
 

@@ -89,4 +89,6 @@ If an operation is missing from the policy, it defaults to `admin` (safe-by-defa
 | `team.remove-member` | `privileged` |
 | `team.status` | `restricted` |
 | `team.list` | `restricted` |
+| `team.list-members` | `restricted` |
+| `team.send` | `restricted` |
 | `team.delete` | `admin` |

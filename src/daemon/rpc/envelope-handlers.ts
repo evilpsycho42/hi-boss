@@ -15,8 +15,8 @@ import { requireToken, rpcError } from "./context.js";
 import { formatAgentAddress, parseAddress } from "../../adapters/types.js";
 import { parseDateTimeInputToUnixMsInTimeZone } from "../../shared/time.js";
 import { resolveEnvelopeIdInput } from "./resolve-envelope-id.js";
-import type { Envelope, EnvelopeOrigin } from "../../envelope/types.js";
-import { DEFAULT_ID_PREFIX_LEN, isHexLower, normalizeIdPrefixInput } from "../../shared/id-format.js";
+import type { Envelope } from "../../envelope/types.js";
+import { sendEnvelopeFromAgent } from "./envelope-send-core.js";
 
 function parseEnvelopeListTimeBoundary(params: {
   raw: unknown;
@@ -37,105 +37,6 @@ function parseEnvelopeListTimeBoundary(params: {
   }
 }
 
-function resolveTargetSessionIdForSend(params: {
-  ctx: DaemonContext;
-  toSessionId: unknown;
-  toProviderSessionId: unknown;
-  toProvider: unknown;
-  destination: ReturnType<typeof parseAddress>;
-  destinationAgentName?: string;
-}): string | undefined {
-  const hasToSessionId = params.toSessionId !== undefined;
-  const hasToProviderSessionId = params.toProviderSessionId !== undefined;
-  const hasToProvider = params.toProvider !== undefined;
-
-  if (!hasToSessionId && !hasToProviderSessionId && !hasToProvider) {
-    return undefined;
-  }
-
-  if (params.destination.type !== "agent") {
-    rpcError(
-      RPC_ERRORS.INVALID_PARAMS,
-      "Session targeting is only supported for agent destinations"
-    );
-  }
-
-  if (!params.destinationAgentName) {
-    rpcError(RPC_ERRORS.INTERNAL_ERROR, "Missing destination agent context");
-  }
-
-  if (hasToSessionId && hasToProviderSessionId) {
-    rpcError(
-      RPC_ERRORS.INVALID_PARAMS,
-      "Provide only one of: to-session-id, to-provider-session-id"
-    );
-  }
-
-  if (!hasToSessionId && !hasToProviderSessionId && hasToProvider) {
-    rpcError(
-      RPC_ERRORS.INVALID_PARAMS,
-      "to-provider can only be used with to-provider-session-id"
-    );
-  }
-
-  if (hasToSessionId) {
-    if (typeof params.toSessionId !== "string" || !params.toSessionId.trim()) {
-      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to-session-id");
-    }
-
-    const raw = params.toSessionId.trim();
-    const direct = params.ctx.db.getAgentSessionById(raw);
-    if (direct && direct.agentName === params.destinationAgentName) {
-      return direct.id;
-    }
-
-    const compactPrefix = normalizeIdPrefixInput(raw);
-    if (compactPrefix.length < DEFAULT_ID_PREFIX_LEN || !isHexLower(compactPrefix)) {
-      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to-session-id");
-    }
-
-    const matches = params.ctx.db.findAgentSessionsByIdPrefix(
-      params.destinationAgentName,
-      compactPrefix,
-      20
-    );
-    if (matches.length === 1) {
-      return matches[0]!.id;
-    }
-    if (matches.length === 0) {
-      rpcError(RPC_ERRORS.NOT_FOUND, "Session not found");
-    }
-
-    rpcError(
-      RPC_ERRORS.INVALID_PARAMS,
-      "Ambiguous to-session-id (matches multiple sessions)"
-    );
-  }
-
-  if (typeof params.toProviderSessionId !== "string" || !params.toProviderSessionId.trim()) {
-    rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to-provider-session-id");
-  }
-
-  let provider: "claude" | "codex" | undefined;
-  if (params.toProvider !== undefined) {
-    if (params.toProvider !== "claude" && params.toProvider !== "codex") {
-      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to-provider (expected claude or codex)");
-    }
-    provider = params.toProvider;
-  }
-
-  const byProviderSession = params.ctx.db.findAgentSessionByProviderSessionId({
-    agentName: params.destinationAgentName,
-    providerSessionId: params.toProviderSessionId.trim(),
-    provider,
-  });
-  if (!byProviderSession) {
-    rpcError(RPC_ERRORS.NOT_FOUND, "Session not found");
-  }
-
-  return byProviderSession.id;
-}
-
 /**
  * Create envelope RPC handlers.
  */
@@ -153,188 +54,27 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
       );
     }
 
-    if (typeof p.to !== "string" || !p.to.trim()) {
-      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to");
-    }
-
-    const toInput = p.to.trim();
-
-    let destination: ReturnType<typeof parseAddress>;
-    try {
-      destination = parseAddress(toInput);
-    } catch (err) {
-      rpcError(RPC_ERRORS.INVALID_PARAMS, err instanceof Error ? err.message : "Invalid to");
-    }
-
-    let from: string;
-    let fromBoss = false;
-    let interruptNow = false;
-    const metadata: Record<string, unknown> = {};
-    let origin: EnvelopeOrigin = "cli";
-
     if (p.from !== undefined || p.fromBoss !== undefined || p.fromName !== undefined) {
       rpcError(RPC_ERRORS.UNAUTHORIZED, "Access denied");
     }
 
-    const agent = principal.agent;
-    ctx.db.updateAgentLastSeen(agent.name);
-    from = formatAgentAddress(agent.name);
-
-    if (p.interruptNow !== undefined) {
-      if (typeof p.interruptNow !== "boolean") {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid interrupt-now");
-      }
-      interruptNow = p.interruptNow;
-    }
-
-    if (p.origin !== undefined) {
-      if (p.origin !== "cli" && p.origin !== "mcp" && p.origin !== "internal") {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid origin");
-      }
-      origin = p.origin;
-    }
-    metadata.origin = origin;
-
-    let destinationAgentName: string | undefined;
-    const to = (() => {
-      if (destination.type !== "agent") return toInput;
-
-      const destAgent = ctx.db.getAgentByNameCaseInsensitive(destination.agentName);
-      if (!destAgent) {
-        rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
-      }
-      destinationAgentName = destAgent.name;
-      return formatAgentAddress(destAgent.name);
-    })();
-
-    if (interruptNow && p.deliverAt !== undefined) {
-      rpcError(RPC_ERRORS.INVALID_PARAMS, "interrupt-now cannot be used with deliver-at");
-    }
-
-    if (interruptNow && destination.type !== "agent") {
-      rpcError(RPC_ERRORS.INVALID_PARAMS, "interrupt-now is only supported for agent destinations");
-    }
-
-    // Check binding for channel destinations (agent sender only)
-    if (destination.type === "channel") {
-      const binding = ctx.db.getAgentBindingByType(agent.name, destination.adapter);
-      if (!binding) {
-        rpcError(
-          RPC_ERRORS.UNAUTHORIZED,
-          `Agent '${agent.name}' is not bound to adapter '${destination.adapter}'`
-        );
-      }
-    }
-
-    // Validate channel delivery requirements: sending to a channel requires from=agent:*
-    if (destination.type === "channel") {
-      let sender: ReturnType<typeof parseAddress>;
-      try {
-        sender = parseAddress(from);
-      } catch (err) {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, err instanceof Error ? err.message : "Invalid from");
-      }
-      if (sender.type !== "agent") {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "Channel destinations require from=agent:<name>");
-      }
-    }
-
-    if (p.parseMode !== undefined) {
-      if (typeof p.parseMode !== "string") {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid parse-mode");
-      }
-      const mode = p.parseMode.trim();
-      if (mode !== "plain" && mode !== "markdownv2" && mode !== "html") {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid parse-mode (expected plain, markdownv2, or html)");
-      }
-      if (destination.type !== "channel") {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "parse-mode is only supported for channel destinations");
-      }
-      metadata.parseMode = mode;
-    }
-
-    if (p.replyToEnvelopeId !== undefined) {
-      if (typeof p.replyToEnvelopeId !== "string" || !p.replyToEnvelopeId.trim()) {
-        rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid reply-to-envelope-id");
-      }
-      metadata.replyToEnvelopeId = resolveEnvelopeIdInput(ctx.db, p.replyToEnvelopeId.trim());
-    }
-
-    const targetSessionId = resolveTargetSessionIdForSend({
+    return sendEnvelopeFromAgent({
       ctx,
-      toSessionId: p.toSessionId,
-      toProviderSessionId: p.toProviderSessionId,
-      toProvider: p.toProvider,
-      destination,
-      destinationAgentName,
+      senderAgent: principal.agent,
+      input: {
+        to: p.to,
+        text: p.text,
+        attachments: p.attachments,
+        deliverAt: p.deliverAt,
+        interruptNow: p.interruptNow,
+        parseMode: p.parseMode,
+        replyToEnvelopeId: p.replyToEnvelopeId,
+        toSessionId: p.toSessionId,
+        toProviderSessionId: p.toProviderSessionId,
+        toProvider: p.toProvider,
+        origin: p.origin,
+      },
     });
-    if (targetSessionId) {
-      metadata.targetSessionId = targetSessionId;
-    }
-
-    let deliverAt: number | undefined;
-    if (p.deliverAt) {
-      try {
-        deliverAt = parseDateTimeInputToUnixMsInTimeZone(p.deliverAt, ctx.db.getBossTimezone());
-      } catch (err) {
-        rpcError(
-          RPC_ERRORS.INVALID_PARAMS,
-          err instanceof Error ? err.message : "Invalid deliver-at"
-        );
-      }
-    }
-
-    const finalMetadata = Object.keys(metadata).length > 0 ? metadata : undefined;
-    let interruptedWork = false;
-
-    if (interruptNow && destination.type === "agent") {
-      const targetAgent = ctx.db.getAgentByNameCaseInsensitive(destination.agentName);
-      if (!targetAgent) {
-        rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
-      }
-      interruptedWork = ctx.executor.abortCurrentRun(
-        targetAgent.name,
-        "rpc:envelope.send:interrupt-now"
-      );
-    }
-
-    try {
-      const envelope = await ctx.router.routeEnvelope({
-        from,
-        to,
-        fromBoss,
-        content: {
-          text: p.text,
-          attachments: p.attachments,
-        },
-        priority: interruptNow ? 1 : 0,
-        deliverAt,
-        metadata: finalMetadata,
-      });
-
-      ctx.scheduler.onEnvelopeCreated(envelope);
-      if (interruptNow) {
-        return {
-          id: envelope.id,
-          interruptedWork,
-          priorityApplied: true,
-        };
-      }
-      return { id: envelope.id };
-    } catch (err) {
-      // Best-effort: ensure the scheduler sees newly-created scheduled envelopes, even if immediate delivery failed.
-      const e = err as Error & { data?: unknown };
-      if (e.data && typeof e.data === "object") {
-        const id = (e.data as Record<string, unknown>).envelopeId;
-        if (typeof id === "string" && id.trim()) {
-          const env = ctx.db.getEnvelopeById(id.trim());
-          if (env) {
-            ctx.scheduler.onEnvelopeCreated(env);
-          }
-        }
-      }
-      throw err;
-    }
   };
 
   const createEnvelopeList = (operation: string) => async (params: Record<string, unknown>) => {

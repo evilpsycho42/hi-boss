@@ -47,7 +47,7 @@ Canonical envelope methods:
 - `interruptNow?: boolean` (agent destinations only; mutually exclusive with `deliverAt`; interrupts current work and prioritizes the new envelope)
 - `toSessionId?: string` (agent destinations only; pin target execution to a specific Hi-Boss session)
 - `toProviderSessionId?: string` + `toProvider?: "claude" | "codex"` (agent destinations only; pin by provider session/thread id)
-- `origin?: "cli" | "mcp" | "internal"` (optional audit source; defaults to `cli` when omitted)
+- `origin?: "cli" | "internal"` (optional audit source; defaults to `cli` when omitted)
 
 Reactions:
 
@@ -86,7 +86,18 @@ Teams:
 - `team.remove-member`
 - `team.status`
 - `team.list`
+- `team.list-members`
+- `team.send`
 - `team.delete`
+
+`team.list-members` params/result:
+- params: `token`, `teamName`
+- result: `teamName`, `members[]` (`agentName`, `source`, `createdAt`)
+
+`team.send` params/result:
+- params: `token`, `teamName`, `text?`, `attachments?`, `deliverAt?`, `interruptNow?`, `replyToEnvelopeId?`, `toSessionId?`, `toProviderSessionId?`, `toProvider?`, `origin?`
+- result: `teamName`, `requestedCount`, `sentCount`, `failedCount`, `results[]`
+- semantics: fan-out singlecast to each team member (excluding sender), best-effort across recipients
 
 Sessions:
 

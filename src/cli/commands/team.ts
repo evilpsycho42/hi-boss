@@ -4,9 +4,11 @@ import { resolveToken } from "../token.js";
 import type {
   TeamDeleteResult,
   TeamListResult,
+  TeamListMembersResult,
   TeamMemberAddResult,
   TeamMemberRemoveResult,
   TeamRegisterResult,
+  TeamSendResult,
   TeamSetResult,
   TeamStatusResult,
 } from "../../daemon/ipc/types.js";
@@ -18,6 +20,8 @@ import {
 } from "../../shared/validation.js";
 import { formatUnixMsAsTimeZoneOffset } from "../../shared/time.js";
 import { getDaemonTimeContext } from "../time-context.js";
+import { formatShortId } from "../../shared/id-format.js";
+import { extractTelegramFileId, normalizeAttachmentSource, resolveText } from "./envelope-input.js";
 
 export interface TeamRegisterOptions {
   token?: string;
@@ -51,6 +55,25 @@ export interface TeamStatusOptions {
 export interface TeamListOptions {
   token?: string;
   status?: "active" | "archived";
+}
+
+export interface TeamListMembersOptions {
+  token?: string;
+  name: string;
+}
+
+export interface TeamSendOptions {
+  token?: string;
+  name: string;
+  text?: string;
+  textFile?: string;
+  attachment?: string[];
+  deliverAt?: string;
+  interruptNow?: boolean;
+  replyTo?: string;
+  toSessionId?: string;
+  toProviderSessionId?: string;
+  toProvider?: "claude" | "codex";
 }
 
 function printTeamRecord(team: {
@@ -238,6 +261,97 @@ export async function listTeams(options: TeamListOptions): Promise<void> {
     for (const team of result.teams) {
       printTeamRecord(team, time.bossTimezone);
       console.log();
+    }
+  } catch (err) {
+    console.error("error:", (err as Error).message);
+    process.exit(1);
+  }
+}
+
+export async function listTeamMembers(options: TeamListMembersOptions): Promise<void> {
+  const config = getDefaultConfig();
+  const client = new IpcClient(getSocketPath(config));
+
+  try {
+    if (!isValidTeamName(options.name)) {
+      throw new Error(TEAM_NAME_ERROR_MESSAGE);
+    }
+
+    const token = resolveToken(options.token);
+    const time = await getDaemonTimeContext({ client, token });
+    const result = await client.call<TeamListMembersResult>("team.list-members", {
+      token,
+      teamName: options.name,
+    });
+
+    console.log(`team-name: ${result.teamName}`);
+    console.log(`member-count: ${result.members.length}`);
+    if (result.members.length === 0) {
+      console.log("no-members: true");
+      return;
+    }
+
+    for (const member of result.members) {
+      console.log(`agent-name: ${member.agentName}`);
+      console.log(`source: ${member.source}`);
+      console.log(`joined-at: ${formatUnixMsAsTimeZoneOffset(member.createdAt, time.bossTimezone)}`);
+      console.log();
+    }
+  } catch (err) {
+    console.error("error:", (err as Error).message);
+    process.exit(1);
+  }
+}
+
+export async function sendTeam(options: TeamSendOptions): Promise<void> {
+  const config = getDefaultConfig();
+  const client = new IpcClient(getSocketPath(config));
+
+  try {
+    if (!isValidTeamName(options.name)) {
+      throw new Error(TEAM_NAME_ERROR_MESSAGE);
+    }
+
+    const token = resolveToken(options.token);
+    const text = await resolveText(options.text, options.textFile);
+    const result = await client.call<TeamSendResult>("team.send", {
+      token,
+      teamName: options.name,
+      text,
+      attachments: options.attachment?.map((source) => {
+        const telegramFileId = extractTelegramFileId(source);
+        return {
+          source: normalizeAttachmentSource(source),
+          ...(telegramFileId ? { telegramFileId } : {}),
+        };
+      }),
+      deliverAt: options.deliverAt,
+      interruptNow: options.interruptNow,
+      replyToEnvelopeId: options.replyTo,
+      toSessionId: options.toSessionId,
+      toProviderSessionId: options.toProviderSessionId,
+      toProvider: options.toProvider,
+    });
+
+    console.log(`team-name: ${result.teamName}`);
+    console.log(`requested-count: ${result.requestedCount}`);
+    console.log(`sent-count: ${result.sentCount}`);
+    console.log(`failed-count: ${result.failedCount}`);
+    if (result.requestedCount === 0) {
+      console.log("no-recipients: true");
+      return;
+    }
+
+    for (const item of result.results) {
+      console.log(`agent-name: ${item.agentName}`);
+      console.log(`status: ${item.success ? "sent" : "failed"}`);
+      console.log(`id: ${item.envelopeId ? formatShortId(item.envelopeId) : "none"}`);
+      console.log(`error: ${item.error ?? "none"}`);
+      console.log();
+    }
+
+    if (result.failedCount > 0) {
+      process.exit(1);
     }
   } catch (err) {
     console.error("error:", (err as Error).message);

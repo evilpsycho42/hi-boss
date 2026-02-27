@@ -29,7 +29,7 @@ export interface EnvelopeContent {
  * Envelope status.
  */
 export type EnvelopeStatus = "pending" | "done";
-export type EnvelopeOrigin = "cli" | "mcp" | "channel" | "cron" | "internal";
+export type EnvelopeOrigin = "cli" | "channel" | "cron" | "internal";
 
 /**
  * Internal message format for agent-to-agent and human-to-agent communication.

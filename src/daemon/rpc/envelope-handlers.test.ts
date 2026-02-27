@@ -7,6 +7,7 @@ import type { DaemonContext } from "./context.js";
 import type { CreateEnvelopeInput, Envelope } from "../../envelope/types.js";
 import type { Agent } from "../../agent/types.js";
 import type { AgentSessionRecord } from "../db/database.js";
+import { INTERNAL_VERSION } from "../../shared/version.js";
 
 function makeAgent(name: string): Agent {
   return {
@@ -95,7 +96,7 @@ function makeContext(params: {
       agent: params.sender,
     }),
     assertOperationAllowed: () => undefined,
-    getPermissionPolicy: () => ({ version: 1, operations: { "envelope.send": "restricted" } }),
+    getPermissionPolicy: () => ({ version: INTERNAL_VERSION, operations: { "envelope.send": "restricted" } }),
     createAdapterForBinding: async () => null,
     removeAdapter: async () => undefined,
     registerAgentHandler: () => undefined,
@@ -221,46 +222,6 @@ test("envelope.send interruptNow aborts work and creates priority envelope", asy
   assert.equal(result.id, "env-priority");
   assert.equal(result.interruptedWork, true);
   assert.equal(result.priorityApplied, true);
-});
-
-test("envelope.send accepts origin=mcp and stamps metadata origin", async () => {
-  const sender = makeAgent("sender");
-  const target = makeAgent("target");
-  let routedInput: CreateEnvelopeInput | null = null;
-
-  const ctx = makeContext({
-    sender,
-    targetAgent: target,
-    routeEnvelope: async (input) => {
-      routedInput = input;
-      return {
-        id: "env-origin",
-        from: input.from,
-        to: input.to,
-        fromBoss: false,
-        content: input.content,
-        priority: input.priority,
-        status: "pending",
-        createdAt: Date.now(),
-        metadata: input.metadata,
-      };
-    },
-  });
-
-  const handlers = createEnvelopeHandlers(ctx);
-  await handlers["envelope.send"]({
-    token: sender.token,
-    to: "agent:target",
-    text: "hello-from-mcp",
-    origin: "mcp",
-  });
-
-  assert.notEqual(routedInput, null);
-  if (!routedInput) {
-    assert.fail("Expected routeEnvelope input to be captured");
-  }
-  const metadata = (routedInput as CreateEnvelopeInput).metadata as Record<string, unknown> | undefined;
-  assert.equal(metadata?.origin, "mcp");
 });
 
 test("envelope.send rejects session targeting for channel destinations", async () => {

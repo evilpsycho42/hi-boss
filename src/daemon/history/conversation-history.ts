@@ -326,7 +326,6 @@ export class ConversationHistory {
       const origin = (md as Record<string, unknown>).origin;
       if (
         origin === "cli" ||
-        origin === "mcp" ||
         origin === "channel" ||
         origin === "cron" ||
         origin === "internal"

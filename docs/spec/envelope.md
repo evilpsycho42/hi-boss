@@ -69,7 +69,7 @@ Session-targeting note:
 - The daemon resolves and stores the pinned target as `envelope.metadata.targetSessionId`.
 
 Origin note:
-- Envelope origin is tracked in `metadata.origin` for audit/history (`cli | mcp | channel | cron | internal`).
+- Envelope origin is tracked in `metadata.origin` for audit/history (`cli | channel | cron | internal`).
 
 ---
 

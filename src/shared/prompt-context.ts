@@ -252,6 +252,24 @@ export function buildSystemPromptContext(params: {
       : (params.agent.workspace && params.agent.workspace.trim())
         ? params.agent.workspace.trim()
         : getDefaultRuntimeWorkspace();
+  const configuredWorkspaceDir =
+    (params.agent.workspace && params.agent.workspace.trim())
+      ? params.agent.workspace.trim()
+      : "";
+  const teamWorkspaceDirs = Array.from(
+    new Set(
+      (params.teams ?? [])
+        .map((team) => (team.teamspaceDir ?? "").trim())
+        .filter((dir) => dir.length > 0),
+    ),
+  );
+  const allWorkspaceDirs = Array.from(
+    new Set(
+      [workspaceDir, configuredWorkspaceDir, ...teamWorkspaceDirs].filter(
+        (dir) => dir.length > 0,
+      ),
+    ),
+  );
 
   const hibossFiles = readHiBossCustomizationFiles(hibossDir);
   const agentFiles = readAgentCustomizationFiles({ hibossDir, agentName: params.agent.name });
@@ -290,6 +308,9 @@ export function buildSystemPromptContext(params: {
       name: params.agent.name,
       description: params.agent.description ?? "",
       workspace: workspaceDir,
+      workspaceConfigured: configuredWorkspaceDir,
+      teamWorkspaces: teamWorkspaceDirs,
+      allWorkspaces: allWorkspaceDirs,
       provider: params.agent.provider ?? DEFAULT_AGENT_PROVIDER,
       model: params.agent.model ?? "",
       reasoningEffort: params.agent.reasoningEffort ?? "",
@@ -323,6 +344,9 @@ export function buildSystemPromptContext(params: {
     })),
     workspace: {
       dir: workspaceDir,
+      configuredDir: configuredWorkspaceDir,
+      teamDirs: teamWorkspaceDirs,
+      allDirs: allWorkspaceDirs,
     },
   };
 }
