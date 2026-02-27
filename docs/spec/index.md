@@ -48,4 +48,3 @@
 ## Adapters
 
 - Telegram adapter: `docs/spec/adapters/telegram.md`
-- WeChatPadPro adapter: `docs/spec/adapters/wechatpadpro.md`

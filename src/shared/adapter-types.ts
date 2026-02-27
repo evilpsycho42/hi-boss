@@ -1,4 +1,4 @@
-export const KNOWN_ADAPTER_TYPES = ["telegram", "wechatpadpro"] as const;
+export const KNOWN_ADAPTER_TYPES = ["telegram"] as const;
 
 export type KnownAdapterType = (typeof KNOWN_ADAPTER_TYPES)[number];
 

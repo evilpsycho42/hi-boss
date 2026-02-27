@@ -18,7 +18,6 @@ import {
   deleteCron,
   setReaction,
   runSetup,
-  serveMcp,
 } from "./commands/index.js";
 import { registerAgentCommands } from "./cli-agent.js";
 import { registerTeamCommands } from "./cli-team.js";
@@ -336,23 +335,6 @@ cron
 
 registerAgentCommands(program);
 registerTeamCommands(program);
-
-const mcp = program
-  .command("mcp")
-  .description("MCP server")
-  .helpCommand(false);
-
-mcp
-  .command("serve")
-  .description("Run Hi-Boss MCP server on stdio")
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
-  .action((options) => {
-    serveMcp({ token: options.token }).catch((err) => {
-      const e = err as Error;
-      console.error("error:", e.message);
-      process.exit(1);
-    });
-  });
 
 const setup = program
   .command("setup")

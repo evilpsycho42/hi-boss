@@ -39,7 +39,7 @@ Optional flags (defaults):
 - `metadata`: unset
 
 Notes:
-- Supported adapter types for binding are `telegram` and `wechatpadpro`.
+- Supported adapter types for binding are `telegram`.
 - `--model default` on register clears the model override to provider default (`NULL`).
 - `--reasoning-effort default` on register clears the reasoning-effort override to provider default (`NULL`).
 
@@ -88,7 +88,7 @@ Notes:
 - `--clear-metadata` clears user metadata but preserves the internal session resume handle (`metadata.sessionHandle`). The `sessionHandle` key is reserved and is ignored if provided via `--metadata-*`.
 - `--bind-adapter-*` and `--unbind-adapter-type` may be used together for same-command binding swaps.
 - `--bind-adapter-*` alone replaces an existing binding token for that same adapter type on the target agent (atomic replace).
-- Supported adapter types for bind/unbind are `telegram` and `wechatpadpro`.
+- Supported adapter types for bind/unbind are `telegram`.
 
 Provider-home behavior follows `docs/spec/cli/conventions.md#provider-homes`.
 

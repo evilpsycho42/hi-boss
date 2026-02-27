@@ -30,7 +30,7 @@ This document is a high-level view of Hi-Boss. For details, see the linked spec 
 | Scheduler | Wakes future `deliver-at` envelopes and triggers delivery | `docs/spec/components/scheduler.md` |
 | Agent executor | Runs provider CLI sessions and marks envelopes done | `docs/spec/components/agent.md`, `docs/spec/components/session.md` |
 | CLI | Talks to daemon over IPC for ops + envelopes | `docs/spec/ipc.md` |
-| Adapters | Bridge external systems to channel messages/commands | `docs/spec/adapters/telegram.md`, `docs/spec/adapters/wechatpadpro.md` |
+| Adapters | Bridge external systems to channel messages/commands | `docs/spec/adapters/telegram.md` |
 
 ## Key Invariants
 
