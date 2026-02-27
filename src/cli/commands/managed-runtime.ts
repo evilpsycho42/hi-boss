@@ -124,11 +124,11 @@ function resolvePm2Command(): string {
 const PM2_COMMAND = resolvePm2Command();
 
 function resolveDockerComposeCommand(): { command: string; baseArgs: string[] } {
-  const dockerComposeV2 = spawnSync("docker", ["compose", "version"], {
+  const dockerComposeModern = spawnSync("docker", ["compose", "version"], {
     stdio: ["ignore", "pipe", "pipe"],
     encoding: "utf8",
   });
-  if (dockerComposeV2.status === 0) {
+  if (dockerComposeModern.status === 0) {
     return { command: "docker", baseArgs: ["compose"] };
   }
   return { command: "docker-compose", baseArgs: [] };

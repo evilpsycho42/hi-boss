@@ -113,6 +113,17 @@ pm2 logs hiboss-daemon --lines 200 --nostream
 pm2 restart hiboss-daemon
 ```
 
+Windows (Tailscale) access:
+- Node: `WIN-H9HOROG0IKJ` (`100.72.210.95`)
+- SSH user: `Administrator`
+- Auth: SSH public key (no passwords in repo/docs)
+- Connect:
+  - `ssh Administrator@100.72.210.95`
+- Quick verification on host:
+  - `where hiboss`
+  - `hiboss --version`
+  - `hiboss envelope send --help`
+
 Credentials policy:
 - Read server credentials from local private knowledge files (for Shieru: `agents/Shieru/internal_space/knowledge/credentials.md`).
 - Never copy passwords/tokens/keys into repo files, specs, plans, commits, or PR comments.
