@@ -25,10 +25,10 @@ import { parseDailyResetAt, parseDurationToMs } from "../../shared/session-polic
 import {
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
-  getDefaultRuntimeWorkspace,
 } from "../../shared/defaults.js";
 import { createAgentRegisterHandler } from "./agent-register-handler.js";
 import { mutateSettingsAndSync } from "../settings-sync.js";
+import { resolveAgentWorkspace } from "../../team/runtime.js";
 
 /**
  * Create agent RPC handlers (excluding agent.set which is in its own file).
@@ -93,7 +93,11 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
 
       const effectiveProvider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
       const effectivePermissionLevel = agent.permissionLevel ?? DEFAULT_AGENT_PERMISSION_LEVEL;
-      const effectiveWorkspace = agent.workspace ?? getDefaultRuntimeWorkspace();
+      const effectiveWorkspace = resolveAgentWorkspace({
+        db: ctx.db,
+        hibossDir: ctx.config.dataDir,
+        agent,
+      });
 
       const isBusy = ctx.executor.isAgentBusy(agent.name);
       const pendingCount = ctx.db.countDuePendingEnvelopesForAgent(agent.name);
@@ -349,7 +353,11 @@ export function createAgentHandlers(ctx: DaemonContext): RpcMethodRegistry {
       ctx.db.updateAgentLastSeen(agent.name);
 
       const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
-      const workspace = agent.workspace ?? getDefaultRuntimeWorkspace();
+      const workspace = resolveAgentWorkspace({
+        db: ctx.db,
+        hibossDir: ctx.config.dataDir,
+        agent,
+      });
       const reasoningEffort = agent.reasoningEffort;
 
       return {

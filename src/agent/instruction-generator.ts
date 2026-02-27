@@ -29,6 +29,12 @@ export interface InstructionContext {
   agent: Agent;
   agentToken: string;
   bindings?: AgentBinding[];
+  workspaceDir?: string;
+  teams?: Array<{
+    name: string;
+    members: string[];
+    teamspaceDir: string;
+  }>;
   additionalContext?: string;
   hibossDir?: string;
   bossTimezone?: string;
@@ -63,6 +69,8 @@ export function generateSystemInstructions(ctx: InstructionContext): string {
     agent,
     agentToken,
     bindings: bindings ?? [],
+    workspaceDir: ctx.workspaceDir,
+    teams: ctx.teams ?? [],
     time: { bossTimezone: ctx.bossTimezone },
     hibossDir: ctx.hibossDir,
     boss,

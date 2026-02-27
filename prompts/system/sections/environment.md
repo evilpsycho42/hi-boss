@@ -12,7 +12,8 @@
 {% endif %}
 
 ### Paths
-- **Workspace**: {{ agent.workspace }}
+- **Workspace (effective)**: {{ agent.workspace }}
+- **Teamspaces root**: {{ hiboss.dir }}/teamspaces/
 - **Internal workspace**: {{ hiboss.dir }}/agents/{{ agent.name }}/
 - **Long-term memory (auto-injected)**: {{ hiboss.dir }}/agents/{{ agent.name }}/internal_space/MEMORY.md
 - **Daily memory dir**: {{ hiboss.dir }}/agents/{{ agent.name }}/internal_space/memories/

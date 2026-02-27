@@ -8,10 +8,7 @@
 import type { Agent } from "./types.js";
 import type { HiBossDatabase } from "../daemon/db/database.js";
 import { generateSystemInstructions } from "./instruction-generator.js";
-import {
-  DEFAULT_AGENT_PROVIDER,
-  getDefaultRuntimeWorkspace,
-} from "../shared/defaults.js";
+import { DEFAULT_AGENT_PROVIDER } from "../shared/defaults.js";
 import { errorMessage, logEvent } from "../shared/daemon-log.js";
 import {
   getBossInfo,
@@ -23,6 +20,7 @@ import type { AgentRunTrigger } from "./executor-triggers.js";
 import { getTriggerFields } from "./executor-triggers.js";
 import { resolveSessionOpenMode } from "./session-resume.js";
 import { getProviderCliEnvOverrides } from "./provider-env.js";
+import { buildAgentTeamPromptContext, resolveAgentWorkspace } from "../team/runtime.js";
 
 type SessionPolicy = {
   dailyResetAt?: { hour: number; minute: number; normalized: string };
@@ -103,7 +101,11 @@ export async function getOrCreateAgentSession(params: {
       persisted?.handle.sessionId && (persisted.provider === "claude" || persisted.provider === "codex")
         ? persisted.provider
         : desiredProvider;
-    const workspace = params.agent.workspace ?? getDefaultRuntimeWorkspace();
+    const workspace = resolveAgentWorkspace({
+      db: params.db,
+      hibossDir: params.hibossDir,
+      agent: params.agent,
+    });
     const providerEnvOverrides = getProviderCliEnvOverrides(params.agent.metadata, provider);
     const codexCumulativeUsageTotals =
       provider === "codex"
@@ -114,13 +116,20 @@ export async function getOrCreateAgentSession(params: {
       // Generate system instructions for inline injection
       const bindings = params.db.getBindingsByAgentName(params.agent.name);
       const boss = getBossInfo(params.db, bindings);
+      const teams = buildAgentTeamPromptContext({
+        db: params.db,
+        hibossDir: params.hibossDir,
+        agent: params.agent,
+      });
       const instructions = generateSystemInstructions({
         agent: params.agent,
         agentToken: agentRecord.token,
         bindings,
+        workspaceDir: workspace,
         bossTimezone: params.db.getBossTimezone(),
         hibossDir: params.hibossDir,
         boss,
+        teams,
       });
 
       // Resolve session open mode (fresh vs resume)

@@ -229,6 +229,12 @@ export function buildSystemPromptContext(params: {
   agent: Agent;
   agentToken: string;
   bindings: AgentBinding[];
+  workspaceDir?: string;
+  teams?: Array<{
+    name: string;
+    members: string[];
+    teamspaceDir: string;
+  }>;
   time?: {
     bossTimezone?: string;
   };
@@ -243,9 +249,11 @@ export function buildSystemPromptContext(params: {
   const daemonTimeZone = getDaemonIanaTimeZone();
 
   const workspaceDir =
-    params.agent.workspace && params.agent.workspace.trim()
-      ? params.agent.workspace.trim()
-      : getDefaultRuntimeWorkspace();
+    (params.workspaceDir && params.workspaceDir.trim())
+      ? params.workspaceDir.trim()
+      : (params.agent.workspace && params.agent.workspace.trim())
+        ? params.agent.workspace.trim()
+        : getDefaultRuntimeWorkspace();
 
   const hibossFiles = readHiBossCustomizationFiles(hibossDir);
   const agentFiles = readAgentCustomizationFiles({ hibossDir, agentName: params.agent.name });
@@ -313,6 +321,11 @@ export function buildSystemPromptContext(params: {
     bindings: (params.bindings ?? []).map((b) => ({
       adapterType: b.adapterType,
       createdAt: formatUnixMsAsTimeZoneOffset(b.createdAt, bossTimeZone),
+    })),
+    teams: (params.teams ?? []).map((team) => ({
+      name: team.name,
+      members: team.members,
+      teamspaceDir: team.teamspaceDir,
     })),
     workspace: {
       dir: workspaceDir,

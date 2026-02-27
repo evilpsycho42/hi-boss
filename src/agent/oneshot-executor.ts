@@ -23,10 +23,10 @@ import { formatAgentAddress } from "../adapters/types.js";
 import {
   DEFAULT_AGENT_PROVIDER,
   DEFAULT_ONESHOT_MAX_CONCURRENT,
-  getDefaultRuntimeWorkspace,
 } from "../shared/defaults.js";
 import { errorMessage, logEvent } from "../shared/daemon-log.js";
 import { getHiBossDir } from "./home-setup.js";
+import { buildAgentTeamPromptContext, resolveAgentWorkspace } from "../team/runtime.js";
 
 interface OneShotJob {
   envelope: Envelope;
@@ -271,17 +271,28 @@ export class OneShotExecutor {
     }
 
     const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
-    const workspace = agent.workspace ?? getDefaultRuntimeWorkspace();
+    const workspace = resolveAgentWorkspace({
+      db: this.deps.db,
+      hibossDir: this.deps.hibossDir,
+      agent,
+    });
 
     const bindings = this.deps.db.getBindingsByAgentName(agent.name);
     const boss = getBossInfo(this.deps.db, bindings);
+    const teams = buildAgentTeamPromptContext({
+      db: this.deps.db,
+      hibossDir: this.deps.hibossDir,
+      agent,
+    });
     const instructions = generateSystemInstructions({
       agent,
       agentToken: agentRecord.token,
       bindings,
+      workspaceDir: workspace,
       bossTimezone: this.deps.db.getBossTimezone(),
       hibossDir: this.deps.hibossDir,
       boss,
+      teams,
     });
 
     return {

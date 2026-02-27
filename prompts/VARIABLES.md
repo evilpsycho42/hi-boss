@@ -38,7 +38,7 @@ Notes:
 | `boss.adapterIds` | object | Boss identity per adapter type (e.g. `{ telegram: "kevin" }`, or `{}`) |
 | `agent.name` | string | Agent name |
 | `agent.description` | string | Agent description (or empty) |
-| `agent.workspace` | string | Agent workspace directory (resolved; falls back to `process.cwd()`) |
+| `agent.workspace` | string | Effective workspace directory used for the run (active teamspace if member of an active team, otherwise agent workspace or runtime default) |
 | `agent.provider` | string | `claude` or `codex` |
 | `agent.model` | string | Model id/alias (or empty) |
 | `agent.reasoningEffort` | string | one of: `none`, `low`, `medium`, `high`, `xhigh` (or empty) |
@@ -54,7 +54,11 @@ Notes:
 | `bindings` | array | Adapter bindings (no secrets) |
 | `bindings[].adapterType` | string | Adapter type (e.g. `telegram`) |
 | `bindings[].createdAt` | string | ISO 8601 |
-| `workspace.dir` | string | Workspace directory (same as `agent.workspace`) |
+| `teams` | array | Active team memberships for this agent (may be empty) |
+| `teams[].name` | string | Team name |
+| `teams[].members` | array | Team member agent names |
+| `teams[].teamspaceDir` | string | Team shared workspace directory (`{{hiboss.dir}}/teamspaces/<team-name>/`) |
+| `workspace.dir` | string | Effective workspace directory (same as `agent.workspace`) |
 
 ---
 
