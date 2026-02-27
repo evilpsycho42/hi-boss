@@ -17,6 +17,9 @@ Flags:
 - `--attachment <path>` (repeatable)
 - `--reply-to <envelope-id>` (optional; adds thread context for agent↔agent envelopes; for channel destinations, also replies/quotes the referenced channel envelope when possible)
 - `--interrupt-now` (optional; only for `to=agent:<name>`; immediately interrupts current work and prioritizes this envelope)
+- `--to-session-id <id>` (optional; only for `to=agent:<name>`; pin delivery to a specific target agent session)
+- `--to-provider-session-id <id>` (optional; only for `to=agent:<name>`; pin delivery by provider session/thread id on target agent)
+- `--to-provider <claude|codex>` (optional; only with `--to-provider-session-id`; disambiguates provider)
 - `--parse-mode <mode>` (optional; channel destinations only; `plain|markdownv2|html`)
 - `--deliver-at <time>` (ISO 8601 or relative: `+2h`, `+30m`, `+1Y2M`, `-15m`; units: `Y/M/D/h/m/s`)
 
@@ -26,6 +29,8 @@ Notes:
 - Sending to `agent:<name>` fails fast if the agent does not exist (`NOT_FOUND`) or the address is invalid (`INVALID_PARAMS`).
 - `--interrupt-now` is only supported for `to=agent:<name>`.
 - `--interrupt-now` and `--deliver-at` are mutually exclusive.
+- Session targeting flags are only supported for `to=agent:<name>`.
+- Provide at most one of `--to-session-id` and `--to-provider-session-id`.
 
 Output (parseable):
 

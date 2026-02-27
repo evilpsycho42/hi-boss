@@ -27,6 +27,7 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | `hiboss daemon start` | Start the daemon | Yes (admin-privileged token) | admin |
 | `hiboss daemon stop` | Stop the daemon | Yes (admin-privileged token) | admin |
 | `hiboss daemon status` | Show daemon status | Yes (admin-privileged token) | admin |
+| `hiboss mcp serve` | Start stdio MCP server for Claude/Codex clients | Yes (agent/admin token) | n/a (RPC methods enforce permissions) |
 | `hiboss envelope send` | Send an envelope | Yes (agent token) | restricted |
 | `hiboss envelope list` | List envelopes | Yes (agent token) | restricted |
 | `hiboss envelope thread` | Show envelope thread | Yes (agent token) | restricted |
@@ -56,3 +57,4 @@ Note: `hiboss daemon start` prints startup failure guidance directly in CLI when
 - Cron: `docs/spec/cli/cron.md`
 - Reactions: `docs/spec/cli/reactions.md`
 - Agents: `docs/spec/cli/agents.md`
+- MCP: `docs/spec/cli/mcp.md`

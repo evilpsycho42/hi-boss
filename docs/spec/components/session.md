@@ -80,6 +80,14 @@ Core session tables:
 
 Legacy best-effort default resume handle remains in `agents.metadata.sessionHandle` for default per-agent scope.
 
+Per-agent session history files:
+
+- path: `agents/<agent>/internal_space/history/YYYY-MM-DD/<session-id>.json`
+- schema version: `2`
+- payload model: `events[]` (envelope lifecycle), not role/text conversations
+  - `envelope-created` (full envelope snapshot + origin)
+  - `envelope-status-changed` (`fromStatus`, `toStatus`, `reason`, `outcome`, `origin`)
+
 ## Session Listing / Switching (Telegram)
 
 Boss-only commands:

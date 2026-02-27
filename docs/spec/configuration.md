@@ -60,8 +60,17 @@ If an operation is missing from the policy, it defaults to `admin` (safe-by-defa
 |-----------|---------------|
 | `envelope.send` | `restricted` |
 | `envelope.list` | `restricted` |
+| `envelope.thread` | `restricted` |
+| `session.list` | `restricted` |
+| `reaction.set` | `restricted` |
+| `cron.create` | `restricted` |
+| `cron.list` | `restricted` |
+| `cron.enable` | `restricted` |
+| `cron.disable` | `restricted` |
+| `cron.delete` | `restricted` |
 | `daemon.status` | `admin` |
 | `daemon.ping` | `standard` |
+| `daemon.time` | `restricted` |
 | `daemon.start` | `admin` |
 | `daemon.stop` | `admin` |
 | `agent.register` | `admin` |

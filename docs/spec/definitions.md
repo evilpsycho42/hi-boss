@@ -151,6 +151,8 @@ Command flags:
 Notes:
 - Channel platform message ids (e.g., Telegram `message_id`) are stored internally in `envelope.metadata.channelMessageId` for adapter delivery, but are intentionally **not rendered** in agent prompts/CLI envelope instructions.
 - Agents should use `envelope-id:` + `hiboss envelope send --reply-to <envelope-id>` for quoting (channels) and threading (agent↔agent).
+- Session-pinned delivery stores `envelope.metadata.targetSessionId` (internal agent session id) and routes execution to that session when valid for the destination agent.
+- Envelope creation source is tracked in `envelope.metadata.origin` (`cli | mcp | channel | cron | internal`) for history/audit.
 
 ### CLI Output (Cron Schedules)
 

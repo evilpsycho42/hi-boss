@@ -4,3 +4,4 @@ export * from "./cron.js";
 export * from "./reaction.js";
 export * from "./agent.js";
 export * from "./setup.js";
+export * from "./mcp.js";

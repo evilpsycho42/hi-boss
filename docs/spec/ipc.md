@@ -45,6 +45,9 @@ Canonical envelope methods:
 
 `envelope.send` notable params:
 - `interruptNow?: boolean` (agent destinations only; mutually exclusive with `deliverAt`; interrupts current work and prioritizes the new envelope)
+- `toSessionId?: string` (agent destinations only; pin target execution to a specific Hi-Boss session)
+- `toProviderSessionId?: string` + `toProvider?: "claude" | "codex"` (agent destinations only; pin by provider session/thread id)
+- `origin?: "cli" | "mcp" | "internal"` (optional audit source; defaults to `cli` when omitted)
 
 Reactions:
 
@@ -74,6 +77,10 @@ Agents:
 - `agent.self` (resolve `token` → current agent config)
 - `agent.session-policy.set`
 - `agent.status`
+
+Sessions:
+
+- `session.list`
 
 Daemon:
 

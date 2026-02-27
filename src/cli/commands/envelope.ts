@@ -36,6 +36,9 @@ export interface SendEnvelopeOptions {
   interruptNow?: boolean;
   parseMode?: string;
   replyTo?: string;
+  toSessionId?: string;
+  toProviderSessionId?: string;
+  toProvider?: "claude" | "codex";
 }
 
 export interface ListEnvelopesOptions {
@@ -82,6 +85,9 @@ export async function sendEnvelope(options: SendEnvelopeOptions): Promise<void> 
       interruptNow: options.interruptNow,
       parseMode,
       replyToEnvelopeId: options.replyTo,
+      toSessionId: options.toSessionId,
+      toProviderSessionId: options.toProviderSessionId,
+      toProvider: options.toProvider,
     });
 
     console.log(`id: ${formatShortId(result.id)}`);

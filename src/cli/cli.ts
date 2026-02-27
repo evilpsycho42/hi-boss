@@ -18,6 +18,7 @@ import {
   deleteCron,
   setReaction,
   runSetup,
+  serveMcp,
 } from "./commands/index.js";
 import { registerAgentCommands } from "./cli-agent.js";
 
@@ -110,6 +111,9 @@ envelope
   .option("--text-file <path>", "Read envelope text from file")
   .option("--attachment <path>", "Attachment path (can be used multiple times)", collect, [])
   .option("--interrupt-now", "Interrupt current run and prioritize this envelope (agent destinations only)")
+  .option("--to-session-id <id>", "Pin delivery to a specific target agent session (short id/prefix/full UUID)")
+  .option("--to-provider-session-id <id>", "Pin delivery by provider session/thread id on the target agent")
+  .option("--to-provider <provider>", "Provider for --to-provider-session-id: claude or codex")
   .option("--parse-mode <mode>", "Parse mode (Telegram): plain (default), html (recommended), markdownv2")
   .option(
     "--reply-to <envelope-id>",
@@ -142,6 +146,9 @@ envelope
       interruptNow: options.interruptNow,
       parseMode: options.parseMode,
       replyTo: options.replyTo,
+      toSessionId: options.toSessionId,
+      toProviderSessionId: options.toProviderSessionId,
+      toProvider: options.toProvider,
     });
   });
 
@@ -327,6 +334,23 @@ cron
   });
 
 registerAgentCommands(program);
+
+const mcp = program
+  .command("mcp")
+  .description("MCP server")
+  .helpCommand(false);
+
+mcp
+  .command("serve")
+  .description("Run Hi-Boss MCP server on stdio")
+  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .action((options) => {
+    serveMcp({ token: options.token }).catch((err) => {
+      const e = err as Error;
+      console.error("error:", e.message);
+      process.exit(1);
+    });
+  });
 
 const setup = program
   .command("setup")

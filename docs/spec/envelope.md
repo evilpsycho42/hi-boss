@@ -62,6 +62,15 @@ Interrupt-now note:
 - Existing unread pending envelopes are preserved; no queue-clear is performed.
 - `--interrupt-now` is mutually exclusive with `--deliver-at`.
 
+Session-targeting note:
+- Agent-destination sends can pin execution to a specific target session via:
+  - `--to-session-id <id>` (Hi-Boss `agent_sessions.id`)
+  - `--to-provider-session-id <id> [--to-provider <claude|codex>]` (provider thread/session id)
+- The daemon resolves and stores the pinned target as `envelope.metadata.targetSessionId`.
+
+Origin note:
+- Envelope origin is tracked in `metadata.origin` for audit/history (`cli | mcp | channel | cron | internal`).
+
 ---
 
 ## Reply / Threading (canonical)
