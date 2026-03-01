@@ -155,6 +155,7 @@ export class ChannelBridge {
     const enrichedCommand: ChannelCommand & { agentName: string } = {
       ...command,
       adapterType: command.adapterType ?? adapter.platform,
+      fromBoss,
       agentName: binding.agentName,
     };
 
@@ -170,6 +171,7 @@ export class ChannelBridge {
   ): Promise<void> {
     const platform = adapter.platform;
     const fromBoss = this.isBoss(platform, message.channelUser.username);
+    const hasUserPermissionPolicy = this.getUserPermissionPolicy() !== null;
     const authz = this.isActionAllowed({
       adapterType: platform,
       channelUserId: message.channelUser.id,
@@ -219,8 +221,9 @@ export class ChannelBridge {
     const fromAddress = formatChannelAddress(platform, message.chat.id);
     const toAddress = formatAgentAddress(binding.agentName);
     const agent = this.db.getAgentByNameCaseInsensitive(binding.agentName);
-    const ownerUserId = fromBoss ? message.channelUser.id : undefined;
-    const ownerUserId = fromBoss ? message.channelUser.id : undefined;
+    const ownerUserId = hasUserPermissionPolicy
+      ? message.channelUser.id
+      : (fromBoss ? message.channelUser.id : undefined);
     const channelDefaultSession = agent
       ? this.db.getOrCreateChannelDefaultSession({
           agentName: binding.agentName,
@@ -248,7 +251,6 @@ export class ChannelBridge {
         platform,
         channelMessageId: message.id,
         ...(channelDefaultSession ? { channelSessionId: channelDefaultSession.session.id } : {}),
-        channelUser: message.channelUser,
         channelUser: message.channelUser,
         chat: message.chat,
         ...(message.inReplyTo ? { inReplyTo: message.inReplyTo } : {}),

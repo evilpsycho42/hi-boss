@@ -2452,6 +2452,10 @@ export class HiBossDatabase {
       where.push("l.adapter_type = ?");
       where.push("l.chat_id = ?");
       params.push(input.adapterType, input.chatId);
+      if (input.ownerUserId) {
+        where.push("l.owner_user_id = ?");
+        params.push(input.ownerUserId);
+      }
     } else if (input.scope === "my-chats") {
       if (!input.ownerUserId) return [];
       where.push("l.owner_user_id = ?");
@@ -2523,6 +2527,10 @@ export class HiBossDatabase {
       where.push("l.adapter_type = ?");
       where.push("l.chat_id = ?");
       params.push(input.adapterType, input.chatId);
+      if (input.ownerUserId) {
+        where.push("l.owner_user_id = ?");
+        params.push(input.ownerUserId);
+      }
     } else if (input.scope === "my-chats") {
       if (!input.ownerUserId) return 0;
       where.push("l.owner_user_id = ?");

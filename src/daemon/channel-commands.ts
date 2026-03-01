@@ -73,6 +73,7 @@ function buildSessionsKeyboard(params: {
   page: number;
   totalPages: number;
   locale: "en" | "zh-CN";
+  includeAgentAll?: boolean;
 }): TelegramInlineKeyboardButton[][] {
   const tabLabels = params.locale === "zh-CN"
     ? {
@@ -87,7 +88,8 @@ function buildSessionsKeyboard(params: {
       };
 
   const selectedPrefix = "● ";
-  const tabRow: TelegramInlineKeyboardButton[] = SESSION_SCOPE_VALUES.map((scope) => ({
+  const scopes = params.includeAgentAll ? SESSION_SCOPE_VALUES : SESSION_SCOPE_VALUES.filter((scope) => scope !== "agent-all");
+  const tabRow: TelegramInlineKeyboardButton[] = scopes.map((scope) => ({
     text: `${params.scope === scope ? selectedPrefix : ""}${tabLabels[scope]}`,
     callbackData: `${SESSIONS_CALLBACK_PREFIX}${scope}:${params.scope === scope ? params.page : 1}`,
   }));
@@ -120,9 +122,13 @@ function collectVisibleSessionIds(params: {
   chatId: string;
   adapterType: string;
   ownerUserId?: string;
+  fromBoss?: boolean;
 }): Set<string> {
   const out = new Set<string>();
   for (const scope of SESSION_SCOPE_VALUES) {
+    if (scope === "agent-all" && !params.fromBoss) {
+      continue;
+    }
     const items = params.db.listSessionsForScope({
       agentName: params.agentName,
       scope,
@@ -180,7 +186,11 @@ async function handleSessionsCommand(params: {
 }): Promise<ChannelCommandResponse> {
   const c = params.command;
   const agentName = c.agentName!;
-  const view = parseSessionsView(c.args);
+  const requestedView = parseSessionsView(c.args);
+  const view: SessionsView = {
+    scope: requestedView.scope === "agent-all" && !c.fromBoss ? "my-chats" : requestedView.scope,
+    page: requestedView.page,
+  };
   const adapterType = c.adapterType ?? "telegram";
 
   const totalRaw = params.db.countSessionsForScope({
@@ -238,6 +248,7 @@ async function handleSessionsCommand(params: {
               page,
               totalPages,
               locale: params.locale,
+              includeAgentAll: c.fromBoss === true,
             }),
             ...(c.isCallback && c.messageId ? { editMessageId: c.messageId } : {}),
           },
@@ -281,6 +292,7 @@ async function handleSessionSwitchCommand(params: {
     adapterType,
     chatId: c.chatId,
     ownerUserId: c.channelUserId,
+    fromBoss: c.fromBoss,
   });
 
   if (!visible.has(resolved.session.id)) {

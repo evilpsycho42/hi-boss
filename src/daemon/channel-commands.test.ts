@@ -583,3 +583,60 @@ test("/session not-found uses distinct message from invalid-id", async () => {
     assert.equal(notFound?.text, "error: Session not found");
   });
 });
+
+test("/session enforces owner-scoped visibility for non-boss and keeps agent-all for boss", async () => {
+  await withTempDb(async (db) => {
+    db.registerAgent({ name: "nex", provider: "codex" });
+    const ownedByUser1 = db.getOrCreateChannelDefaultSession({
+      agentName: "nex",
+      adapterType: "telegram",
+      chatId: "chat-1",
+      ownerUserId: "u-1",
+      provider: "codex",
+    }).session;
+    const ownedByUser2 = db.createFreshChannelSessionAndSetDefault({
+      agentName: "nex",
+      adapterType: "telegram",
+      chatId: "chat-1",
+      ownerUserId: "u-2",
+      provider: "codex",
+    }).newSession;
+
+    const handler = createChannelCommandHandler({
+      db,
+      executor: {
+        isAgentBusy: () => false,
+        abortCurrentRun: () => false,
+        invalidateChannelSessionCache: () => undefined,
+      } as any,
+      router: { routeEnvelope: async () => undefined } as any,
+    });
+
+    const userCannotSwitch = await handler({
+      command: "session",
+      args: ownedByUser2.id,
+      chatId: "chat-1",
+      channelUserId: "u-1",
+      channelUsername: "alice",
+      fromBoss: false,
+      agentName: "nex",
+    } as any);
+    assert.equal(userCannotSwitch?.text, "error: Session is not visible in this scope");
+
+    const bossCanSwitch = await handler({
+      command: "session",
+      args: ownedByUser2.id,
+      chatId: "chat-1",
+      channelUserId: "boss-1",
+      channelUsername: "boss",
+      fromBoss: true,
+      agentName: "nex",
+    } as any);
+    assert.ok(bossCanSwitch?.text?.includes("session-switch: ok"));
+
+    const binding = db.getChannelSessionBinding("nex", "telegram", "chat-1");
+    assert.ok(binding);
+    assert.equal(binding?.defaultSessionId, ownedByUser2.id);
+    assert.notEqual(binding?.defaultSessionId, ownedByUser1.id);
+  });
+});

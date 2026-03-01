@@ -238,5 +238,7 @@ test("channel bridge enforces user-permission-policy for command and message ent
       raw: {},
     });
     assert.equal(routedEnvelopes.length, 1);
+    const binding = db.getChannelSessionBinding("nex", "telegram", "chat-1");
+    assert.equal(binding?.ownerUserId, "op-1");
   });
 });
