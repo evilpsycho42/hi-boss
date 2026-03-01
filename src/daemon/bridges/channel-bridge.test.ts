@@ -66,7 +66,34 @@ test("channel bridge stamps channelSessionId at ingest and does not drift owner 
   await withTempDb(async (db) => {
     db.registerAgent({ name: "nex", provider: "codex" });
     db.createBinding("nex", "telegram", "bot-token");
-    db.setAdapterBossIds("telegram", ["boss_user"]);
+    db.setConfig(
+      "user_permission_policy",
+      JSON.stringify({
+        version: INTERNAL_VERSION,
+        roles: {
+          boss: { allow: ["channel.command.*", "channel.message.send"] },
+          operator: { allow: ["channel.message.send"] },
+          blocked: { allow: [] },
+        },
+        bindings: [
+          {
+            "adapter-type": "telegram",
+            username: "boss_user",
+            token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            role: "boss",
+          },
+          {
+            "adapter-type": "telegram",
+            "user-id": "member-2",
+            token: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            role: "operator",
+          },
+        ],
+        defaults: {
+          "unmapped-user-role": "blocked",
+        },
+      })
+    );
 
     const envelopes: Array<{ metadata?: Record<string, unknown> }> = [];
     const router = {
@@ -95,7 +122,7 @@ test("channel bridge stamps channelSessionId at ingest and does not drift owner 
     assert.ok(firstSessionId);
 
     const bindingAfterBoss = db.getChannelSessionBinding("nex", "telegram", "chat-1");
-    assert.equal(bindingAfterBoss?.ownerUserId, "boss-1");
+    assert.equal(bindingAfterBoss?.ownerUserId, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 
     await adapter.emitMessage({
       id: "m2",
@@ -112,49 +139,7 @@ test("channel bridge stamps channelSessionId at ingest and does not drift owner 
     assert.equal(secondSessionId, firstSessionId);
 
     const bindingAfterMember = db.getChannelSessionBinding("nex", "telegram", "chat-1");
-    assert.equal(bindingAfterMember?.ownerUserId, "boss-1");
-  });
-});
-
-test("channel bridge keeps legacy boss-only command behavior when user policy is not configured", async () => {
-  await withTempDb(async (db) => {
-    db.registerAgent({ name: "nex", provider: "codex" });
-    db.createBinding("nex", "telegram", "bot-token");
-    db.setAdapterBossIds("telegram", ["boss_user"]);
-
-    const router = {
-      registerAdapter: () => undefined,
-      routeEnvelope: async () => undefined,
-    } as any;
-
-    const bridge = new ChannelBridge(router, db, {} as any);
-    let commandCalls = 0;
-    bridge.setCommandHandler(async () => {
-      commandCalls += 1;
-      return { text: "command-ok" };
-    });
-    const adapter = new TestAdapter();
-    bridge.connect(adapter, "bot-token");
-
-    const nonBoss = await adapter.emitCommand({
-      command: "status",
-      args: "",
-      chatId: "chat-1",
-      channelUserId: "u-1",
-      channelUsername: "alice",
-    });
-    assert.equal(nonBoss, undefined);
-    assert.equal(commandCalls, 0);
-
-    const boss = await adapter.emitCommand({
-      command: "status",
-      args: "",
-      chatId: "chat-1",
-      channelUserId: "boss-1",
-      channelUsername: "boss_user",
-    });
-    assert.equal(commandCalls, 1);
-    assert.equal((boss as ChannelCommandResponse | undefined)?.text, "command-ok");
+    assert.equal(bindingAfterMember?.ownerUserId, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
   });
 });
 
@@ -162,7 +147,6 @@ test("channel bridge enforces user-permission-policy for command and message ent
   await withTempDb(async (db) => {
     db.registerAgent({ name: "nex", provider: "codex" });
     db.createBinding("nex", "telegram", "bot-token");
-    db.setAdapterBossIds("telegram", ["boss_user"]);
     db.setConfig(
       "user_permission_policy",
       JSON.stringify({
@@ -173,8 +157,24 @@ test("channel bridge enforces user-permission-policy for command and message ent
           blocked: { allow: [] },
         },
         bindings: [
-          { "adapter-type": "telegram", "user-id": "op-1", role: "operator" },
-          { "adapter-type": "telegram", "user-id": "blocked-1", role: "blocked" },
+          {
+            "adapter-type": "telegram",
+            "user-id": "op-1",
+            token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            role: "operator",
+          },
+          {
+            "adapter-type": "telegram",
+            "user-id": "blocked-1",
+            token: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            role: "blocked",
+          },
+          {
+            "adapter-type": "telegram",
+            username: "boss_user",
+            token: "cccccccccccccccccccccccccccccccc",
+            role: "boss",
+          },
         ],
         defaults: {
           "unmapped-user-role": "blocked",
@@ -183,6 +183,8 @@ test("channel bridge enforces user-permission-policy for command and message ent
     );
 
     let commandCalls = 0;
+    let lastUserToken: string | undefined;
+    let lastFromBoss: boolean | undefined;
     const routedEnvelopes: unknown[] = [];
     const router = {
       registerAdapter: () => undefined,
@@ -193,8 +195,10 @@ test("channel bridge enforces user-permission-policy for command and message ent
 
     const bridge = new ChannelBridge(router, db, {} as any);
     const adapter = new TestAdapter();
-    bridge.setCommandHandler(async () => {
+    bridge.setCommandHandler(async (cmd) => {
       commandCalls += 1;
+      lastUserToken = cmd.userToken;
+      lastFromBoss = cmd.fromBoss;
       return { text: "command-ok" };
     });
     bridge.connect(adapter, "bot-token");
@@ -208,6 +212,8 @@ test("channel bridge enforces user-permission-policy for command and message ent
     });
     assert.equal((allowed as ChannelCommandResponse | undefined)?.text, "command-ok");
     assert.equal(commandCalls, 1);
+    assert.equal(lastUserToken, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    assert.equal(lastFromBoss, false);
 
     const denied = await adapter.emitCommand({
       command: "abort",
@@ -218,6 +224,18 @@ test("channel bridge enforces user-permission-policy for command and message ent
     });
     assert.equal((denied as ChannelCommandResponse | undefined)?.text, "error: Access denied");
     assert.equal(commandCalls, 1);
+
+    const bossAllowed = await adapter.emitCommand({
+      command: "abort",
+      args: "",
+      chatId: "chat-1",
+      channelUserId: "boss-1",
+      channelUsername: "boss_user",
+    });
+    assert.equal((bossAllowed as ChannelCommandResponse | undefined)?.text, "command-ok");
+    assert.equal(commandCalls, 2);
+    assert.equal(lastUserToken, "cccccccccccccccccccccccccccccccc");
+    assert.equal(lastFromBoss, true);
 
     await adapter.emitMessage({
       id: "m-blocked",
@@ -239,6 +257,6 @@ test("channel bridge enforces user-permission-policy for command and message ent
     });
     assert.equal(routedEnvelopes.length, 1);
     const binding = db.getChannelSessionBinding("nex", "telegram", "chat-1");
-    assert.equal(binding?.ownerUserId, "op-1");
+    assert.equal(binding?.ownerUserId, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
   });
 });

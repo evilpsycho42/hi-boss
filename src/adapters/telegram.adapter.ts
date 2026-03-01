@@ -184,7 +184,7 @@ export class TelegramAdapter implements ChatAdapter {
     }
 
     if (!response?.text) {
-      // Boss-only commands: non-boss users get no reply.
+      // Handlers can intentionally return no response (for deny/drop cases).
       return;
     }
 

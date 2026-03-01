@@ -17,8 +17,24 @@ function buildPolicy() {
       blocked: { allow: [] },
     },
     bindings: [
-      { "adapter-type": "telegram", "user-id": "u-op", role: "operator" },
-      { "adapter-type": "telegram", username: "@viewer_name", role: "viewer" },
+      {
+        "adapter-type": "telegram",
+        "user-id": "u-op",
+        token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        role: "operator",
+      },
+      {
+        "adapter-type": "telegram",
+        username: "@viewer_name",
+        token: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        role: "viewer",
+      },
+      {
+        "adapter-type": "telegram",
+        username: "@boss_user",
+        token: "cccccccccccccccccccccccccccccccc",
+        role: "boss",
+      },
     ],
     defaults: { "unmapped-user-role": "blocked" },
   });
@@ -55,12 +71,12 @@ test("evaluateUserPermission resolves by user-id then username then default role
       adapterType: "telegram",
       channelUserId: "u-op",
       channelUsername: "someone",
-      fromBoss: false,
     },
     "channel.command.status"
   );
   assert.equal(byId.allowed, true);
   assert.equal(byId.role, "operator");
+  assert.equal(byId.token, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 
   const byUsername = evaluateUserPermission(
     policy,
@@ -68,12 +84,12 @@ test("evaluateUserPermission resolves by user-id then username then default role
       adapterType: "telegram",
       channelUserId: "other-id",
       channelUsername: "@viewer_name",
-      fromBoss: false,
     },
     "channel.command.status"
   );
   assert.equal(byUsername.allowed, true);
   assert.equal(byUsername.role, "viewer");
+  assert.equal(byUsername.token, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
 
   const fallback = evaluateUserPermission(
     policy,
@@ -81,27 +97,27 @@ test("evaluateUserPermission resolves by user-id then username then default role
       adapterType: "telegram",
       channelUserId: "unknown",
       channelUsername: "unknown",
-      fromBoss: false,
     },
     "channel.command.status"
   );
   assert.equal(fallback.allowed, false);
   assert.equal(fallback.role, "blocked");
+  assert.equal(fallback.token, undefined);
 });
 
-test("evaluateUserPermission maps boss principal to boss role", () => {
+test("evaluateUserPermission resolves boss role from binding and applies wildcard action", () => {
   const policy = buildPolicy();
   const decision = evaluateUserPermission(
     policy,
     {
       adapterType: "telegram",
-      channelUserId: "any-user",
-      channelUsername: "any-user",
-      fromBoss: true,
+      channelUserId: "unknown-id",
+      channelUsername: "boss_user",
     },
     "channel.command.abort"
   );
 
   assert.equal(decision.allowed, true);
   assert.equal(decision.role, "boss");
+  assert.equal(decision.token, "cccccccccccccccccccccccccccccccc");
 });

@@ -143,6 +143,6 @@ export const DEFAULT_USER_PERMISSION_POLICY: UserPermissionPolicy = {
   },
   bindings: [],
   defaults: {
-    unmappedUserRole: "viewer",
+    unmappedUserRole: "blocked",
   },
 };

@@ -49,6 +49,7 @@ test("parseSettingsJson accepts valid user-permission-policy", () => {
           {
             "adapter-type": "telegram",
             "user-id": "u-1",
+            token: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
             role: "operator",
           },
         ],
@@ -61,6 +62,7 @@ test("parseSettingsJson accepts valid user-permission-policy", () => {
 
   assert.equal(settings.userPermissionPolicy?.defaults.unmappedUserRole, "operator");
   assert.equal(settings.userPermissionPolicy?.bindings[0]?.userId, "u-1");
+  assert.equal(settings.userPermissionPolicy?.bindings[0]?.token, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
 });
 
 test("parseSettingsJson rejects invalid user-permission-policy", () => {

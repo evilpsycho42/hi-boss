@@ -15,7 +15,7 @@ import { getUiText } from "../../shared/ui-text.js";
 import { DEFAULT_AGENT_PROVIDER } from "../../shared/defaults.js";
 import {
   evaluateUserPermission,
-  parseUserPermissionPolicyOrNull,
+  parseUserPermissionPolicy,
 } from "../../shared/user-permissions.js";
 
 /**
@@ -43,7 +43,11 @@ export class ChannelBridge {
   }
 
   private getUserPermissionPolicy() {
-    return parseUserPermissionPolicyOrNull(this.db.getConfig("user_permission_policy"));
+    const raw = (this.db.getConfig("user_permission_policy") ?? "").trim();
+    if (!raw) {
+      throw new Error("Missing required config: user_permission_policy");
+    }
+    return parseUserPermissionPolicy(raw);
   }
 
   private commandToAction(commandNameRaw: string): string {
@@ -55,31 +59,19 @@ export class ChannelBridge {
     adapterType: string;
     channelUserId?: string;
     channelUsername?: string;
-    fromBoss: boolean;
     action: string;
-  }): { allowed: boolean; role: string } {
+  }): { allowed: boolean; role: string; token?: string } {
     const policy = this.getUserPermissionPolicy();
-    if (!policy) {
-      // Legacy behavior when no explicit channel user policy is configured.
-      if (params.action.startsWith("channel.command.")) {
-        return { allowed: params.fromBoss, role: params.fromBoss ? "boss" : "unmapped" };
-      }
-      if (params.action === "channel.message.send") {
-        return { allowed: true, role: params.fromBoss ? "boss" : "unmapped" };
-      }
-      return { allowed: false, role: params.fromBoss ? "boss" : "unmapped" };
-    }
     const decision = evaluateUserPermission(
       policy,
       {
         adapterType: params.adapterType,
         channelUserId: params.channelUserId,
         channelUsername: params.channelUsername,
-        fromBoss: params.fromBoss,
       },
       params.action
     );
-    return { allowed: decision.allowed, role: decision.role };
+    return { allowed: decision.allowed, role: decision.role, token: decision.token };
   }
 
   /**
@@ -114,17 +106,15 @@ export class ChannelBridge {
     adapterToken: string,
     command: ChannelCommand
   ): Promise<ChannelCommandResponse | void> {
-    const fromBoss = this.isBoss(adapter.platform, command.channelUsername);
     const action = this.commandToAction(command.command);
     const authz = this.isActionAllowed({
       adapterType: adapter.platform,
       channelUserId: command.channelUserId,
       channelUsername: command.channelUsername,
-      fromBoss,
       action,
     });
+    const fromBoss = authz.role === "boss";
     if (!authz.allowed) {
-      const hasPolicy = Boolean((this.db.getConfig("user_permission_policy") ?? "").trim());
       logEvent("info", "channel-authz-denied", {
         "message-kind": "command",
         "adapter-type": adapter.platform,
@@ -133,8 +123,16 @@ export class ChannelBridge {
         action,
         role: authz.role,
       });
-      // Legacy mode keeps silent drop for non-boss commands.
-      if (!hasPolicy) return;
+      return { text: this.getChannelAccessDeniedText() };
+    }
+    if (!authz.token) {
+      logEvent("warn", "channel-authz-denied-missing-token", {
+        "message-kind": "command",
+        "adapter-type": adapter.platform,
+        "chat-id": command.chatId,
+        action,
+        role: authz.role,
+      });
       return { text: this.getChannelAccessDeniedText() };
     }
 
@@ -156,6 +154,7 @@ export class ChannelBridge {
       ...command,
       adapterType: command.adapterType ?? adapter.platform,
       fromBoss,
+      userToken: authz.token,
       agentName: binding.agentName,
     };
 
@@ -170,21 +169,29 @@ export class ChannelBridge {
     message: ChannelMessage
   ): Promise<void> {
     const platform = adapter.platform;
-    const fromBoss = this.isBoss(platform, message.channelUser.username);
-    const hasUserPermissionPolicy = this.getUserPermissionPolicy() !== null;
     const authz = this.isActionAllowed({
       adapterType: platform,
       channelUserId: message.channelUser.id,
       channelUsername: message.channelUser.username,
-      fromBoss,
       action: "channel.message.send",
     });
+    const fromBoss = authz.role === "boss";
     if (!authz.allowed) {
       logEvent("info", "channel-authz-denied", {
         "message-kind": "message",
         "adapter-type": platform,
         "chat-id": message.chat.id,
         "from-boss": fromBoss,
+        action: "channel.message.send",
+        role: authz.role,
+      });
+      return;
+    }
+    if (!authz.token) {
+      logEvent("warn", "channel-authz-denied-missing-token", {
+        "message-kind": "message",
+        "adapter-type": platform,
+        "chat-id": message.chat.id,
         action: "channel.message.send",
         role: authz.role,
       });
@@ -221,9 +228,7 @@ export class ChannelBridge {
     const fromAddress = formatChannelAddress(platform, message.chat.id);
     const toAddress = formatAgentAddress(binding.agentName);
     const agent = this.db.getAgentByNameCaseInsensitive(binding.agentName);
-    const ownerUserId = hasUserPermissionPolicy
-      ? message.channelUser.id
-      : (fromBoss ? message.channelUser.id : undefined);
+    const ownerUserId = authz.token;
     const channelDefaultSession = agent
       ? this.db.getOrCreateChannelDefaultSession({
           agentName: binding.agentName,
@@ -250,22 +255,12 @@ export class ChannelBridge {
         origin: "channel",
         platform,
         channelMessageId: message.id,
+        userToken: authz.token,
         ...(channelDefaultSession ? { channelSessionId: channelDefaultSession.session.id } : {}),
         channelUser: message.channelUser,
         chat: message.chat,
         ...(message.inReplyTo ? { inReplyTo: message.inReplyTo } : {}),
       },
     });
-  }
-
-  private isBoss(platform: string, username?: string): boolean {
-    if (!username) return false;
-
-    const adapterBossIds = this.db.getAdapterBossIds(platform);
-    if (adapterBossIds.length < 1) return false;
-
-    const normalizedUser = username.replace(/^@/, '').toLowerCase();
-
-    return adapterBossIds.some((id) => id.toLowerCase() === normalizedUser);
   }
 }

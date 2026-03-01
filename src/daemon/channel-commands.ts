@@ -198,7 +198,7 @@ async function handleSessionsCommand(params: {
     scope: view.scope,
     adapterType,
     chatId: c.chatId,
-    ownerUserId: c.channelUserId,
+    ownerUserId: c.userToken,
   });
 
   const total = Math.min(SESSIONS_MAX_TOTAL, totalRaw);
@@ -211,7 +211,7 @@ async function handleSessionsCommand(params: {
     scope: view.scope,
     adapterType,
     chatId: c.chatId,
-    ownerUserId: c.channelUserId,
+    ownerUserId: c.userToken,
     limit: SESSIONS_PAGE_SIZE,
     offset,
   });
@@ -291,7 +291,7 @@ async function handleSessionSwitchCommand(params: {
     agentName: c.agentName!,
     adapterType,
     chatId: c.chatId,
-    ownerUserId: c.channelUserId,
+    ownerUserId: c.userToken,
     fromBoss: c.fromBoss,
   });
 
@@ -304,7 +304,7 @@ async function handleSessionSwitchCommand(params: {
     adapterType,
     chatId: c.chatId,
     targetSessionId: resolved.session.id,
-    ownerUserId: c.channelUserId,
+    ownerUserId: c.userToken,
   });
   params.executor.invalidateChannelSessionCache(c.agentName!, adapterType, c.chatId);
 
@@ -338,7 +338,7 @@ export function createChannelCommandHandler(params: {
         agentName: agent.name,
         adapterType,
         chatId: c.chatId,
-        ownerUserId: c.channelUserId,
+        ownerUserId: c.userToken,
         provider: agent.provider ?? DEFAULT_AGENT_PROVIDER,
       });
       params.executor.invalidateChannelSessionCache(agent.name, adapterType, c.chatId);
@@ -442,13 +442,14 @@ async function handleOneshotCommand(
     await params.router.routeEnvelope({
       from: fromAddress,
       to: toAddress,
-      fromBoss: true,
+      fromBoss: command.fromBoss === true,
       content: { text },
       metadata: {
         origin: "channel",
         oneshotType: mode,
         platform: adapterType,
         channelMessageId: command.messageId,
+        ...(command.userToken ? { userToken: command.userToken } : {}),
         channelUser:
           command.channelUserId || command.channelUsername
             ? {

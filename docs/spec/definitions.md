@@ -60,7 +60,7 @@ Default mapping per channel conversation:
 | `binding.adapterType` | `adapter_type` | e.g. `telegram` |
 | `binding.chatId` | `chat_id` | Channel chat id |
 | `binding.defaultSessionId` | `default_session_id` | FK -> `agent_sessions.id` |
-| `binding.ownerUserId` | `owner_user_id` | Boss user id (nullable; adapter-specific) |
+| `binding.ownerUserId` | `owner_user_id` | Global user token (nullable) |
 | `binding.updatedAt` | `updated_at` | Unix epoch ms |
 
 Unique key: `(agent_name, adapter_type, chat_id)`.
@@ -75,7 +75,7 @@ Visibility/history relation used by `/sessions` tab scopes:
 | `link.adapterType` | `adapter_type` | Channel adapter |
 | `link.chatId` | `chat_id` | Channel chat id |
 | `link.sessionId` | `session_id` | FK -> `agent_sessions.id` |
-| `link.ownerUserId` | `owner_user_id` | Boss user id (nullable) |
+| `link.ownerUserId` | `owner_user_id` | Global user token (nullable) |
 | `link.firstSeenAt` | `first_seen_at` | Unix epoch ms |
 | `link.lastSeenAt` | `last_seen_at` | Unix epoch ms |
 

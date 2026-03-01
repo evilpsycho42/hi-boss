@@ -36,7 +36,7 @@ The daemon authorizes token-authenticated operations using `config.permission_po
 
 - Each agent has a `permissionLevel`: `restricted`, `standard`, `privileged`, or `admin`.
 - Admin operations require a token whose effective permission level is `admin` (admin token or an admin-level agent token).
-- `permissionLevel: admin` grants authorization only; it does not mark messages as boss (`fromBoss` / `[boss]` are adapter identity, not permission).
+- `permissionLevel: admin` grants authorization only; channel `fromBoss` / `[boss]` are derived from `user-permission-policy` role resolution (`role: boss`), not agent permission level.
 
 See:
 - `src/shared/defaults.ts` (`DEFAULT_PERMISSION_POLICY`)

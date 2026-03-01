@@ -21,6 +21,7 @@ Behavior:
 - Creates empty `{{HIBOSS_DIR}}/BOSS.md` (best effort).
 - Creates two baseline agents (`primary` and `secondary`).
 - Prints primary/secondary/admin tokens once.
+- Prints per-channel-user tokens (derived from `telegram.boss-ids`) once.
 - Writes `settings.json` with owner-only permissions (`0600`, best effort across platforms).
 
 Interactive defaults:
@@ -46,6 +47,7 @@ Top-level required fields:
 - `admin`
 - `telegram`
 - `permission-policy`
+- `user-permission-policy`
 - `agents[]`
 
 Top-level optional fields:
@@ -57,8 +59,9 @@ Key fields:
 - `admin.token` (plaintext)
 - `telegram.boss-ids[]` (supports multiple boss usernames)
 - `permission-policy` (`version: "v0.0.0"`)
-- `permission-policy` (`version: "v0.0.0"`)
 - `user-permission-policy` (`version: "v0.0.0"`, required)
+- `user-permission-policy.bindings[]`:
+  - each entry must include `token` (32 lowercase hex chars)
 - `runtime.session-concurrency.per-agent` (default `4`)
 - `runtime.session-concurrency.global` (default `16`, must be `>= per-agent`)
 - `agents[].token` (plaintext)

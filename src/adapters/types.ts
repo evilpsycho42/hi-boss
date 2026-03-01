@@ -132,7 +132,8 @@ export interface ChannelCommand {
   chatId: string;            // Chat ID where command was issued
   channelUserId?: string;    // Channel-side user ID of command issuer
   channelUsername?: string;  // Channel-side username of command issuer
-  fromBoss?: boolean;        // Whether command sender matches configured boss identity
+  fromBoss?: boolean;        // Whether command sender resolved to role "boss"
+  userToken?: string;        // Resolved global user token of command issuer
   messageId?: string;        // Platform message ID of the command message
   callbackQueryId?: string;  // Platform callback query ID (for interactive buttons)
   isCallback?: boolean;      // True when command was triggered by a button callback

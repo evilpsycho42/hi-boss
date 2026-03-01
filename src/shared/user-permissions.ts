@@ -6,6 +6,7 @@ export interface UserPermissionRoleDefinition {
 
 export interface UserPermissionBinding {
   adapterType: string;
+  token: string;
   userId?: string;
   username?: string;
   role: string;
@@ -24,12 +25,12 @@ export interface UserPermissionPrincipal {
   adapterType: string;
   channelUserId?: string;
   channelUsername?: string;
-  fromBoss: boolean;
 }
 
 export interface UserPermissionDecision {
   allowed: boolean;
   role: string;
+  token?: string;
   action: string;
 }
 
@@ -55,6 +56,14 @@ function normalizeUsername(raw: string): string {
 
 function normalizeActionPattern(raw: string): string {
   return raw.trim().toLowerCase();
+}
+
+function normalizeToken(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+function isValidToken(token: string): boolean {
+  return /^[0-9a-f]{32}$/.test(token);
 }
 
 function isValidActionPattern(value: string): boolean {
@@ -172,6 +181,15 @@ function parseBindings(raw: unknown, roles: UserPermissionPolicy["roles"]): User
       fail(`bindings[${index}].role`, `unknown role '${roleRaw}'`);
     }
 
+    const tokenRaw = typeof item.token === "string" ? item.token : "";
+    const token = normalizeToken(tokenRaw);
+    if (!token) {
+      fail(`bindings[${index}].token`, "is required");
+    }
+    if (!isValidToken(token)) {
+      fail(`bindings[${index}].token`, "must be 32 lowercase hex characters");
+    }
+
     const userIdRaw =
       typeof item["user-id"] === "string"
         ? item["user-id"]
@@ -203,6 +221,7 @@ function parseBindings(raw: unknown, roles: UserPermissionPolicy["roles"]): User
 
     bindings.push({
       adapterType,
+      token,
       ...(userId ? { userId } : {}),
       ...(username ? { username } : {}),
       role,
@@ -268,17 +287,6 @@ export function parseUserPermissionPolicy(json: string): UserPermissionPolicy {
   return parseUserPermissionPolicyFromObject(parsed);
 }
 
-export function parseUserPermissionPolicyOrNull(
-  json: string | null | undefined
-): UserPermissionPolicy | null {
-  if (!json || !json.trim()) return null;
-  try {
-    return parseUserPermissionPolicy(json);
-  } catch {
-    return null;
-  }
-}
-
 function actionMatches(pattern: string, action: string): boolean {
   if (pattern === "*") return true;
   if (pattern.endsWith(".*")) {
@@ -291,10 +299,7 @@ function actionMatches(pattern: string, action: string): boolean {
 export function resolveUserPermissionRole(
   policy: UserPermissionPolicy,
   principal: UserPermissionPrincipal
-): string {
-  if (principal.fromBoss && policy.roles.boss) {
-    return "boss";
-  }
+): { role: string; token?: string } {
 
   const adapterType = normalizeAdapterType(principal.adapterType);
   const userId = typeof principal.channelUserId === "string" ? principal.channelUserId.trim() : "";
@@ -307,17 +312,17 @@ export function resolveUserPermissionRole(
     const matchedById = policy.bindings.find(
       (binding) => binding.adapterType === adapterType && binding.userId === userId
     );
-    if (matchedById) return matchedById.role;
+    if (matchedById) return { role: matchedById.role, token: matchedById.token };
   }
 
   if (username) {
     const matchedByUsername = policy.bindings.find(
       (binding) => binding.adapterType === adapterType && binding.username === username
     );
-    if (matchedByUsername) return matchedByUsername.role;
+    if (matchedByUsername) return { role: matchedByUsername.role, token: matchedByUsername.token };
   }
 
-  return policy.defaults.unmappedUserRole;
+  return { role: policy.defaults.unmappedUserRole };
 }
 
 export function evaluateUserPermission(
@@ -326,16 +331,17 @@ export function evaluateUserPermission(
   actionRaw: string
 ): UserPermissionDecision {
   const action = normalizeActionPattern(actionRaw);
-  const role = resolveUserPermissionRole(policy, principal);
+  const { role, token } = resolveUserPermissionRole(policy, principal);
   const roleDef = policy.roles[role];
   if (!roleDef) {
-    return { allowed: false, role, action };
+    return { allowed: false, role, token, action };
   }
 
   const allowed = roleDef.allow.some((pattern) => actionMatches(pattern, action));
   return {
     allowed,
     role,
+    token,
     action,
   };
 }

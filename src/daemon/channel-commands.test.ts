@@ -591,14 +591,14 @@ test("/session enforces owner-scoped visibility for non-boss and keeps agent-all
       agentName: "nex",
       adapterType: "telegram",
       chatId: "chat-1",
-      ownerUserId: "u-1",
+      ownerUserId: "token-u1",
       provider: "codex",
     }).session;
     const ownedByUser2 = db.createFreshChannelSessionAndSetDefault({
       agentName: "nex",
       adapterType: "telegram",
       chatId: "chat-1",
-      ownerUserId: "u-2",
+      ownerUserId: "token-u2",
       provider: "codex",
     }).newSession;
 
@@ -618,6 +618,7 @@ test("/session enforces owner-scoped visibility for non-boss and keeps agent-all
       chatId: "chat-1",
       channelUserId: "u-1",
       channelUsername: "alice",
+      userToken: "token-u1",
       fromBoss: false,
       agentName: "nex",
     } as any);
@@ -629,6 +630,7 @@ test("/session enforces owner-scoped visibility for non-boss and keeps agent-all
       chatId: "chat-1",
       channelUserId: "boss-1",
       channelUsername: "boss",
+      userToken: "token-boss",
       fromBoss: true,
       agentName: "nex",
     } as any);
