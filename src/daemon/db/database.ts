@@ -488,6 +488,10 @@ export class HiBossDatabase {
         this.setAdminToken(settings.admin.token);
       }
       this.setConfig("permission_policy", JSON.stringify(settings.permissionPolicy));
+      this.setConfig(
+        "user_permission_policy",
+        settings.userPermissionPolicy ? JSON.stringify(settings.userPermissionPolicy) : ""
+      );
       this.setAdapterBossIds("telegram", settings.telegram.bossIds);
       this.setRuntimeSessionConcurrency({
         perAgent: settings.runtime?.sessionConcurrency?.perAgent ?? DEFAULT_SESSION_CONCURRENCY_PER_AGENT,

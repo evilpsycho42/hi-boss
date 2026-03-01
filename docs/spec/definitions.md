@@ -14,6 +14,7 @@ Canonical mapping (selected):
 - `envelope.fromBoss` → SQLite `from_boss` → `[boss]` suffix in rendered sender lines
 - `config.bossTimezone` → SQLite `config.boss_timezone` → setup `boss-timezone` → `boss-timezone:`
 - `config.uiLocale` → SQLite `config.ui_locale` → env override `HIBOSS_UI_LOCALE` (fixed system-message locale)
+- `config.userPermissionPolicy` → SQLite `config.user_permission_policy` → `settings.user-permission-policy`
 
 Derived (not stored):
 - `daemon-timezone:` is computed from the daemon host (`Intl.DateTimeFormat().resolvedOptions().timeZone`) and printed by setup for operator clarity.

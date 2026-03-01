@@ -22,9 +22,16 @@ Outbound (agent -> Telegram):
 - standard channel delivery via router/adapter
 - optional reply quoting resolved from `replyToEnvelopeId`
 
-## Boss-only Commands
+## Command Authorization
 
-Telegram commands are boss-only (non-boss receives no reply):
+By default (no `user-permission-policy` configured), Telegram commands are boss-only (non-boss receives no reply).
+
+When `user-permission-policy` is configured, command/message authorization is role-based:
+- command actions: `channel.command.<name>`
+- message action: `channel.message.send`
+- role lookup prefers adapter `user-id`; `username` is optional fallback
+
+Supported commands:
 
 - `/new` -> switch current chat to a fresh default session
 - `/sessions` -> list recent sessions (tabs + pager)

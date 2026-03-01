@@ -57,6 +57,8 @@ Key fields:
 - `admin.token` (plaintext)
 - `telegram.boss-ids[]` (supports multiple boss usernames)
 - `permission-policy` (`version: "v0.0.0"`)
+- `permission-policy` (`version: "v0.0.0"`)
+- `user-permission-policy` (`version: "v0.0.0"`, required)
 - `runtime.session-concurrency.per-agent` (default `4`)
 - `runtime.session-concurrency.global` (default `16`, must be `>= per-agent`)
 - `agents[].token` (plaintext)
@@ -83,6 +85,7 @@ Core mappings:
 - `admin.token` → `config.admin_token_hash`
 - `telegram.boss-ids` → `config.adapter_boss_ids_telegram` (first value also mirrored to `config.adapter_boss_id_telegram` for compatibility)
 - `permission-policy` → `config.permission_policy`
+- `user-permission-policy` → `config.user_permission_policy`
 - `runtime.session-concurrency.per-agent` → `config.runtime_session_concurrency_per_agent`
 - `runtime.session-concurrency.global` → `config.runtime_session_concurrency_global`
 - `agents[]` → `agents`
