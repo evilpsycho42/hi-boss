@@ -397,8 +397,8 @@ export function createTeamHandlers(ctx: DaemonContext): RpcMethodRegistry {
             },
             interruptReason: "rpc:team.send:interrupt-now",
           });
-          if (!("id" in sendResult)) {
-            throw new Error("Unexpected team.send broadcast result");
+          if (!("id" in sendResult) || typeof sendResult.id !== "string" || !sendResult.id.trim()) {
+            throw new Error("Unexpected team.send result: missing envelope id");
           }
           results.push({
             agentName,

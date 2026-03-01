@@ -63,7 +63,6 @@ Interrupt-now note:
 - `--interrupt-now` is mutually exclusive with `--deliver-at`.
 
 Chat scope note:
-Chat scope note:
 - Agent-origin sends stamp `envelope.metadata.chatScope` for session routing:
   - DM: `agent-dm:<sorted-agent-a>:<sorted-agent-b>`
   - Team: `team:<team-name>`

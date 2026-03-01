@@ -31,7 +31,7 @@ Attachment format: `- [type] filename (source)` where type is `image`, `audio`, 
 
 ## Full Example (group, single message)
 
-```
+```text
 envelope-id: 4b7c2d1a
 from: channel:telegram:6447779930
 sender: Kevin (@kky1024) [boss] in group "hiboss-test"
@@ -49,7 +49,7 @@ attachments:
 
 ## Full Example (direct message)
 
-```
+```text
 envelope-id: 9d0a61fe
 from: channel:telegram:6447779930
 sender: Kevin (@kky1024) [boss] in private chat
@@ -62,7 +62,7 @@ attachments:
 
 ## Full Example (agent-to-agent)
 
-```
+```text
 envelope-id: 1f2a3b4c
 from: agent:scheduler
 chat: agent-dm:scheduler:worker
@@ -73,7 +73,7 @@ Time to run the daily backup.
 
 ## Full Example (team mention)
 
-```
+```text
 envelope-id: 7aa4b93c
 from: agent:alice
 to: agent:bob

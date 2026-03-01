@@ -142,6 +142,11 @@ export class CronScheduler {
       bossTimezone: this.db.getBossTimezone(),
     });
 
+    this.assertChannelBinding({
+      agentName: normalizedInput.agentName,
+      to: normalizedInput.to,
+    });
+
     let createdSchedule!: CronSchedule;
     let createdEnvelope: Envelope | undefined;
 

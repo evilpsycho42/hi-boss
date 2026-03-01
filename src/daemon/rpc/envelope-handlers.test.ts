@@ -442,3 +442,24 @@ test("envelope.send team broadcast returns no-recipients for sender-only team", 
   assert.deepEqual(result.ids, []);
   assert.equal(result.noRecipients, true);
 });
+
+test("envelope.send validates team broadcast params even with no recipients", async () => {
+  const sender = makeAgent("sender");
+  const ctx = makeContext({
+    sender,
+    teams: [{ name: "alpha", members: ["sender"] }],
+  });
+  const handlers = createEnvelopeHandlers(ctx);
+
+  await assertRpcError(
+    () =>
+      handlers["envelope.send"]({
+        token: sender.token,
+        to: "team:alpha",
+        text: "hello",
+        deliverAt: "not-a-time",
+      }),
+    RPC_ERRORS.INVALID_PARAMS,
+    "Invalid deliver-at"
+  );
+});

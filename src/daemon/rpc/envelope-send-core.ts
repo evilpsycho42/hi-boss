@@ -61,6 +61,7 @@ export async function sendEnvelopeFromAgent(params: {
   const metadata: Record<string, unknown> = {};
   let destinationAgentName: string | undefined;
   let to = toInput;
+  let deliverAt: number | undefined;
   let origin: EnvelopeOrigin = "cli";
 
   if (p.interruptNow !== undefined) {
@@ -77,6 +78,42 @@ export async function sendEnvelopeFromAgent(params: {
     origin = p.origin;
   }
   metadata.origin = origin;
+
+  if (interruptNow && p.deliverAt !== undefined) {
+    rpcError(RPC_ERRORS.INVALID_PARAMS, "interrupt-now cannot be used with deliver-at");
+  }
+
+  if (p.parseMode !== undefined) {
+    if (typeof p.parseMode !== "string") {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid parse-mode");
+    }
+    const mode = p.parseMode.trim();
+    if (mode !== "plain" && mode !== "markdownv2" && mode !== "html") {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid parse-mode (expected plain, markdownv2, or html)");
+    }
+    if (destination.type !== "channel") {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, "parse-mode is only supported for channel destinations");
+    }
+    metadata.parseMode = mode;
+  }
+
+  if (p.replyToEnvelopeId !== undefined) {
+    if (typeof p.replyToEnvelopeId !== "string" || !p.replyToEnvelopeId.trim()) {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid reply-to-envelope-id");
+    }
+    metadata.replyToEnvelopeId = resolveEnvelopeIdInput(params.ctx.db, p.replyToEnvelopeId.trim());
+  }
+
+  if (p.deliverAt) {
+    try {
+      deliverAt = parseDateTimeInputToUnixMsInTimeZone(p.deliverAt, params.ctx.db.getBossTimezone());
+    } catch (err) {
+      rpcError(
+        RPC_ERRORS.INVALID_PARAMS,
+        err instanceof Error ? err.message : "Invalid deliver-at"
+      );
+    }
+  }
 
   if (destination.type === "team") {
     if (interruptNow) {
@@ -154,10 +191,6 @@ export async function sendEnvelopeFromAgent(params: {
     metadata.chatScope = p.chatScope ?? computeTeamChatId(team.name);
   }
 
-  if (interruptNow && p.deliverAt !== undefined) {
-    rpcError(RPC_ERRORS.INVALID_PARAMS, "interrupt-now cannot be used with deliver-at");
-  }
-
   if (interruptNow && destination.type !== "agent" && destination.type !== "team-mention") {
     rpcError(
       RPC_ERRORS.INVALID_PARAMS,
@@ -187,38 +220,6 @@ export async function sendEnvelopeFromAgent(params: {
     }
   }
 
-  if (p.parseMode !== undefined) {
-    if (typeof p.parseMode !== "string") {
-      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid parse-mode");
-    }
-    const mode = p.parseMode.trim();
-    if (mode !== "plain" && mode !== "markdownv2" && mode !== "html") {
-      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid parse-mode (expected plain, markdownv2, or html)");
-    }
-    if (destination.type !== "channel") {
-      rpcError(RPC_ERRORS.INVALID_PARAMS, "parse-mode is only supported for channel destinations");
-    }
-    metadata.parseMode = mode;
-  }
-
-  if (p.replyToEnvelopeId !== undefined) {
-    if (typeof p.replyToEnvelopeId !== "string" || !p.replyToEnvelopeId.trim()) {
-      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid reply-to-envelope-id");
-    }
-    metadata.replyToEnvelopeId = resolveEnvelopeIdInput(params.ctx.db, p.replyToEnvelopeId.trim());
-  }
-
-  let deliverAt: number | undefined;
-  if (p.deliverAt) {
-    try {
-      deliverAt = parseDateTimeInputToUnixMsInTimeZone(p.deliverAt, params.ctx.db.getBossTimezone());
-    } catch (err) {
-      rpcError(
-        RPC_ERRORS.INVALID_PARAMS,
-        err instanceof Error ? err.message : "Invalid deliver-at"
-      );
-    }
-  }
 
   const finalMetadata = Object.keys(metadata).length > 0 ? metadata : undefined;
   let interruptedWork = false;
