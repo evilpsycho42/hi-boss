@@ -38,6 +38,10 @@ export interface SetupStatus {
   userInfo: SetupUserInfoStatus;
 }
 
+function isNumericPrincipal(raw: string): boolean {
+  return /^[0-9]+$/.test(raw);
+}
+
 function buildUserInfoStatus(db: HiBossDatabase): SetupUserInfoStatus {
   const bossName = (db.getBossName() ?? "").trim();
   const bossTimezone = (db.getConfig("boss_timezone") ?? "").trim();
@@ -170,7 +174,7 @@ function ensureBossProfileFile(hibossDir: string): void {
 export async function executeSetup(config: SetupConfig): Promise<{
   primaryAgentToken: string;
   secondaryAgentToken: string;
-  userTokens: Array<{ username: string; token: string }>;
+  userTokens: Array<{ principal: string; token: string }>;
 }> {
   if (await isDaemonRunning()) {
     throw new Error("Daemon is running. Stop it first: hiboss daemon stop --token <admin-token>");
@@ -181,7 +185,7 @@ export async function executeSetup(config: SetupConfig): Promise<{
 async function executeSetupDirect(config: SetupConfig): Promise<{
   primaryAgentToken: string;
   secondaryAgentToken: string;
-  userTokens: Array<{ username: string; token: string }>;
+  userTokens: Array<{ principal: string; token: string }>;
 }> {
   const daemonConfig = getDefaultConfig();
   const settingsPath = getSettingsPath(daemonConfig.dataDir);
@@ -211,8 +215,8 @@ async function executeSetupDirect(config: SetupConfig): Promise<{
 
     const primaryAgentToken = generateToken();
     const secondaryAgentToken = generateToken();
-    const userTokens = config.adapter.adapterBossIds.map((username) => ({
-      username,
+    const userTokens = config.adapter.adapterBossIds.map((principal) => ({
+      principal,
       token: generateToken(),
     }));
 
@@ -233,7 +237,9 @@ async function executeSetupDirect(config: SetupConfig): Promise<{
         ...DEFAULT_USER_PERMISSION_POLICY,
         bindings: userTokens.map((item) => ({
           adapterType: config.adapter.adapterType,
-          username: item.username,
+          ...(isNumericPrincipal(item.principal)
+            ? { userId: item.principal }
+            : { username: item.principal }),
           token: item.token,
           role: "boss",
         })),

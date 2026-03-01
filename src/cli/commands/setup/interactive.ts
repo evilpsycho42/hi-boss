@@ -284,7 +284,8 @@ export async function runInteractiveSetup(): Promise<void> {
     console.log(`   secondary-agent-name: ${secondaryAgentName}`);
     console.log(`   secondary-agent-token:${setupResult.secondaryAgentToken}`);
     for (const item of setupResult.userTokens) {
-      console.log(`   user-token[@${item.username}]: ${item.token}`);
+      const principalLabel = /^[0-9]+$/.test(item.principal) ? item.principal : `@${item.principal}`;
+      console.log(`   user-token[${principalLabel}]: ${item.token}`);
     }
     console.log(`   admin-token: ${adminToken}`);
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
