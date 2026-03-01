@@ -229,8 +229,8 @@ export class ChannelBridge {
     const toAddress = formatAgentAddress(binding.agentName);
     const agent = this.db.getAgentByNameCaseInsensitive(binding.agentName);
     const ownerUserId = authz.token;
-    const channelDefaultSession = agent
-      ? this.db.getOrCreateChannelDefaultSession({
+    const channelSession = agent
+      ? this.db.getOrCreateChannelActiveSession({
           agentName: binding.agentName,
           adapterType: platform,
           chatId: message.chat.id,
@@ -256,7 +256,7 @@ export class ChannelBridge {
         platform,
         channelMessageId: message.id,
         userToken: authz.token,
-        ...(channelDefaultSession ? { channelSessionId: channelDefaultSession.session.id } : {}),
+        ...(channelSession ? { channelSessionId: channelSession.session.id } : {}),
         channelUser: message.channelUser,
         chat: message.chat,
         ...(message.inReplyTo ? { inReplyTo: message.inReplyTo } : {}),

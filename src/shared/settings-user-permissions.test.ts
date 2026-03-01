@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { DEFAULT_PERMISSION_POLICY } from "./defaults.js";
-import { parseSettingsJson } from "./settings.js";
+import { parseSettingsV4Json } from "./settings.js";
 import { INTERNAL_VERSION } from "./version.js";
 
 function buildSettingsJson(extra: Record<string, unknown>): string {
   return JSON.stringify({
-    version: INTERNAL_VERSION,
+    version: 4,
     boss: {
       name: "boss",
       timezone: "UTC",
@@ -23,6 +23,24 @@ function buildSettingsJson(extra: Record<string, unknown>): string {
       {
         name: "nex",
         token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        role: "speaker",
+        provider: "codex",
+        description: "",
+        workspace: null,
+        model: null,
+        "reasoning-effort": null,
+        "permission-level": "standard",
+        bindings: [
+          {
+            "adapter-type": "telegram",
+            "adapter-token": "bot-token",
+          },
+        ],
+      },
+      {
+        name: "kai",
+        token: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        role: "leader",
         provider: "codex",
         description: "",
         workspace: null,
@@ -36,8 +54,8 @@ function buildSettingsJson(extra: Record<string, unknown>): string {
   });
 }
 
-test("parseSettingsJson accepts valid user-permission-policy", () => {
-  const settings = parseSettingsJson(
+test("parseSettingsV4Json accepts valid user-permission-policy", () => {
+  const settings = parseSettingsV4Json(
     buildSettingsJson({
       "user-permission-policy": {
         version: INTERNAL_VERSION,
@@ -65,10 +83,10 @@ test("parseSettingsJson accepts valid user-permission-policy", () => {
   assert.equal(settings.userPermissionPolicy?.bindings[0]?.token, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
 });
 
-test("parseSettingsJson rejects invalid user-permission-policy", () => {
+test("parseSettingsV4Json rejects invalid user-permission-policy", () => {
   assert.throws(
     () =>
-      parseSettingsJson(
+      parseSettingsV4Json(
         buildSettingsJson({
           "user-permission-policy": {
             version: INTERNAL_VERSION,

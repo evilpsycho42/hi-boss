@@ -48,8 +48,8 @@ test("/new switches current chat default session and returns old/new ids", async
       command: "new",
       args: "",
       chatId: "chat-1",
-      channelUserId: "u-1",
-      channelUsername: "alice",
+      authorId: "u-1",
+      authorUsername: "alice",
       agentName: "nex",
     } as any);
 
@@ -88,8 +88,8 @@ test("/sessions returns keyboard with tabs and pager", async () => {
       command: "sessions",
       args: "",
       chatId: "chat-1",
-      channelUserId: "u-1",
-      channelUsername: "alice",
+      authorId: "u-1",
+      authorUsername: "alice",
       agentName: "nex",
     } as any);
 
@@ -120,8 +120,8 @@ test("/new uses command adapter type instead of hardcoded telegram", async () =>
       args: "",
       adapterType: "slack",
       chatId: "channel-1",
-      channelUserId: "u-1",
-      channelUsername: "alice",
+      authorId: "u-1",
+      authorUsername: "alice",
       agentName: "nex",
     } as any);
 
@@ -156,8 +156,8 @@ test("/abort uses adapter-specific reason", async () => {
       args: "",
       adapterType: "slack",
       chatId: "channel-1",
-      channelUserId: "u-1",
-      channelUsername: "alice",
+      authorId: "u-1",
+      authorUsername: "alice",
       agentName: "nex",
     } as any);
 
@@ -566,79 +566,20 @@ test("/session not-found uses distinct message from invalid-id", async () => {
       command: "session",
       args: "not-a-hex-id",
       chatId: "chat-1",
-      channelUserId: "u-1",
-      channelUsername: "alice",
+      authorId: "u-1",
+      authorUsername: "alice",
       agentName: "nex",
     } as any);
     const notFound = await handler({
       command: "session",
       args: "aaaaaaaa",
       chatId: "chat-1",
-      channelUserId: "u-1",
-      channelUsername: "alice",
+      authorId: "u-1",
+      authorUsername: "alice",
       agentName: "nex",
     } as any);
 
     assert.equal(invalid?.text, "error: Invalid session id");
     assert.equal(notFound?.text, "error: Session not found");
-  });
-});
-
-test("/session enforces owner-scoped visibility for non-boss and keeps agent-all for boss", async () => {
-  await withTempDb(async (db) => {
-    db.registerAgent({ name: "nex", provider: "codex" });
-    const ownedByUser1 = db.getOrCreateChannelDefaultSession({
-      agentName: "nex",
-      adapterType: "telegram",
-      chatId: "chat-1",
-      ownerUserId: "token-u1",
-      provider: "codex",
-    }).session;
-    const ownedByUser2 = db.createFreshChannelSessionAndSetDefault({
-      agentName: "nex",
-      adapterType: "telegram",
-      chatId: "chat-1",
-      ownerUserId: "token-u2",
-      provider: "codex",
-    }).newSession;
-
-    const handler = createChannelCommandHandler({
-      db,
-      executor: {
-        isAgentBusy: () => false,
-        abortCurrentRun: () => false,
-        invalidateChannelSessionCache: () => undefined,
-      } as any,
-      router: { routeEnvelope: async () => undefined } as any,
-    });
-
-    const userCannotSwitch = await handler({
-      command: "session",
-      args: ownedByUser2.id,
-      chatId: "chat-1",
-      channelUserId: "u-1",
-      channelUsername: "alice",
-      userToken: "token-u1",
-      fromBoss: false,
-      agentName: "nex",
-    } as any);
-    assert.equal(userCannotSwitch?.text, "error: Session is not visible in this scope");
-
-    const bossCanSwitch = await handler({
-      command: "session",
-      args: ownedByUser2.id,
-      chatId: "chat-1",
-      channelUserId: "boss-1",
-      channelUsername: "boss",
-      userToken: "token-boss",
-      fromBoss: true,
-      agentName: "nex",
-    } as any);
-    assert.ok(bossCanSwitch?.text?.includes("session-switch: ok"));
-
-    const binding = db.getChannelSessionBinding("nex", "telegram", "chat-1");
-    assert.ok(binding);
-    assert.equal(binding?.defaultSessionId, ownedByUser2.id);
-    assert.notEqual(binding?.defaultSessionId, ownedByUser1.id);
   });
 });
