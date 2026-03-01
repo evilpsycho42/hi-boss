@@ -153,7 +153,7 @@ export class TelegramAdapter implements ChatAdapter {
     if (!chatId) return;
 
     const username = ctx.from?.username;
-    const authorId =
+    const channelUserId =
       ctx.from?.id !== undefined && ctx.from?.id !== null
         ? String(ctx.from.id)
         : undefined;
@@ -164,8 +164,8 @@ export class TelegramAdapter implements ChatAdapter {
       args: TelegramAdapter.extractCommandArgs(rawText, commandName),
       adapterType: this.platform,
       chatId,
-      authorId,
-      authorUsername: username,
+      channelUserId,
+      channelUsername: username,
       messageId: ctx.message?.message_id != null ? String(ctx.message.message_id) : undefined,
     };
 
@@ -211,8 +211,8 @@ export class TelegramAdapter implements ChatAdapter {
       args: `tab=${parsed.tab} page=${parsed.page}`,
       adapterType: this.platform,
       chatId,
-      authorId: ctx.from?.id !== undefined && ctx.from?.id !== null ? String(ctx.from.id) : undefined,
-      authorUsername: ctx.from?.username,
+      channelUserId: ctx.from?.id !== undefined && ctx.from?.id !== null ? String(ctx.from.id) : undefined,
+      channelUsername: ctx.from?.username,
       messageId:
         callback?.message?.message_id !== undefined && callback?.message?.message_id !== null
           ? String(callback.message.message_id)

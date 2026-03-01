@@ -167,7 +167,7 @@ test("resolveExecutionScope respects envelope channelSessionId pin even after de
       fromBoss: false,
       metadata: {
         channelSessionId: first.id,
-        author: { id: "member-2" },
+        channelUser: { id: "member-2" },
       },
     } as any;
 
@@ -186,7 +186,7 @@ test("resolveExecutionScope respects envelope channelSessionId pin even after de
       fromBoss: true,
       metadata: {
         channelSessionId: first.id,
-        author: { id: "boss-1" },
+        channelUser: { id: "boss-1" },
       },
     } as any;
     const bossScope = (executor as any).resolveExecutionScope(agent, db, bossEnvelope) as {

@@ -74,7 +74,7 @@ test("channel bridge stamps channelSessionId at ingest and does not drift owner 
     await adapter.emitMessage({
       id: "m1",
       platform: "telegram",
-      author: { id: "boss-1", username: "boss_user", displayName: "Boss" },
+      channelUser: { id: "boss-1", username: "boss_user", displayName: "Boss" },
       chat: { id: "chat-1", name: "group-1" },
       content: { text: "hello" },
       raw: {},
@@ -91,7 +91,7 @@ test("channel bridge stamps channelSessionId at ingest and does not drift owner 
     await adapter.emitMessage({
       id: "m2",
       platform: "telegram",
-      author: { id: "member-2", username: "alice", displayName: "Alice" },
+      channelUser: { id: "member-2", username: "alice", displayName: "Alice" },
       chat: { id: "chat-1", name: "group-1" },
       content: { text: "follow-up" },
       raw: {},

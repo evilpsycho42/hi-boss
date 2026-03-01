@@ -65,7 +65,7 @@ export class ChannelBridge {
     adapterToken: string,
     command: ChannelCommand
   ): Promise<ChannelCommandResponse | void> {
-    const fromBoss = this.isBoss(adapter.platform, command.authorUsername);
+    const fromBoss = this.isBoss(adapter.platform, command.channelUsername);
     if (!fromBoss) {
       // Boss-only commands: do not reply to non-boss users.
       return;
@@ -102,7 +102,7 @@ export class ChannelBridge {
     message: ChannelMessage
   ): Promise<void> {
     const platform = adapter.platform;
-    const fromBoss = this.isBoss(platform, message.author.username);
+    const fromBoss = this.isBoss(platform, message.channelUser.username);
 
     // Find the agent bound to this adapter
     const binding = this.db.getBindingByAdapter(platform, adapterToken);
@@ -134,7 +134,8 @@ export class ChannelBridge {
     const fromAddress = formatChannelAddress(platform, message.chat.id);
     const toAddress = formatAgentAddress(binding.agentName);
     const agent = this.db.getAgentByNameCaseInsensitive(binding.agentName);
-    const ownerUserId = fromBoss ? message.author.id : undefined;
+    const ownerUserId = fromBoss ? message.channelUser.id : undefined;
+    const ownerUserId = fromBoss ? message.channelUser.id : undefined;
     const channelDefaultSession = agent
       ? this.db.getOrCreateChannelDefaultSession({
           agentName: binding.agentName,
@@ -162,7 +163,8 @@ export class ChannelBridge {
         platform,
         channelMessageId: message.id,
         ...(channelDefaultSession ? { channelSessionId: channelDefaultSession.session.id } : {}),
-        author: message.author,
+        channelUser: message.channelUser,
+        channelUser: message.channelUser,
         chat: message.chat,
         ...(message.inReplyTo ? { inReplyTo: message.inReplyTo } : {}),
       },

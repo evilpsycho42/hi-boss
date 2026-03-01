@@ -48,8 +48,8 @@ test("/new switches current chat default session and returns old/new ids", async
       command: "new",
       args: "",
       chatId: "chat-1",
-      authorId: "u-1",
-      authorUsername: "alice",
+      channelUserId: "u-1",
+      channelUsername: "alice",
       agentName: "nex",
     } as any);
 
@@ -88,8 +88,8 @@ test("/sessions returns keyboard with tabs and pager", async () => {
       command: "sessions",
       args: "",
       chatId: "chat-1",
-      authorId: "u-1",
-      authorUsername: "alice",
+      channelUserId: "u-1",
+      channelUsername: "alice",
       agentName: "nex",
     } as any);
 
@@ -120,8 +120,8 @@ test("/new uses command adapter type instead of hardcoded telegram", async () =>
       args: "",
       adapterType: "slack",
       chatId: "channel-1",
-      authorId: "u-1",
-      authorUsername: "alice",
+      channelUserId: "u-1",
+      channelUsername: "alice",
       agentName: "nex",
     } as any);
 
@@ -156,8 +156,8 @@ test("/abort uses adapter-specific reason", async () => {
       args: "",
       adapterType: "slack",
       chatId: "channel-1",
-      authorId: "u-1",
-      authorUsername: "alice",
+      channelUserId: "u-1",
+      channelUsername: "alice",
       agentName: "nex",
     } as any);
 
@@ -193,8 +193,8 @@ test("/provider switches provider, clears overrides, and requests refresh", asyn
       args: "claude",
       adapterType: "telegram",
       chatId: "chat-1",
-      authorId: "u-1",
-      authorUsername: "alice",
+      channelUserId: "u-1",
+      channelUsername: "alice",
       agentName: "nex",
     } as any);
 
@@ -239,8 +239,8 @@ test("/provider updates model and reasoning-effort without provider switch", asy
       args: "codex model=gpt-5.3-codex reasoning-effort=high",
       adapterType: "telegram",
       chatId: "chat-1",
-      authorId: "u-1",
-      authorUsername: "alice",
+      channelUserId: "u-1",
+      channelUsername: "alice",
       agentName: "nex",
     } as any);
 
@@ -278,8 +278,8 @@ test("/provider without args returns usage", async () => {
       args: "",
       adapterType: "telegram",
       chatId: "chat-1",
-      authorId: "u-1",
-      authorUsername: "alice",
+      channelUserId: "u-1",
+      channelUsername: "alice",
       agentName: "nex",
     } as any);
 
@@ -308,8 +308,8 @@ test("/trace returns usage when args are provided", async () => {
       command: "trace",
       args: "abcdef12",
       chatId: "chat-1",
-      authorId: "u-1",
-      authorUsername: "alice",
+      channelUserId: "u-1",
+      channelUsername: "alice",
       agentName: "nex",
     } as any);
 
@@ -353,8 +353,8 @@ test("/trace reads latest finished run trace", async () => {
         command: "trace",
         args: "",
         chatId: "chat-1",
-        authorId: "u-1",
-        authorUsername: "alice",
+        channelUserId: "u-1",
+        channelUsername: "alice",
         agentName: "nex",
       } as any);
 
@@ -403,8 +403,8 @@ test("/trace shows live entries when current run is in progress", async () => {
         command: "trace",
         args: "",
         chatId: "chat-1",
-        authorId: "u-1",
-        authorUsername: "alice",
+        channelUserId: "u-1",
+        channelUsername: "alice",
         agentName: "nex",
       } as any);
 
@@ -453,8 +453,8 @@ test("/trace reads Codex run traces", async () => {
         command: "trace",
         args: "",
         chatId: "chat-1",
-        authorId: "u-1",
-        authorUsername: "alice",
+        channelUserId: "u-1",
+        channelUsername: "alice",
         agentName: "nex",
       } as any);
 
@@ -521,8 +521,8 @@ test("/status resolves effective codex model/reasoning from CODEX_HOME config", 
         args: "",
         adapterType: "telegram",
         chatId: "chat-1",
-        authorId: "u-1",
-        authorUsername: "alice",
+        channelUserId: "u-1",
+        channelUsername: "alice",
         agentName: "nex",
       } as any);
 
@@ -566,16 +566,16 @@ test("/session not-found uses distinct message from invalid-id", async () => {
       command: "session",
       args: "not-a-hex-id",
       chatId: "chat-1",
-      authorId: "u-1",
-      authorUsername: "alice",
+      channelUserId: "u-1",
+      channelUsername: "alice",
       agentName: "nex",
     } as any);
     const notFound = await handler({
       command: "session",
       args: "aaaaaaaa",
       chatId: "chat-1",
-      authorId: "u-1",
-      authorUsername: "alice",
+      channelUserId: "u-1",
+      channelUsername: "alice",
       agentName: "nex",
     } as any);
 

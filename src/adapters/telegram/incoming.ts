@@ -33,7 +33,7 @@ function extractInReplyTo(msg: MessageContext["message"]): ChannelMessage["inRep
 
   if (typeof replyMsg.message_id !== "number") return undefined;
 
-  const author =
+  const channelUser =
     replyMsg.from && typeof replyMsg.from === "object" && typeof replyMsg.from.id === "number"
       ? {
           id: String(replyMsg.from.id),
@@ -51,7 +51,7 @@ function extractInReplyTo(msg: MessageContext["message"]): ChannelMessage["inRep
 
   return {
     channelMessageId: String(replyMsg.message_id),
-    author: author && author.displayName ? author : undefined,
+    channelUser: channelUser && channelUser.displayName ? channelUser : undefined,
     text: text ? truncateText(text, 1200) : undefined,
   };
 }
@@ -199,7 +199,7 @@ export async function buildTelegramChannelMessage(params: {
   return {
     id: String(telegramMsg.message_id),
     platform: params.platform,
-    author: {
+    channelUser: {
       id: String(from.id),
       username: from.username,
       displayName: from.first_name,

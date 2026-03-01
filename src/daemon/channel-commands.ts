@@ -188,7 +188,7 @@ async function handleSessionsCommand(params: {
     scope: view.scope,
     adapterType,
     chatId: c.chatId,
-    ownerUserId: c.authorId,
+    ownerUserId: c.channelUserId,
   });
 
   const total = Math.min(SESSIONS_MAX_TOTAL, totalRaw);
@@ -201,7 +201,7 @@ async function handleSessionsCommand(params: {
     scope: view.scope,
     adapterType,
     chatId: c.chatId,
-    ownerUserId: c.authorId,
+    ownerUserId: c.channelUserId,
     limit: SESSIONS_PAGE_SIZE,
     offset,
   });
@@ -280,7 +280,7 @@ async function handleSessionSwitchCommand(params: {
     agentName: c.agentName!,
     adapterType,
     chatId: c.chatId,
-    ownerUserId: c.authorId,
+    ownerUserId: c.channelUserId,
   });
 
   if (!visible.has(resolved.session.id)) {
@@ -292,7 +292,7 @@ async function handleSessionSwitchCommand(params: {
     adapterType,
     chatId: c.chatId,
     targetSessionId: resolved.session.id,
-    ownerUserId: c.authorId,
+    ownerUserId: c.channelUserId,
   });
   params.executor.invalidateChannelSessionCache(c.agentName!, adapterType, c.chatId);
 
@@ -326,7 +326,7 @@ export function createChannelCommandHandler(params: {
         agentName: agent.name,
         adapterType,
         chatId: c.chatId,
-        ownerUserId: c.authorId,
+        ownerUserId: c.channelUserId,
         provider: agent.provider ?? DEFAULT_AGENT_PROVIDER,
       });
       params.executor.invalidateChannelSessionCache(agent.name, adapterType, c.chatId);
@@ -437,11 +437,11 @@ async function handleOneshotCommand(
         oneshotType: mode,
         platform: adapterType,
         channelMessageId: command.messageId,
-        author:
-          command.authorId || command.authorUsername
+        channelUser:
+          command.channelUserId || command.channelUsername
             ? {
-                ...(command.authorId ? { id: command.authorId } : {}),
-                ...(command.authorUsername ? { username: command.authorUsername } : {}),
+                ...(command.channelUserId ? { id: command.channelUserId } : {}),
+                ...(command.channelUsername ? { username: command.channelUsername } : {}),
               }
             : undefined,
         chat: { id: command.chatId },

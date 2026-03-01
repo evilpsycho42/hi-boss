@@ -57,7 +57,7 @@ Stored envelope metadata includes:
 metadata: {
   platform: "telegram",
   channelMessageId: string,
-  author: { id, username?, displayName },
+  channelUser: { id, username?, displayName },
   chat: { id, name? }
 }
 ```
