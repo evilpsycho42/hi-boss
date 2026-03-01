@@ -9,7 +9,7 @@ Hi-Boss supplies fields as template variables (see `prompts/VARIABLES.md`).
 ## Sections
 
 1. **Header** - routing and metadata
-2. **Messages** - author, timestamp, text, attachments
+2. **Messages** - sender, timestamp, text, attachments
 
 ## Header Fields
 

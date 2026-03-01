@@ -193,8 +193,8 @@ test("/provider switches provider, clears overrides, and requests refresh", asyn
       args: "claude",
       adapterType: "telegram",
       chatId: "chat-1",
-      authorId: "u-1",
-      authorUsername: "alice",
+      channelUserId: "u-1",
+      channelUsername: "alice",
       agentName: "nex",
     } as any);
 
@@ -239,8 +239,8 @@ test("/provider updates model and reasoning-effort without provider switch", asy
       args: "codex model=gpt-5.3-codex reasoning-effort=high",
       adapterType: "telegram",
       chatId: "chat-1",
-      authorId: "u-1",
-      authorUsername: "alice",
+      channelUserId: "u-1",
+      channelUsername: "alice",
       agentName: "nex",
     } as any);
 
@@ -278,8 +278,8 @@ test("/provider without args returns usage", async () => {
       args: "",
       adapterType: "telegram",
       chatId: "chat-1",
-      authorId: "u-1",
-      authorUsername: "alice",
+      channelUserId: "u-1",
+      channelUsername: "alice",
       agentName: "nex",
     } as any);
 
@@ -308,8 +308,8 @@ test("/trace returns usage when args are provided", async () => {
       command: "trace",
       args: "abcdef12",
       chatId: "chat-1",
-      authorId: "u-1",
-      authorUsername: "alice",
+      channelUserId: "u-1",
+      channelUsername: "alice",
       agentName: "nex",
     } as any);
 
@@ -353,8 +353,8 @@ test("/trace reads latest finished run trace", async () => {
         command: "trace",
         args: "",
         chatId: "chat-1",
-        authorId: "u-1",
-        authorUsername: "alice",
+        channelUserId: "u-1",
+        channelUsername: "alice",
         agentName: "nex",
       } as any);
 
@@ -403,8 +403,8 @@ test("/trace shows live entries when current run is in progress", async () => {
         command: "trace",
         args: "",
         chatId: "chat-1",
-        authorId: "u-1",
-        authorUsername: "alice",
+        channelUserId: "u-1",
+        channelUsername: "alice",
         agentName: "nex",
       } as any);
 
@@ -453,8 +453,8 @@ test("/trace reads Codex run traces", async () => {
         command: "trace",
         args: "",
         chatId: "chat-1",
-        authorId: "u-1",
-        authorUsername: "alice",
+        channelUserId: "u-1",
+        channelUsername: "alice",
         agentName: "nex",
       } as any);
 
@@ -521,8 +521,8 @@ test("/status resolves effective codex model/reasoning from CODEX_HOME config", 
         args: "",
         adapterType: "telegram",
         chatId: "chat-1",
-        authorId: "u-1",
-        authorUsername: "alice",
+        channelUserId: "u-1",
+        channelUsername: "alice",
         agentName: "nex",
       } as any);
 

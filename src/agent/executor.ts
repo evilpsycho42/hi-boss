@@ -514,9 +514,8 @@ export class AgentExecutor {
     if (parsedFrom && parsedFrom.type === "channel") {
       const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
       const md = metadata;
-      const authorRaw = md && typeof md.author === "object" && md.author ? md.author as Record<string, unknown> : undefined;
-      const ownerUserId = envelope.fromBoss && typeof authorRaw?.id === "string" && authorRaw.id.trim()
-        ? authorRaw.id.trim()
+      const ownerUserId = typeof md?.userToken === "string" && md.userToken.trim()
+        ? md.userToken.trim()
         : undefined;
       const pinnedSessionId = typeof md?.channelSessionId === "string" && md.channelSessionId.trim().length > 0
         ? md.channelSessionId.trim()

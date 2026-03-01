@@ -91,7 +91,7 @@ export function detectAttachmentType(attachment: Attachment): "image" | "video" 
 export interface ChannelMessage {
   id: string;
   platform: string;
-  author: {
+  channelUser: {
     id: string;
     username?: string;
     displayName: string;
@@ -102,7 +102,7 @@ export interface ChannelMessage {
    */
   inReplyTo?: {
     channelMessageId: string;
-    author?: {
+    channelUser?: {
       id: string;
       username?: string;
       displayName: string;
@@ -130,8 +130,10 @@ export interface ChannelCommand {
   args: string;              // Arguments after command
   adapterType?: string;      // Adapter origin (e.g., "telegram")
   chatId: string;            // Chat ID where command was issued
-  authorId?: string;         // Platform user ID of command issuer
-  authorUsername?: string;   // Username of command issuer
+  channelUserId?: string;    // Channel-side user ID of command issuer
+  channelUsername?: string;  // Channel-side username of command issuer
+  fromBoss?: boolean;        // Whether command sender resolved to role "boss"
+  userToken?: string;        // Resolved global user token of command issuer
   messageId?: string;        // Platform message ID of the command message
   callbackQueryId?: string;  // Platform callback query ID (for interactive buttons)
   isCallback?: boolean;      // True when command was triggered by a button callback
@@ -187,9 +189,9 @@ export interface ChatAdapter {
 }
 
 export function buildSemanticName(msg: ChannelMessage): string {
-  const name = msg.author.username
-    ? `${msg.author.displayName} (@${msg.author.username})`
-    : msg.author.displayName;
+  const name = msg.channelUser.username
+    ? `${msg.channelUser.displayName} (@${msg.channelUser.username})`
+    : msg.channelUser.displayName;
 
   return msg.chat.name ? `${name} in "${msg.chat.name}"` : name;
 }

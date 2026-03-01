@@ -96,13 +96,13 @@ function formatAttachmentsText(attachments: EnvelopeAttachment[] | undefined): s
 interface ChannelMetadata {
   platform: string;
   channelMessageId: string;
-  author: { id: string; username?: string; displayName: string };
+  channelUser: { id: string; username?: string; displayName: string };
   chat: { id: string; name?: string };
   inReplyTo?: {
     // Prefer channelMessageId, but accept legacy messageId from older stored metadata.
     channelMessageId?: string;
     messageId?: string;
-    author?: { id: string; username?: string; displayName: string };
+    channelUser?: { id: string; username?: string; displayName: string };
     text?: string;
   };
 }
@@ -121,10 +121,10 @@ function isChannelMetadata(metadata: unknown): metadata is ChannelMetadata {
   return (
     typeof m.platform === "string" &&
     typeof m.channelMessageId === "string" &&
-    typeof m.author === "object" &&
-    m.author !== null &&
-    typeof (m.author as Record<string, unknown>).id === "string" &&
-    typeof (m.author as Record<string, unknown>).displayName === "string" &&
+    typeof m.channelUser === "object" &&
+    m.channelUser !== null &&
+    typeof (m.channelUser as Record<string, unknown>).id === "string" &&
+    typeof (m.channelUser as Record<string, unknown>).displayName === "string" &&
     typeof m.chat === "object" &&
     m.chat !== null &&
     typeof (m.chat as Record<string, unknown>).id === "string"
@@ -171,10 +171,10 @@ function buildSemanticFrom(envelope: Envelope): SemanticFromResult | undefined {
   }
   if (!isChannelMetadata(metadata)) return undefined;
 
-  const { author, chat } = metadata;
-  const authorName = author.username
-    ? `${author.displayName} (@${author.username})`
-    : author.displayName;
+  const { channelUser, chat } = metadata;
+  const authorName = channelUser.username
+    ? `${channelUser.displayName} (@${channelUser.username})`
+    : channelUser.displayName;
 
   if (chat.name) {
     // Group message
@@ -206,10 +206,10 @@ function buildInReplyTo(metadata: unknown): InReplyToPrompt | undefined {
   if (!inReplyTo || typeof inReplyTo !== "object") return undefined;
 
   const rt = inReplyTo as Record<string, unknown>;
-  const authorRaw = rt.author;
+  const channelUserRaw = rt.channelUser;
   let fromName = "";
-  if (authorRaw && typeof authorRaw === "object") {
-    const a = authorRaw as Record<string, unknown>;
+  if (channelUserRaw && typeof channelUserRaw === "object") {
+    const a = channelUserRaw as Record<string, unknown>;
     const displayName = typeof a.displayName === "string" ? a.displayName : "";
     const username = typeof a.username === "string" ? a.username : "";
     fromName = username ? `${displayName} (@${username})` : displayName;

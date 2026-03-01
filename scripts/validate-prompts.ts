@@ -63,7 +63,7 @@ function makeMockEnvelopes(): Envelope[] {
       metadata: {
         platform: "telegram",
         channelMessageId: "2147483647",
-        author: { id: "u-1", username: "alice", displayName: "Alice" },
+        channelUser: { id: "u-1", username: "alice", displayName: "Alice" },
         chat: { id: "123", name: "hiboss-test" },
       },
     },
@@ -196,7 +196,7 @@ function validateTurnPrompt(): void {
       metadata: {
         platform: "telegram",
         channelMessageId: "2147483647",
-        author: { id: "u-1", username: "alice", displayName: "Alice" },
+        channelUser: { id: "u-1", username: "alice", displayName: "Alice" },
         chat: { id: "123", name: "hiboss-test" },
       },
     };
@@ -211,7 +211,7 @@ function validateTurnPrompt(): void {
       metadata: {
         platform: "telegram",
         channelMessageId: "2147483646",
-        author: { id: "u-2", username: "kky1024", displayName: "Kevin" },
+        channelUser: { id: "u-2", username: "kky1024", displayName: "Kevin" },
         chat: { id: "123", name: "hiboss-test" },
       },
     };
@@ -255,7 +255,7 @@ function validateCliEnvelopePrompt(): void {
     metadata: {
       platform: "telegram",
       channelMessageId: "m-1",
-      author: { id: "u-1", username: "alice", displayName: "Alice" },
+      channelUser: { id: "u-1", username: "alice", displayName: "Alice" },
       chat: { id: "123", name: "hiboss-test" },
     },
   };

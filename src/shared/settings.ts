@@ -9,6 +9,10 @@ import {
 import { isPermissionLevel, parsePermissionPolicyFromObject, type PermissionPolicy } from "./permissions.js";
 import { parseDailyResetAt, parseDurationToMs } from "./session-policy.js";
 import { isValidIanaTimeZone } from "./timezone.js";
+import {
+  parseUserPermissionPolicyFromObject,
+  type UserPermissionPolicy,
+} from "./user-permissions.js";
 import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "./validation.js";
 import { INTERNAL_VERSION } from "./version.js";
 
@@ -66,6 +70,7 @@ export interface Settings {
     bossIds: string[];
   };
   permissionPolicy: PermissionPolicy;
+  userPermissionPolicy: UserPermissionPolicy;
   runtime?: SettingsRuntime;
   agents: SettingsAgent[];
 }
@@ -123,6 +128,17 @@ function parsePermissionPolicy(raw: unknown): Settings["permissionPolicy"] {
     return parsed;
   } catch (err) {
     fail("permission-policy", (err as Error).message);
+  }
+}
+
+function parseUserPermissionPolicy(raw: unknown): Settings["userPermissionPolicy"] {
+  if (!isObject(raw)) {
+    fail("user-permission-policy", "is required and must be an object");
+  }
+  try {
+    return parseUserPermissionPolicyFromObject(raw);
+  } catch (err) {
+    fail("user-permission-policy", (err as Error).message);
   }
 }
 
@@ -354,6 +370,11 @@ export function assertValidSettings(settings: Settings): void {
     fail("admin.token", `must be at least ${MIN_ADMIN_TOKEN_LENGTH} characters`);
   }
   validateBossIds(settings.telegram.bossIds);
+  try {
+    parseUserPermissionPolicyFromObject(settings.userPermissionPolicy);
+  } catch (err) {
+    fail("user-permission-policy", (err as Error).message);
+  }
   const perAgent = settings.runtime?.sessionConcurrency?.perAgent ?? DEFAULT_SESSION_CONCURRENCY_PER_AGENT;
   const globalLimit = settings.runtime?.sessionConcurrency?.global ?? DEFAULT_SESSION_CONCURRENCY_GLOBAL;
   if (!Number.isFinite(perAgent) || Math.trunc(perAgent) < 1 || Math.trunc(perAgent) > 64) {
@@ -457,6 +478,7 @@ export function parseSettingsJson(json: string): Settings {
       bossIds: parseBossIds(telegramRaw["boss-ids"]),
     },
     permissionPolicy: parsePermissionPolicy(raw["permission-policy"] ?? DEFAULT_PERMISSION_POLICY),
+    userPermissionPolicy: parseUserPermissionPolicy(raw["user-permission-policy"] ?? undefined),
     runtime: parseRuntime(raw.runtime),
     agents: agentsRaw.map((agent, index) => parseAgent(agent, index)),
   };
@@ -480,6 +502,7 @@ export function stringifySettings(settings: Settings): string {
       "boss-ids": settings.telegram.bossIds,
     },
     "permission-policy": settings.permissionPolicy,
+    "user-permission-policy": settings.userPermissionPolicy,
     runtime: {
       "session-concurrency": {
         "per-agent":

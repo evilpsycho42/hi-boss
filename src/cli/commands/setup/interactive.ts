@@ -283,6 +283,10 @@ export async function runInteractiveSetup(): Promise<void> {
     console.log(`   primary-agent-token:  ${setupResult.primaryAgentToken}`);
     console.log(`   secondary-agent-name: ${secondaryAgentName}`);
     console.log(`   secondary-agent-token:${setupResult.secondaryAgentToken}`);
+    for (const item of setupResult.userTokens) {
+      const principalLabel = /^[0-9]+$/.test(item.principal) ? item.principal : `@${item.principal}`;
+      console.log(`   user-token[${principalLabel}]: ${item.token}`);
+    }
     console.log(`   admin-token: ${adminToken}`);
     console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     console.log("\n⚠️  Save these tokens! They won't be shown again.\n");

@@ -75,15 +75,15 @@ Notes:
 | `envelopes[].id` | string | Envelope id |
 | `envelopes[].idShort` | string | Envelope id (short id; first 8 hex chars of the UUID with hyphens removed) |
 | `envelopes[].from` | string | Sender address |
-| `envelopes[].fromName` | string | Human-readable name: `group "<name>"` for group messages, or author name with optional `[boss]` suffix for direct messages (or empty) |
+| `envelopes[].fromName` | string | Human-readable name: `group "<name>"` for group messages, or sender name with optional `[boss]` suffix for direct messages (or empty) |
 | `envelopes[].inReplyTo` | object | Present only when the channel message is a reply (or empty) |
-| `envelopes[].inReplyTo.fromName` | string | Replied-to author display name (or empty) |
+| `envelopes[].inReplyTo.fromName` | string | Replied-to sender display name (or empty) |
 | `envelopes[].inReplyTo.text` | string | Replied-to text excerpt (or `(none)`) |
 | `envelopes[].fromBoss` | boolean | Boss flag |
 | `envelopes[].isGroup` | boolean | Whether message is from a group chat |
 | `envelopes[].groupName` | string | Group name (or empty for direct/agent messages) |
-| `envelopes[].authorName` | string | Author display name without boss marker (or empty) |
-| `envelopes[].authorLine` | string | Author with `[boss]` suffix for group messages (or empty) |
+| `envelopes[].authorName` | string | Sender display name without boss marker (or empty) |
+| `envelopes[].authorLine` | string | Sender with `[boss]` suffix for group messages (or empty) |
 | `envelopes[].senderLine` | string | Sender line for channel messages (e.g. `Alice (@alice) in group "hiboss-test"` or `Alice (@alice) in private chat`) (or empty) |
 | `envelopes[].createdAt.iso` | string | Created-at formatted in boss timezone offset (ISO 8601) |
 | `envelopes[].deliverAt.present` | boolean | Whether deliver-at is present |
@@ -107,15 +107,15 @@ Notes:
 | `envelope.idShort` | string | Envelope id (short id; first 8 hex chars of the UUID with hyphens removed) |
 | `envelope.from` | string | Sender address |
 | `envelope.to` | string | Destination address |
-| `envelope.fromName` | string | Human-readable name: `group "<name>"` for group messages, or author name with optional `[boss]` suffix for direct messages (or empty) |
+| `envelope.fromName` | string | Human-readable name: `group "<name>"` for group messages, or sender name with optional `[boss]` suffix for direct messages (or empty) |
 | `envelope.inReplyTo` | object | Present only when the channel message is a reply (or empty) |
-| `envelope.inReplyTo.fromName` | string | Replied-to author display name (or empty) |
+| `envelope.inReplyTo.fromName` | string | Replied-to sender display name (or empty) |
 | `envelope.inReplyTo.text` | string | Replied-to text excerpt (or `(none)`) |
 | `envelope.fromBoss` | boolean | Boss flag |
 | `envelope.isGroup` | boolean | Whether message is from a group chat |
 | `envelope.groupName` | string | Group name (or empty for direct/agent messages) |
-| `envelope.authorName` | string | Author display name without boss marker (or empty) |
-| `envelope.authorLine` | string | Author with `[boss]` suffix for group messages (or empty) |
+| `envelope.authorName` | string | Sender display name without boss marker (or empty) |
+| `envelope.authorLine` | string | Sender with `[boss]` suffix for group messages (or empty) |
 | `envelope.senderLine` | string | Sender line for channel messages (e.g. `Alice (@alice) in group "hiboss-test"` or `Alice (@alice) in private chat`) (or empty) |
 | `envelope.createdAt.iso` | string | Created-at formatted in boss timezone offset (ISO 8601) |
 | `envelope.deliverAt.present` | boolean | Whether deliver-at is present |

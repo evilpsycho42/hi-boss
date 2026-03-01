@@ -8,7 +8,7 @@ import { setupAgentHome } from "../../../agent/home-setup.js";
 import type { SetupCheckResult } from "../../../daemon/ipc/types.js";
 import type { SetupConfig } from "./types.js";
 import { generateToken } from "../../../agent/auth.js";
-import { DEFAULT_PERMISSION_POLICY } from "../../../shared/defaults.js";
+import { DEFAULT_PERMISSION_POLICY, DEFAULT_USER_PERMISSION_POLICY } from "../../../shared/defaults.js";
 import { SETTINGS_VERSION, type Settings } from "../../../shared/settings.js";
 import { getSettingsPath, writeSettingsFileAtomic } from "../../../shared/settings-io.js";
 import { syncSettingsToDb } from "../../../daemon/settings-sync.js";
@@ -36,6 +36,10 @@ export interface SetupStatus {
     provider?: "claude" | "codex";
   }>;
   userInfo: SetupUserInfoStatus;
+}
+
+function isNumericPrincipal(raw: string): boolean {
+  return /^[0-9]+$/.test(raw);
 }
 
 function buildUserInfoStatus(db: HiBossDatabase): SetupUserInfoStatus {
@@ -167,14 +171,22 @@ function ensureBossProfileFile(hibossDir: string): void {
 /**
  * Execute full first-time setup.
  */
-export async function executeSetup(config: SetupConfig): Promise<{ primaryAgentToken: string; secondaryAgentToken: string }> {
+export async function executeSetup(config: SetupConfig): Promise<{
+  primaryAgentToken: string;
+  secondaryAgentToken: string;
+  userTokens: Array<{ principal: string; token: string }>;
+}> {
   if (await isDaemonRunning()) {
     throw new Error("Daemon is running. Stop it first: hiboss daemon stop --token <admin-token>");
   }
   return executeSetupDirect(config);
 }
 
-async function executeSetupDirect(config: SetupConfig): Promise<{ primaryAgentToken: string; secondaryAgentToken: string }> {
+async function executeSetupDirect(config: SetupConfig): Promise<{
+  primaryAgentToken: string;
+  secondaryAgentToken: string;
+  userTokens: Array<{ principal: string; token: string }>;
+}> {
   const daemonConfig = getDefaultConfig();
   const settingsPath = getSettingsPath(daemonConfig.dataDir);
   const hasSettingsFile = fs.existsSync(settingsPath);
@@ -203,6 +215,10 @@ async function executeSetupDirect(config: SetupConfig): Promise<{ primaryAgentTo
 
     const primaryAgentToken = generateToken();
     const secondaryAgentToken = generateToken();
+    const userTokens = config.adapter.adapterBossIds.map((principal) => ({
+      principal,
+      token: generateToken(),
+    }));
 
     const settings: Settings = {
       version: SETTINGS_VERSION,
@@ -217,6 +233,17 @@ async function executeSetupDirect(config: SetupConfig): Promise<{ primaryAgentTo
         bossIds: config.adapter.adapterBossIds,
       },
       permissionPolicy: DEFAULT_PERMISSION_POLICY,
+      userPermissionPolicy: {
+        ...DEFAULT_USER_PERMISSION_POLICY,
+        bindings: userTokens.map((item) => ({
+          adapterType: config.adapter.adapterType,
+          ...(isNumericPrincipal(item.principal)
+            ? { userId: item.principal }
+            : { username: item.principal }),
+          token: item.token,
+          role: "boss",
+        })),
+      },
       agents: [
         {
           name: config.primaryAgent.name,
@@ -258,6 +285,7 @@ async function executeSetupDirect(config: SetupConfig): Promise<{ primaryAgentTo
     return {
       primaryAgentToken,
       secondaryAgentToken,
+      userTokens,
     };
   } finally {
     db.close();

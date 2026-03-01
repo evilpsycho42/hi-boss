@@ -144,7 +144,7 @@ test("resolveExecutionScope respects envelope channelSessionId pin even after de
       agentName: "nex",
       adapterType: "telegram",
       chatId: "chat-1",
-      ownerUserId: "boss-1",
+      ownerUserId: "token-boss",
       provider: "codex",
     }).session;
 
@@ -152,7 +152,7 @@ test("resolveExecutionScope respects envelope channelSessionId pin even after de
       agentName: "nex",
       adapterType: "telegram",
       chatId: "chat-1",
-      ownerUserId: "boss-1",
+      ownerUserId: "token-boss",
       provider: "codex",
     }).newSession;
 
@@ -167,7 +167,7 @@ test("resolveExecutionScope respects envelope channelSessionId pin even after de
       fromBoss: false,
       metadata: {
         channelSessionId: first.id,
-        author: { id: "member-2" },
+        userToken: "token-member",
       },
     } as any;
 
@@ -178,7 +178,7 @@ test("resolveExecutionScope respects envelope channelSessionId pin even after de
     };
     assert.equal(scope.kind, "channel");
     assert.equal(scope.agentSessionId, first.id);
-    assert.equal(scope.ownerUserId, undefined);
+    assert.equal(scope.ownerUserId, "token-member");
 
     const bossEnvelope = {
       id: "env-2",
@@ -186,13 +186,13 @@ test("resolveExecutionScope respects envelope channelSessionId pin even after de
       fromBoss: true,
       metadata: {
         channelSessionId: first.id,
-        author: { id: "boss-1" },
+        userToken: "token-boss",
       },
     } as any;
     const bossScope = (executor as any).resolveExecutionScope(agent, db, bossEnvelope) as {
       ownerUserId?: string;
     };
-    assert.equal(bossScope.ownerUserId, "boss-1");
+    assert.equal(bossScope.ownerUserId, "token-boss");
   });
 });
 

@@ -19,8 +19,8 @@ Canonical mappings live in `docs/spec/definitions.md`.
 When `envelope.fromBoss` is true, rendered sender lines include the `[boss]` suffix.
 
 Rendered `sender:` values (channel envelopes only):
-- Group: `sender: <author> [boss] in group "<name>"`
-- Direct: `sender: <author> [boss] in private chat`
+- Group: `sender: <sender-name> [boss] in group "<name>"`
+- Direct: `sender: <sender-name> [boss] in private chat`
 
 No `from-boss:` output key is printed in envelope instructions; the boss signal is the `[boss]` suffix.
 
@@ -33,4 +33,3 @@ All user/agent-visible UUID-backed IDs are rendered as **short IDs** by default:
 
 Implementation helpers:
 - `src/shared/id-format.ts` (`formatShortId`, `normalizeIdPrefixInput`)
-

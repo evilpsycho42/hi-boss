@@ -1,6 +1,7 @@
 import * as os from "os";
 import * as path from "path";
 import type { PermissionPolicy } from "./permissions.js";
+import type { UserPermissionPolicy } from "./user-permissions.js";
 import { INTERNAL_VERSION } from "./version.js";
 
 // ==================== Hi-Boss Paths ====================
@@ -121,5 +122,27 @@ export const DEFAULT_PERMISSION_POLICY: PermissionPolicy = {
     "team.add-member": "privileged",
     "team.remove-member": "privileged",
     "team.delete": "admin",
+  },
+};
+
+export const DEFAULT_USER_PERMISSION_POLICY: UserPermissionPolicy = {
+  version: INTERNAL_VERSION,
+  roles: {
+    boss: {
+      allow: ["channel.command.*", "channel.message.send"],
+    },
+    operator: {
+      allow: ["channel.command.status", "channel.command.sessions", "channel.message.send"],
+    },
+    viewer: {
+      allow: ["channel.command.status"],
+    },
+    blocked: {
+      allow: [],
+    },
+  },
+  bindings: [],
+  defaults: {
+    unmappedUserRole: "blocked",
   },
 };

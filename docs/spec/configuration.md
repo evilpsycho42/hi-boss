@@ -92,3 +92,16 @@ If an operation is missing from the policy, it defaults to `admin` (safe-by-defa
 | `team.list-members` | `restricted` |
 | `team.send` | `restricted` |
 | `team.delete` | `admin` |
+
+## Channel User Permission Policy
+
+Hi-Boss authorizes channel-originated commands/messages with a
+channel user policy stored at:
+
+- `settings.json.user-permission-policy` (required; source-of-truth)
+- mirrored to `config.user_permission_policy` in SQLite runtime cache
+
+`channel.command.*` and `channel.message.send` are checked by role allow-lists.
+Role bindings support adapter-scoped `user-id` (preferred) and optional `username`.
+Each binding must include a global `token` (32 lowercase hex chars), used as the
+session owner identity across bots and channels.

@@ -11,6 +11,7 @@ interface UiTextBundle {
     unboundAdapter(platform: string): string;
   };
   channel: {
+    accessDenied: string;
     agentNotFound: string;
     sessionRefreshRequested: string;
     sessionSwitchInvalidId: string;
@@ -39,6 +40,7 @@ const EN_TEXT: UiTextBundle = {
       ].join("\n"),
   },
   channel: {
+    accessDenied: "error: Access denied",
     agentNotFound: "error: Agent not found",
     sessionRefreshRequested: "Session refresh requested.",
     sessionSwitchInvalidId: "error: Invalid session id",
@@ -81,6 +83,7 @@ const ZH_CN_TEXT: UiTextBundle = {
       ].join("\n"),
   },
   channel: {
+    accessDenied: "error: 没有权限",
     agentNotFound: "error: 未找到对应 Agent",
     sessionRefreshRequested: "已请求刷新会话。",
     sessionSwitchInvalidId: "error: 会话 ID 无效",

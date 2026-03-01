@@ -15,16 +15,22 @@ Key files:
 Inbound (Telegram -> agent):
 
 - envelopes are created with `from: channel:telegram:<chat-id>`
-- `fromBoss` is set when sender username matches configured `telegram.boss-ids`
+- `fromBoss` is set when sender resolves to role `boss` in `user-permission-policy`
 
 Outbound (agent -> Telegram):
 
 - standard channel delivery via router/adapter
 - optional reply quoting resolved from `replyToEnvelopeId`
 
-## Boss-only Commands
+## Command Authorization
 
-Telegram commands are boss-only (non-boss receives no reply):
+`user-permission-policy` is required; command/message authorization is role-based:
+- command actions: `channel.command.<name>`
+- message action: `channel.message.send`
+- role lookup prefers adapter `user-id`; `username` is optional fallback
+- each binding includes a required global `token` used for session owner scoping
+
+Supported commands:
 
 - `/new` -> switch current chat to a fresh default session
 - `/sessions` -> list recent sessions (tabs + pager)
@@ -57,7 +63,7 @@ Stored envelope metadata includes:
 metadata: {
   platform: "telegram",
   channelMessageId: string,
-  author: { id, username?, displayName },
+  channelUser: { id, username?, displayName },
   chat: { id, name? }
 }
 ```
@@ -72,6 +78,6 @@ metadata: {
 
 ## Configuration
 
-`telegram.boss-ids` (from setup/settings) defines boss identities.
-
-Comparison is case-insensitive and accepts optional `@` prefix.
+`telegram.boss-ids` (from setup/settings) is used by setup to generate initial
+`user-permission-policy.bindings` for boss-role users. Runtime boss resolution
+is based on `user-permission-policy`, not direct `telegram.boss-ids` checks.

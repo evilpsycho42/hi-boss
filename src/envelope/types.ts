@@ -38,7 +38,7 @@ export interface Envelope {
   id: string;
   from: Address;              // "agent:<name>" or "channel:<adapter>:<chat-id>"
   to: Address;
-  fromBoss: boolean;          // true if sender matches boss config
+  fromBoss: boolean;          // true if sender resolved to role "boss"
   content: EnvelopeContent;
   priority?: number;          // 0=normal, 1=interrupt-now (higher first for agent queues)
   deliverAt?: number;         // unix epoch ms (UTC) (not-before delivery)

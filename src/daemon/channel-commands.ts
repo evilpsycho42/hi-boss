@@ -73,6 +73,7 @@ function buildSessionsKeyboard(params: {
   page: number;
   totalPages: number;
   locale: "en" | "zh-CN";
+  includeAgentAll?: boolean;
 }): TelegramInlineKeyboardButton[][] {
   const tabLabels = params.locale === "zh-CN"
     ? {
@@ -87,7 +88,8 @@ function buildSessionsKeyboard(params: {
       };
 
   const selectedPrefix = "● ";
-  const tabRow: TelegramInlineKeyboardButton[] = SESSION_SCOPE_VALUES.map((scope) => ({
+  const scopes = params.includeAgentAll ? SESSION_SCOPE_VALUES : SESSION_SCOPE_VALUES.filter((scope) => scope !== "agent-all");
+  const tabRow: TelegramInlineKeyboardButton[] = scopes.map((scope) => ({
     text: `${params.scope === scope ? selectedPrefix : ""}${tabLabels[scope]}`,
     callbackData: `${SESSIONS_CALLBACK_PREFIX}${scope}:${params.scope === scope ? params.page : 1}`,
   }));
@@ -120,9 +122,13 @@ function collectVisibleSessionIds(params: {
   chatId: string;
   adapterType: string;
   ownerUserId?: string;
+  fromBoss?: boolean;
 }): Set<string> {
   const out = new Set<string>();
   for (const scope of SESSION_SCOPE_VALUES) {
+    if (scope === "agent-all" && !params.fromBoss) {
+      continue;
+    }
     const items = params.db.listSessionsForScope({
       agentName: params.agentName,
       scope,
@@ -180,7 +186,11 @@ async function handleSessionsCommand(params: {
 }): Promise<ChannelCommandResponse> {
   const c = params.command;
   const agentName = c.agentName!;
-  const view = parseSessionsView(c.args);
+  const requestedView = parseSessionsView(c.args);
+  const view: SessionsView = {
+    scope: requestedView.scope === "agent-all" && !c.fromBoss ? "my-chats" : requestedView.scope,
+    page: requestedView.page,
+  };
   const adapterType = c.adapterType ?? "telegram";
 
   const totalRaw = params.db.countSessionsForScope({
@@ -188,7 +198,7 @@ async function handleSessionsCommand(params: {
     scope: view.scope,
     adapterType,
     chatId: c.chatId,
-    ownerUserId: c.authorId,
+    ownerUserId: c.userToken,
   });
 
   const total = Math.min(SESSIONS_MAX_TOTAL, totalRaw);
@@ -201,7 +211,7 @@ async function handleSessionsCommand(params: {
     scope: view.scope,
     adapterType,
     chatId: c.chatId,
-    ownerUserId: c.authorId,
+    ownerUserId: c.userToken,
     limit: SESSIONS_PAGE_SIZE,
     offset,
   });
@@ -238,6 +248,7 @@ async function handleSessionsCommand(params: {
               page,
               totalPages,
               locale: params.locale,
+              includeAgentAll: c.fromBoss === true,
             }),
             ...(c.isCallback && c.messageId ? { editMessageId: c.messageId } : {}),
           },
@@ -280,7 +291,8 @@ async function handleSessionSwitchCommand(params: {
     agentName: c.agentName!,
     adapterType,
     chatId: c.chatId,
-    ownerUserId: c.authorId,
+    ownerUserId: c.userToken,
+    fromBoss: c.fromBoss,
   });
 
   if (!visible.has(resolved.session.id)) {
@@ -292,7 +304,7 @@ async function handleSessionSwitchCommand(params: {
     adapterType,
     chatId: c.chatId,
     targetSessionId: resolved.session.id,
-    ownerUserId: c.authorId,
+    ownerUserId: c.userToken,
   });
   params.executor.invalidateChannelSessionCache(c.agentName!, adapterType, c.chatId);
 
@@ -326,7 +338,7 @@ export function createChannelCommandHandler(params: {
         agentName: agent.name,
         adapterType,
         chatId: c.chatId,
-        ownerUserId: c.authorId,
+        ownerUserId: c.userToken,
         provider: agent.provider ?? DEFAULT_AGENT_PROVIDER,
       });
       params.executor.invalidateChannelSessionCache(agent.name, adapterType, c.chatId);
@@ -430,18 +442,19 @@ async function handleOneshotCommand(
     await params.router.routeEnvelope({
       from: fromAddress,
       to: toAddress,
-      fromBoss: true,
+      fromBoss: command.fromBoss === true,
       content: { text },
       metadata: {
         origin: "channel",
         oneshotType: mode,
         platform: adapterType,
         channelMessageId: command.messageId,
-        author:
-          command.authorId || command.authorUsername
+        ...(command.userToken ? { userToken: command.userToken } : {}),
+        channelUser:
+          command.channelUserId || command.channelUsername
             ? {
-                ...(command.authorId ? { id: command.authorId } : {}),
-                ...(command.authorUsername ? { username: command.authorUsername } : {}),
+                ...(command.channelUserId ? { id: command.channelUserId } : {}),
+                ...(command.channelUsername ? { username: command.channelUsername } : {}),
               }
             : undefined,
         chat: { id: command.chatId },
