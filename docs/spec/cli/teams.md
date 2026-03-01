@@ -130,6 +130,9 @@ Default permission:
 
 Sends one envelope to each member of a team (fan-out singlecast).
 
+Status:
+- Deprecated. Prefer `hiboss envelope send --to team:<name> ...`.
+
 Flags:
 - `--name <name>` (required)
 - `--text <text>` (optional; use `-` to read from stdin)
@@ -138,9 +141,6 @@ Flags:
 - `--deliver-at <time>` (optional)
 - `--interrupt-now` (optional; mutually exclusive with `--deliver-at`)
 - `--reply-to <envelope-id>` (optional)
-- `--to-session-id <id>` (optional)
-- `--to-provider-session-id <id>` (optional)
-- `--to-provider <claude|codex>` (optional; only valid with `--to-provider-session-id`)
 - `--token <token>` (optional; defaults to `HIBOSS_TOKEN`)
 
 Output:

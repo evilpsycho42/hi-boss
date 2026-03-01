@@ -1,7 +1,7 @@
 import type { Agent } from "../../agent/types.js";
 import { formatAgentAddress, parseAddress } from "../../adapters/types.js";
 import type { EnvelopeOrigin } from "../../envelope/types.js";
-import { DEFAULT_ID_PREFIX_LEN, isHexLower, normalizeIdPrefixInput } from "../../shared/id-format.js";
+import { computeDmChatId, computeTeamChatId } from "../../shared/chat-scope.js";
 import { parseDateTimeInputToUnixMsInTimeZone } from "../../shared/time.js";
 import type { EnvelopeSendParams } from "../ipc/types.js";
 import { RPC_ERRORS } from "../ipc/types.js";
@@ -17,116 +17,24 @@ export interface EnvelopeSendCoreInput {
   interruptNow?: boolean;
   parseMode?: EnvelopeSendParams["parseMode"];
   replyToEnvelopeId?: string;
-  toSessionId?: string;
-  toProviderSessionId?: string;
-  toProvider?: EnvelopeSendParams["toProvider"];
   origin?: EnvelopeOrigin;
+  chatScope?: string;
 }
 
-export interface EnvelopeSendCoreResult {
+export interface EnvelopeSendCoreSingleResult {
   id: string;
   interruptedWork?: boolean;
   priorityApplied?: boolean;
 }
 
-function resolveTargetSessionIdForSend(params: {
-  ctx: DaemonContext;
-  toSessionId: EnvelopeSendCoreInput["toSessionId"];
-  toProviderSessionId: EnvelopeSendCoreInput["toProviderSessionId"];
-  toProvider: EnvelopeSendCoreInput["toProvider"];
-  destination: ReturnType<typeof parseAddress>;
-  destinationAgentName?: string;
-}): string | undefined {
-  const hasToSessionId = params.toSessionId !== undefined;
-  const hasToProviderSessionId = params.toProviderSessionId !== undefined;
-  const hasToProvider = params.toProvider !== undefined;
-
-  if (!hasToSessionId && !hasToProviderSessionId && !hasToProvider) {
-    return undefined;
-  }
-
-  if (params.destination.type !== "agent") {
-    rpcError(
-      RPC_ERRORS.INVALID_PARAMS,
-      "Session targeting is only supported for agent destinations"
-    );
-  }
-
-  if (!params.destinationAgentName) {
-    rpcError(RPC_ERRORS.INTERNAL_ERROR, "Missing destination agent context");
-  }
-
-  if (hasToSessionId && hasToProviderSessionId) {
-    rpcError(
-      RPC_ERRORS.INVALID_PARAMS,
-      "Provide only one of: to-session-id, to-provider-session-id"
-    );
-  }
-
-  if (!hasToSessionId && !hasToProviderSessionId && hasToProvider) {
-    rpcError(
-      RPC_ERRORS.INVALID_PARAMS,
-      "to-provider can only be used with to-provider-session-id"
-    );
-  }
-
-  if (hasToSessionId) {
-    if (typeof params.toSessionId !== "string" || !params.toSessionId.trim()) {
-      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to-session-id");
-    }
-
-    const raw = params.toSessionId.trim();
-    const direct = params.ctx.db.getAgentSessionById(raw);
-    if (direct && direct.agentName === params.destinationAgentName) {
-      return direct.id;
-    }
-
-    const compactPrefix = normalizeIdPrefixInput(raw);
-    if (compactPrefix.length < DEFAULT_ID_PREFIX_LEN || !isHexLower(compactPrefix)) {
-      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to-session-id");
-    }
-
-    const matches = params.ctx.db.findAgentSessionsByIdPrefix(
-      params.destinationAgentName,
-      compactPrefix,
-      20
-    );
-    if (matches.length === 1) {
-      return matches[0]!.id;
-    }
-    if (matches.length === 0) {
-      rpcError(RPC_ERRORS.NOT_FOUND, "Session not found");
-    }
-
-    rpcError(
-      RPC_ERRORS.INVALID_PARAMS,
-      "Ambiguous to-session-id (matches multiple sessions)"
-    );
-  }
-
-  if (typeof params.toProviderSessionId !== "string" || !params.toProviderSessionId.trim()) {
-    rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to-provider-session-id");
-  }
-
-  let provider: "claude" | "codex" | undefined;
-  if (params.toProvider !== undefined) {
-    if (params.toProvider !== "claude" && params.toProvider !== "codex") {
-      rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to-provider (expected claude or codex)");
-    }
-    provider = params.toProvider;
-  }
-
-  const byProviderSession = params.ctx.db.findAgentSessionByProviderSessionId({
-    agentName: params.destinationAgentName,
-    providerSessionId: params.toProviderSessionId.trim(),
-    provider,
-  });
-  if (!byProviderSession) {
-    rpcError(RPC_ERRORS.NOT_FOUND, "Session not found");
-  }
-
-  return byProviderSession.id;
+export interface EnvelopeSendCoreBroadcastResult {
+  ids: string[];
+  noRecipients?: boolean;
 }
+
+export type EnvelopeSendCoreResult =
+  | EnvelopeSendCoreSingleResult
+  | EnvelopeSendCoreBroadcastResult;
 
 export async function sendEnvelopeFromAgent(params: {
   ctx: DaemonContext;
@@ -151,6 +59,8 @@ export async function sendEnvelopeFromAgent(params: {
   const from = formatAgentAddress(params.senderAgent.name);
   let interruptNow = false;
   const metadata: Record<string, unknown> = {};
+  let destinationAgentName: string | undefined;
+  let to = toInput;
   let origin: EnvelopeOrigin = "cli";
 
   if (p.interruptNow !== undefined) {
@@ -168,24 +78,91 @@ export async function sendEnvelopeFromAgent(params: {
   }
   metadata.origin = origin;
 
-  let destinationAgentName: string | undefined;
-  const to = (() => {
-    if (destination.type !== "agent") return toInput;
+  if (destination.type === "team") {
+    if (interruptNow) {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, "interrupt-now is not supported for team broadcast");
+    }
 
+    const team = params.ctx.db.getTeamByNameCaseInsensitive(destination.teamName);
+    if (!team) {
+      rpcError(RPC_ERRORS.NOT_FOUND, "Team not found");
+    }
+    if (team.status !== "active") {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, "Cannot send to archived team");
+    }
+
+    const recipients = Array.from(
+      new Set(
+        params.ctx.db
+          .listTeamMemberAgentNames(team.name)
+          .filter((name) => name !== params.senderAgent.name),
+      ),
+    );
+
+    if (recipients.length === 0) {
+      return { ids: [], noRecipients: true };
+    }
+
+    const ids: string[] = [];
+    for (const recipient of recipients) {
+      const sent = await sendEnvelopeFromAgent({
+        ctx: params.ctx,
+        senderAgent: params.senderAgent,
+        input: {
+          ...p,
+          to: formatAgentAddress(recipient),
+          chatScope: computeTeamChatId(team.name),
+        },
+        interruptReason: params.interruptReason,
+      });
+      if (!("id" in sent)) {
+        rpcError(RPC_ERRORS.INTERNAL_ERROR, "Unexpected team broadcast result");
+      }
+      ids.push(sent.id);
+    }
+    return { ids };
+  }
+
+  if (destination.type === "agent") {
     const destAgent = params.ctx.db.getAgentByNameCaseInsensitive(destination.agentName);
     if (!destAgent) {
       rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
     }
     destinationAgentName = destAgent.name;
-    return formatAgentAddress(destAgent.name);
-  })();
+    to = formatAgentAddress(destAgent.name);
+    metadata.chatScope = p.chatScope ?? computeDmChatId(params.senderAgent.name, destAgent.name);
+  }
+
+  if (destination.type === "team-mention") {
+    const team = params.ctx.db.getTeamByNameCaseInsensitive(destination.teamName);
+    if (!team) {
+      rpcError(RPC_ERRORS.NOT_FOUND, "Team not found");
+    }
+    if (team.status !== "active") {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, "Cannot send to archived team");
+    }
+
+    const members = params.ctx.db.listTeamMemberAgentNames(team.name);
+    const mentioned = members.find(
+      (agentName) => agentName.toLowerCase() === destination.agentName.toLowerCase()
+    );
+    if (!mentioned) {
+      rpcError(RPC_ERRORS.NOT_FOUND, "Team member not found");
+    }
+    destinationAgentName = mentioned;
+    to = formatAgentAddress(mentioned);
+    metadata.chatScope = p.chatScope ?? computeTeamChatId(team.name);
+  }
 
   if (interruptNow && p.deliverAt !== undefined) {
     rpcError(RPC_ERRORS.INVALID_PARAMS, "interrupt-now cannot be used with deliver-at");
   }
 
-  if (interruptNow && destination.type !== "agent") {
-    rpcError(RPC_ERRORS.INVALID_PARAMS, "interrupt-now is only supported for agent destinations");
+  if (interruptNow && destination.type !== "agent" && destination.type !== "team-mention") {
+    rpcError(
+      RPC_ERRORS.INVALID_PARAMS,
+      "interrupt-now is only supported for single agent destinations"
+    );
   }
 
   if (destination.type === "channel") {
@@ -231,18 +208,6 @@ export async function sendEnvelopeFromAgent(params: {
     metadata.replyToEnvelopeId = resolveEnvelopeIdInput(params.ctx.db, p.replyToEnvelopeId.trim());
   }
 
-  const targetSessionId = resolveTargetSessionIdForSend({
-    ctx: params.ctx,
-    toSessionId: p.toSessionId,
-    toProviderSessionId: p.toProviderSessionId,
-    toProvider: p.toProvider,
-    destination,
-    destinationAgentName,
-  });
-  if (targetSessionId) {
-    metadata.targetSessionId = targetSessionId;
-  }
-
   let deliverAt: number | undefined;
   if (p.deliverAt) {
     try {
@@ -258,13 +223,12 @@ export async function sendEnvelopeFromAgent(params: {
   const finalMetadata = Object.keys(metadata).length > 0 ? metadata : undefined;
   let interruptedWork = false;
 
-  if (interruptNow && destination.type === "agent") {
-    const targetAgent = params.ctx.db.getAgentByNameCaseInsensitive(destination.agentName);
-    if (!targetAgent) {
-      rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
+  if (interruptNow) {
+    if (!destinationAgentName) {
+      rpcError(RPC_ERRORS.INTERNAL_ERROR, "Missing destination agent context");
     }
     interruptedWork = params.ctx.executor.abortCurrentRun(
-      targetAgent.name,
+      destinationAgentName,
       params.interruptReason ?? "rpc:envelope.send:interrupt-now"
     );
   }
@@ -281,7 +245,7 @@ export async function sendEnvelopeFromAgent(params: {
       priority: interruptNow ? 1 : 0,
       deliverAt,
       metadata: finalMetadata,
-    });
+      });
 
     params.ctx.scheduler.onEnvelopeCreated(envelope);
     if (interruptNow) {

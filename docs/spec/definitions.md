@@ -26,6 +26,8 @@ Derived (not stored):
 | Type | Format | Example |
 |------|--------|---------|
 | Agent | `agent:<name>` | `agent:nex` |
+| Team broadcast | `team:<name>` | `team:research` |
+| Team mention | `team:<name>:<agent>` | `team:research:nex` |
 | Channel | `channel:<adapter>:<chat-id>` | `channel:telegram:123456` |
 
 Reserved agent addresses:
@@ -103,7 +105,7 @@ Table: `envelopes` (see `src/daemon/db/schema.ts`)
 | `envelope.deliverAt` | `deliver_at` | Unix epoch ms (UTC) (nullable) |
 | `envelope.status` | `status` | `pending` or `done` |
 | `envelope.createdAt` | `created_at` | Unix epoch ms (UTC) |
-| `envelope.metadata` | `metadata` | JSON (nullable); used for channel semantics |
+| `envelope.metadata` | `metadata` | JSON (nullable); used for channel semantics and agent chat scope (`chatScope`) |
 
 Status semantics:
 - `pending` means “not yet fully processed”: either waiting for `deliver-at`, waiting for agent read, or waiting for channel delivery attempt.
@@ -124,6 +126,7 @@ Command flags:
 - `from:` (always; raw address)
 - `to:` (always; raw destination address)
 - `sender:` (only for channel messages; `Author [boss] in group "<name>"` or `Author [boss] in private chat`)
+- `chat:` (optional; `envelope.metadata.chatScope` when present)
 - `created-at:` (always; boss timezone offset)
 - `deliver-at:` (optional; shown when present, in boss timezone offset)
 - `cron-id:` (optional; shown when present; short id derived from the internal cron schedule UUID)
@@ -143,7 +146,9 @@ Command flags:
 - `attachments:` followed by a rendered list (only shown if present)
 
 `hiboss envelope send` prints:
-- `id: <envelope-id>` (short id; derived from the internal envelope UUID)
+- Single send: `id: <envelope-id>` (short id; derived from the internal envelope UUID)
+- Team broadcast: one `id:` line per created envelope
+- Sender-only team broadcast: `no-recipients: true`
 - With `--interrupt-now`, additional parseable keys:
   - `interrupt-now: true`
   - `interrupted-work: true|false`
@@ -152,7 +157,7 @@ Command flags:
 Notes:
 - Channel platform message ids (e.g., Telegram `message_id`) are stored internally in `envelope.metadata.channelMessageId` for adapter delivery, but are intentionally **not rendered** in agent prompts/CLI envelope instructions.
 - Agents should use `envelope-id:` + `hiboss envelope send --reply-to <envelope-id>` for quoting (channels) and threading (agent↔agent).
-- Session-pinned delivery stores `envelope.metadata.targetSessionId` (internal agent session id) and routes execution to that session when valid for the destination agent.
+- Chat-scoped routing stores `envelope.metadata.chatScope` (`agent-dm:<a>:<b>` or `team:<name>`) and routes agent-origin envelopes via internal channel bindings (`adapter_type="internal"`).
 - Envelope creation source is tracked in `envelope.metadata.origin` (`cli | channel | cron | internal`) for history/audit.
 
 ### CLI Output (Cron Schedules)

@@ -22,18 +22,10 @@ EOF
 
 **Address formats:**
 - `agent:<name>`
+- `team:<name>` (broadcast to team members, excluding sender)
+- `team:<name>:<agent>` (send to one team member in team chat scope)
 {% if hasTelegram %}- `channel:telegram:<chatId>` (reply using the incoming `from:` address)
 {% endif %}
-
-**Session targeting (agent destinations):**
-- Default (no session flags): daemon routes to the target agent's default non-channel session scope.
-- Use session targeting only when you must continue a specific existing target-agent conversation.
-- Choose exactly one pin mode:
-  - `--to-session-id <id>` (Hi-Boss session id; short id/prefix/full UUID)
-  - `--to-provider-session-id <provider-session-id>` (optionally add `--to-provider <claude|codex>` to disambiguate)
-- `--to-session-id` and `--to-provider-session-id` are mutually exclusive.
-- `--to-provider` is valid only with `--to-provider-session-id`.
-- Never invent session ids. If no reliable id is available, omit session targeting.
 
 **Reply-to (thread context):**
 - Use `--reply-to <envelope-id>` to link your envelope to a prior envelope (task/subtask context).

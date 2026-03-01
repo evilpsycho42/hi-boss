@@ -24,29 +24,6 @@ export function validateTeamSendParams(ctx: DaemonContext, params: TeamSendParam
     resolveEnvelopeIdInput(ctx.db, params.replyToEnvelopeId.trim());
   }
 
-  if (params.toSessionId !== undefined && (typeof params.toSessionId !== "string" || !params.toSessionId.trim())) {
-    rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to-session-id");
-  }
-  if (
-    params.toProviderSessionId !== undefined &&
-    (typeof params.toProviderSessionId !== "string" || !params.toProviderSessionId.trim())
-  ) {
-    rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to-provider-session-id");
-  }
-  if (params.toSessionId !== undefined && params.toProviderSessionId !== undefined) {
-    rpcError(
-      RPC_ERRORS.INVALID_PARAMS,
-      "Provide only one of: to-session-id, to-provider-session-id"
-    );
-  }
-
-  if (params.toProvider !== undefined && params.toProvider !== "claude" && params.toProvider !== "codex") {
-    rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid to-provider (expected claude or codex)");
-  }
-  if (params.toProvider !== undefined && params.toProviderSessionId === undefined) {
-    rpcError(RPC_ERRORS.INVALID_PARAMS, "to-provider can only be used with to-provider-session-id");
-  }
-
   if (params.deliverAt !== undefined) {
     if (typeof params.deliverAt !== "string" || !params.deliverAt.trim()) {
       rpcError(RPC_ERRORS.INVALID_PARAMS, "Invalid deliver-at");

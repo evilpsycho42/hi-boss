@@ -483,6 +483,11 @@ export function buildCliEnvelopePromptContext(params: {
     const cronScheduleId = getCronScheduleId(env.metadata);
     return cronScheduleId ? formatShortId(cronScheduleId) : "";
   })();
+  const chatScope = (() => {
+    if (!env.metadata || typeof env.metadata !== "object") return "";
+    const raw = (env.metadata as Record<string, unknown>).chatScope;
+    return typeof raw === "string" && raw.trim() ? raw.trim() : "";
+  })();
 
   const lastDeliveryError = (() => {
     if (!env.metadata || typeof env.metadata !== "object") return null;
@@ -519,6 +524,7 @@ export function buildCliEnvelopePromptContext(params: {
       },
       deliverAt,
       cronId,
+      chatScope,
       content: {
         text: env.content.text ?? "(none)",
         attachments,

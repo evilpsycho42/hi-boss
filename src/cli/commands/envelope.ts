@@ -2,16 +2,11 @@ import { getDefaultConfig, getSocketPath } from "../../daemon/daemon.js";
 import { IpcClient } from "../ipc-client.js";
 import { resolveToken } from "../token.js";
 import type { Envelope } from "../../envelope/types.js";
+import type { EnvelopeSendResult } from "../../daemon/ipc/types.js";
 import { formatEnvelopeInstruction } from "../instructions/format-envelope.js";
 import { extractTelegramFileId, normalizeAttachmentSource, resolveText } from "./envelope-input.js";
 import { formatShortId } from "../../shared/id-format.js";
 import { getDaemonTimeContext } from "../time-context.js";
-
-interface SendEnvelopeResult {
-  id: string;
-  interruptedWork?: boolean;
-  priorityApplied?: boolean;
-}
 
 interface ListEnvelopesResult {
   envelopes: Envelope[];
@@ -36,9 +31,6 @@ export interface SendEnvelopeOptions {
   interruptNow?: boolean;
   parseMode?: string;
   replyTo?: string;
-  toSessionId?: string;
-  toProviderSessionId?: string;
-  toProvider?: "claude" | "codex";
 }
 
 export interface ListEnvelopesOptions {
@@ -70,7 +62,7 @@ export async function sendEnvelope(options: SendEnvelopeOptions): Promise<void> 
     if (parseMode && parseMode !== "plain" && parseMode !== "markdownv2" && parseMode !== "html") {
       throw new Error("Invalid --parse-mode (expected plain, markdownv2, or html)");
     }
-    const result = await client.call<SendEnvelopeResult>("envelope.send", {
+    const result = await client.call<EnvelopeSendResult>("envelope.send", {
       token,
       to: options.to,
       text,
@@ -85,10 +77,22 @@ export async function sendEnvelope(options: SendEnvelopeOptions): Promise<void> 
       interruptNow: options.interruptNow,
       parseMode,
       replyToEnvelopeId: options.replyTo,
-      toSessionId: options.toSessionId,
-      toProviderSessionId: options.toProviderSessionId,
-      toProvider: options.toProvider,
     });
+
+    if (Array.isArray(result.ids)) {
+      if (result.ids.length === 0) {
+        console.log("no-recipients: true");
+      } else {
+        for (const id of result.ids) {
+          console.log(`id: ${formatShortId(id)}`);
+        }
+      }
+      return;
+    }
+
+    if (!result.id) {
+      throw new Error("Invalid envelope.send response: missing id");
+    }
 
     console.log(`id: ${formatShortId(result.id)}`);
     if (options.interruptNow) {

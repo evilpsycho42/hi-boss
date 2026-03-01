@@ -65,11 +65,6 @@ type SessionExecutionScope =
       adapterType: string;
       chatId: string;
       ownerUserId?: string;
-    }
-  | {
-      kind: "pinned";
-      cacheKey: string;
-      agentSessionId: string;
     };
 
 type AgentRunStartedHook = (params: {
@@ -196,10 +191,6 @@ export class AgentExecutor {
 
   private buildChannelSessionKey(agentName: string, sessionId: string): string {
     return `channel-session:${agentName}:${sessionId}`;
-  }
-
-  private buildPinnedSessionKey(agentName: string, sessionId: string): string {
-    return `agent-session:${agentName}:${sessionId}`;
   }
 
   invalidateChannelSessionCache(agentName: string, adapterType: string, chatId: string): void {
@@ -488,20 +479,6 @@ export class AgentExecutor {
 
   private resolveExecutionScope(agent: Agent, db: HiBossDatabase, envelope: Envelope): SessionExecutionScope {
     const metadata = envelope.metadata as Record<string, unknown> | undefined;
-    const pinnedTargetSessionId =
-      typeof metadata?.targetSessionId === "string" && metadata.targetSessionId.trim().length > 0
-        ? metadata.targetSessionId.trim()
-        : undefined;
-    if (pinnedTargetSessionId) {
-      const pinnedSession = db.getAgentSessionById(pinnedTargetSessionId);
-      if (pinnedSession && pinnedSession.agentName === agent.name) {
-        return {
-          kind: "pinned",
-          cacheKey: this.buildPinnedSessionKey(agent.name, pinnedSession.id),
-          agentSessionId: pinnedSession.id,
-        };
-      }
-    }
 
     const parsedFrom = (() => {
       try {
@@ -510,6 +487,37 @@ export class AgentExecutor {
         return null;
       }
     })();
+
+    if (parsedFrom && parsedFrom.type === "agent") {
+      const chatScope =
+        typeof metadata?.chatScope === "string" && metadata.chatScope.trim().length > 0
+          ? metadata.chatScope.trim()
+          : undefined;
+      if (chatScope) {
+        const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
+        const ownerUserId =
+          typeof metadata?.userToken === "string" && metadata.userToken.trim()
+            ? metadata.userToken.trim()
+            : undefined;
+
+        const defaultSession = db.getOrCreateChannelDefaultSession({
+          agentName: agent.name,
+          adapterType: "internal",
+          chatId: chatScope,
+          ownerUserId,
+          provider,
+        });
+
+        return {
+          kind: "channel",
+          cacheKey: this.buildChannelSessionKey(agent.name, defaultSession.session.id),
+          agentSessionId: defaultSession.session.id,
+          adapterType: "internal",
+          chatId: chatScope,
+          ownerUserId,
+        };
+      }
+    }
 
     if (parsedFrom && parsedFrom.type === "channel") {
       const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
@@ -835,24 +843,6 @@ export class AgentExecutor {
             error: errorMessage(err),
           });
         }
-      } else {
-        try {
-          params.db.updateAgentSessionProviderSessionId(
-            params.scope.agentSessionId,
-            session.sessionId ?? null,
-            { provider: session.provider }
-          );
-          params.db.touchAgentSession(params.scope.agentSessionId, {
-            lastActiveAt: Date.now(),
-          });
-        } catch (err) {
-          logEvent("warn", "agent-session-pinned-persist-failed", {
-            "agent-name": params.agent.name,
-            "agent-session-id": params.scope.agentSessionId,
-            provider: session.provider,
-            error: errorMessage(err),
-          });
-        }
       }
 
       params.db.completeAgentRun(run.id, response, turn.usage.contextLength);
@@ -965,10 +955,7 @@ export class AgentExecutor {
     if (scope.kind === "default") {
       return this.getOrCreateDefaultSession(agent, db, trigger);
     }
-    if (scope.kind === "channel") {
-      return this.getOrCreateChannelSession(agent, db, scope);
-    }
-    return this.getOrCreatePinnedSession(agent, db, scope);
+    return this.getOrCreateChannelSession(agent, db, scope);
   }
 
   private async getOrCreateDefaultSession(
@@ -994,44 +981,6 @@ export class AgentExecutor {
     agent: Agent,
     db: HiBossDatabase,
     scope: Extract<SessionExecutionScope, { kind: "channel" }>
-  ): Promise<AgentSession> {
-    const cached = this.channelSessions.get(scope.cacheKey);
-    const policy = this.getSessionPolicy(agent);
-    if (cached) {
-      const reason = getRefreshReasonForPolicy(cached, policy, new Date());
-      if (!reason) return cached;
-      this.channelSessions.delete(scope.cacheKey);
-      db.updateAgentSessionProviderSessionId(scope.agentSessionId, null, {
-        provider: cached.provider,
-      });
-    }
-
-    const persistedRow = db.getAgentSessionById(scope.agentSessionId);
-    const provider = persistedRow?.provider ?? (agent.provider ?? DEFAULT_AGENT_PROVIDER);
-    const providerEnvOverrides = getProviderCliEnvOverrides(agent.metadata, provider);
-
-    const baseSession = await this.getOrCreateDefaultSession(agent, db);
-    const session: AgentSession = {
-      provider,
-      agentToken: baseSession.agentToken,
-      systemInstructions: baseSession.systemInstructions,
-      workspace: baseSession.workspace,
-      providerEnvOverrides,
-      model: agent.model,
-      reasoningEffort: agent.reasoningEffort,
-      sessionId: persistedRow?.providerSessionId ?? undefined,
-      createdAtMs: persistedRow?.createdAt ?? Date.now(),
-      ...(persistedRow ? { lastRunCompletedAtMs: persistedRow.lastActiveAt } : {}),
-    };
-    this.channelSessions.set(scope.cacheKey, session);
-    this.conversationHistory?.ensureActiveSession(agent.name);
-    return session;
-  }
-
-  private async getOrCreatePinnedSession(
-    agent: Agent,
-    db: HiBossDatabase,
-    scope: Extract<SessionExecutionScope, { kind: "pinned" }>
   ): Promise<AgentSession> {
     const cached = this.channelSessions.get(scope.cacheKey);
     const policy = this.getSessionPolicy(agent);

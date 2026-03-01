@@ -13,13 +13,14 @@ Sends an envelope to an agent or channel.
 
 Flags:
 - `--to <address>` (required)
+  - `agent:<name>`
+  - `team:<name>` (broadcast fan-out)
+  - `team:<name>:<agent>` (single target in team chat scope)
+  - `channel:<adapter>:<chat-id>`
 - `--text <text>` or `--text -` (stdin) or `--text-file <path>`
 - `--attachment <path>` (repeatable)
 - `--reply-to <envelope-id>` (optional; adds thread context for agent↔agent envelopes; for channel destinations, also replies/quotes the referenced channel envelope when possible)
-- `--interrupt-now` (optional; only for `to=agent:<name>`; immediately interrupts current work and prioritizes this envelope)
-- `--to-session-id <id>` (optional; only for `to=agent:<name>`; pin delivery to a specific target agent session)
-- `--to-provider-session-id <id>` (optional; only for `to=agent:<name>`; pin delivery by provider session/thread id on target agent)
-- `--to-provider <claude|codex>` (optional; only with `--to-provider-session-id`; disambiguates provider)
+- `--interrupt-now` (optional; only for single-agent destinations: `to=agent:<name>` or `to=team:<name>:<agent>`; immediately interrupts current work and prioritizes this envelope)
 - `--parse-mode <mode>` (optional; channel destinations only; `plain|markdownv2|html`)
 - `--deliver-at <time>` (ISO 8601 or relative: `+2h`, `+30m`, `+1Y2M`, `-15m`; units: `Y/M/D/h/m/s`)
 
@@ -27,17 +28,33 @@ Notes:
 - Sender identity is derived from the authenticated **agent token**.
 - Admin tokens cannot send envelopes via `hiboss envelope send`; to message an agent as a human/boss, send via a channel adapter (e.g., Telegram).
 - Sending to `agent:<name>` fails fast if the agent does not exist (`NOT_FOUND`) or the address is invalid (`INVALID_PARAMS`).
-- `--interrupt-now` is only supported for `to=agent:<name>`.
+- Sending to `team:<name>` fans out one envelope per team member (sender excluded).
+- Sending to `team:<name>:<agent>` validates team membership and sends one envelope.
+- `--interrupt-now` is only supported for single-agent destinations (`agent:<name>` and `team:<name>:<agent>`).
 - `--interrupt-now` and `--deliver-at` are mutually exclusive.
-- Session targeting flags are only supported for `to=agent:<name>`.
-- Provide at most one of `--to-session-id` and `--to-provider-session-id`.
+- `team:<name>` broadcast rejects `--interrupt-now`.
+- Cron schedules cannot use team destinations (enforced by `cron.create`).
 
 Output (parseable):
 
-Default success output:
+Single-envelope success output:
 
 ```
 id: <envelope-id>  # short id
+```
+
+Team broadcast success output:
+
+```
+id: <envelope-id-1>  # short id
+id: <envelope-id-2>  # short id
+...
+```
+
+Team broadcast with only sender in team:
+
+```
+no-recipients: true
 ```
 
 When `--interrupt-now` is used:

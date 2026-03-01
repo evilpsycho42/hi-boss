@@ -1,8 +1,8 @@
 /**
  * Address format for routing messages.
- * "agent:<name>" | "channel:<adapter>:<chat-id>"
+ * "agent:<name>" | "team:<name>" | "team:<name>:<agent>" | "channel:<adapter>:<chat-id>"
  */
-import { isValidAgentName } from "../shared/validation.js";
+import { isValidAgentName, isValidTeamName } from "../shared/validation.js";
 
 const ADAPTER_TYPE_REGEX = /^[a-z][a-z0-9-]*$/;
 
@@ -13,6 +13,8 @@ export type Address = string;
  */
 export function parseAddress(address: Address):
   | { type: "agent"; agentName: string }
+  | { type: "team"; teamName: string }
+  | { type: "team-mention"; teamName: string; agentName: string }
   | { type: "channel"; adapter: string; chatId: string } {
   const trimmed = address.trim();
 
@@ -22,6 +24,24 @@ export function parseAddress(address: Address):
       throw new Error(`Invalid address format: ${address}`);
     }
     return { type: "agent", agentName };
+  }
+  if (trimmed.startsWith("team:")) {
+    const parts = trimmed.slice(5).split(":");
+    if (parts.length === 1) {
+      const teamName = parts[0] ?? "";
+      if (!teamName || !isValidTeamName(teamName)) {
+        throw new Error(`Invalid address format: ${address}`);
+      }
+      return { type: "team", teamName };
+    }
+    if (parts.length === 2) {
+      const teamName = parts[0] ?? "";
+      const agentName = parts[1] ?? "";
+      if (!teamName || !isValidTeamName(teamName) || !agentName || !isValidAgentName(agentName)) {
+        throw new Error(`Invalid address format: ${address}`);
+      }
+      return { type: "team-mention", teamName, agentName };
+    }
   }
   if (trimmed.startsWith("channel:")) {
     const parts = trimmed.slice(8).split(":");
@@ -45,6 +65,20 @@ export function parseAddress(address: Address):
  */
 export function formatAgentAddress(agentName: string): Address {
   return `agent:${agentName}`;
+}
+
+/**
+ * Format a team broadcast address.
+ */
+export function formatTeamAddress(teamName: string): Address {
+  return `team:${teamName}`;
+}
+
+/**
+ * Format a team mention address.
+ */
+export function formatTeamMentionAddress(teamName: string, agentName: string): Address {
+  return `team:${teamName}:${agentName}`;
 }
 
 /**

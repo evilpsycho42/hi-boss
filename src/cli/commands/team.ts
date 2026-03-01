@@ -71,9 +71,6 @@ export interface TeamSendOptions {
   deliverAt?: string;
   interruptNow?: boolean;
   replyTo?: string;
-  toSessionId?: string;
-  toProviderSessionId?: string;
-  toProvider?: "claude" | "codex";
 }
 
 function printTeamRecord(team: {
@@ -328,9 +325,6 @@ export async function sendTeam(options: TeamSendOptions): Promise<void> {
       deliverAt: options.deliverAt,
       interruptNow: options.interruptNow,
       replyToEnvelopeId: options.replyTo,
-      toSessionId: options.toSessionId,
-      toProviderSessionId: options.toProviderSessionId,
-      toProvider: options.toProvider,
     });
 
     console.log(`team-name: ${result.teamName}`);

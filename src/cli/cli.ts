@@ -104,16 +104,13 @@ envelope
   .description("Send an envelope")
   .requiredOption(
     "--to <address>",
-    "Destination address (agent:<name> or channel:<adapter>:<chat-id>)"
+    "Destination address (agent:<name>, team:<name>, team:<name>:<agent>, or channel:<adapter>:<chat-id>)"
   )
   .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .option("--text <text>", "Envelope text (use - to read from stdin)")
   .option("--text-file <path>", "Read envelope text from file")
   .option("--attachment <path>", "Attachment path (can be used multiple times)", collect, [])
   .option("--interrupt-now", "Interrupt current run and prioritize this envelope (agent destinations only)")
-  .option("--to-session-id <id>", "Pin delivery to a specific target agent session (short id/prefix/full UUID)")
-  .option("--to-provider-session-id <id>", "Pin delivery by provider session/thread id on the target agent")
-  .option("--to-provider <provider>", "Provider for --to-provider-session-id: claude or codex")
   .option("--parse-mode <mode>", "Parse mode (Telegram): plain (default), html (recommended), markdownv2")
   .option(
     "--reply-to <envelope-id>",
@@ -131,7 +128,7 @@ envelope
       "  - Default is plain text. Use --parse-mode html for long or formatted messages (bold/italic/links; structured blocks via <pre>/<code>, incl. ASCII tables).",
       "  - Use --parse-mode markdownv2 only if you can escape special characters correctly.",
       "  - Most Telegram users reply without quoting; only use --reply-to when it prevents confusion (busy groups, multiple questions).",
-      "  - --interrupt-now only works with --to agent:<name> and cannot be combined with --deliver-at.",
+      "  - --interrupt-now only works with single-agent destinations (--to agent:<name> or --to team:<name>:<agent>) and cannot be combined with --deliver-at.",
       "",
     ].join("\n")
   )
@@ -146,9 +143,6 @@ envelope
       interruptNow: options.interruptNow,
       parseMode: options.parseMode,
       replyTo: options.replyTo,
-      toSessionId: options.toSessionId,
-      toProviderSessionId: options.toProviderSessionId,
-      toProvider: options.toProvider,
     });
   });
 

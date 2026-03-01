@@ -7,8 +7,9 @@ This document describes how Hi-Boss manages agent sessions.
 Hi-Boss now supports **channel-scoped default sessions**:
 
 - `channel:*` envelopes use a per-chat default mapping (`agent + adapter + chat-id -> default session`)
+- agent-origin envelopes with `metadata.chatScope` use the same mapping with `adapter_type="internal"` and `chat_id=chatScope`
 - multiple chats can intentionally point to the same session
-- non-channel sources (for example agent↔agent / cron inline) use a default per-agent session bucket
+- agent-origin envelopes without `chatScope` (for example legacy/cron inline) use a default per-agent session bucket
 
 Session IDs are UUID-backed internally and shown as short IDs in operator-facing surfaces.
 
@@ -21,9 +22,10 @@ Sessions are created on-demand when an agent processes due envelopes:
 1. The executor reads due envelopes for an agent.
 2. Envelopes are grouped by target session scope.
 3. For `channel:*` envelopes, Hi-Boss resolves/creates default session mapping via `channel_session_bindings`.
-4. For non-channel envelopes, Hi-Boss uses the default per-agent session bucket.
-5. A runtime session object is loaded or created and reused for that scope.
-6. Provider session/thread id is updated from CLI output after each successful run.
+4. For agent-origin envelopes with `chatScope`, Hi-Boss resolves/creates internal channel mappings via `channel_session_bindings` (`adapter_type="internal"`).
+5. For agent-origin envelopes without `chatScope`, Hi-Boss uses the default per-agent session bucket.
+6. A runtime session object is loaded or created and reused for that scope.
+7. Provider session/thread id is updated from CLI output after each successful run.
 
 ### Reuse
 

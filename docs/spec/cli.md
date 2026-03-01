@@ -50,7 +50,7 @@ Default permission levels below come from the built-in permission policy (`DEFAU
 | `hiboss team status` | Show one team and its members | Yes (agent/admin token) | restricted |
 | `hiboss team list` | List teams | Yes (agent/admin token) | restricted |
 | `hiboss team list-members` | List member records for one team | Yes (agent/admin token) | restricted |
-| `hiboss team send` | Fan out one message to all active team members (excluding sender) | Yes (agent token) | restricted |
+| `hiboss team send` | Fan out one message to all active team members (excluding sender; deprecated in favor of `hiboss envelope send --to team:<name>`) | Yes (agent token) | restricted |
 | `hiboss team delete` | Delete a team and remove teamspace | Yes (admin token) | admin |
 
 Note: `hiboss daemon start` prints startup failure guidance directly in CLI when available (for example setup-integrity remediation), and also writes details to `daemon.log`.

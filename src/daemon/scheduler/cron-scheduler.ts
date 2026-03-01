@@ -55,6 +55,9 @@ export class CronScheduler {
 
   private assertChannelBinding(schedule: Pick<CronSchedule, "agentName" | "to">): void {
     const destination = parseAddress(schedule.to);
+    if (destination.type === "team" || destination.type === "team-mention") {
+      throw new Error("Cron schedules cannot use team destinations");
+    }
     if (destination.type !== "channel") return;
 
     const binding = this.db.getAgentBindingByType(schedule.agentName, destination.adapter);

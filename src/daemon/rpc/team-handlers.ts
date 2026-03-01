@@ -393,13 +393,13 @@ export function createTeamHandlers(ctx: DaemonContext): RpcMethodRegistry {
               deliverAt: p.deliverAt,
               interruptNow: p.interruptNow,
               replyToEnvelopeId: p.replyToEnvelopeId,
-              toSessionId: p.toSessionId,
-              toProviderSessionId: p.toProviderSessionId,
-              toProvider: p.toProvider,
               origin: p.origin,
             },
             interruptReason: "rpc:team.send:interrupt-now",
           });
+          if (!("id" in sendResult)) {
+            throw new Error("Unexpected team.send broadcast result");
+          }
           results.push({
             agentName,
             success: true,

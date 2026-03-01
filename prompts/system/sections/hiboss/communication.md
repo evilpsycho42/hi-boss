@@ -19,23 +19,20 @@ Notes:
 
 **Address formats:**
 - `agent:<name>`
+- `team:<name>` (broadcast to team members, excluding sender)
+- `team:<name>:<agent>` (send to one team member in team chat scope)
 {% set hasTelegram = false %}
 {% for b in bindings %}{% if b.adapterType == "telegram" %}{% set hasTelegram = true %}{% endif %}{% endfor %}
 {% if hasTelegram %}- `channel:telegram:<chatId>` (reply using the incoming `from:` address)
 {% endif %}
 
-### Session targeting (agent destinations)
-- Default (no session flags): daemon routes to the target agent's default non-channel session scope.
-- Use session targeting only when you must continue a specific existing target-agent conversation.
-- Choose exactly one:
-  - `--to-session-id <id>`
-  - `--to-provider-session-id <provider-session-id>` (optionally with `--to-provider <claude|codex>`)
-- `--to-session-id` and `--to-provider-session-id` are mutually exclusive.
-- `--to-provider` is valid only with `--to-provider-session-id`.
-- Never invent session ids. If unknown, omit session targeting.
-
 ### Reading incoming envelopes
 - Reply target: set `--to` to the incoming `from:` value
+- Chat scope: when `chat:` is present, keep replies in the same chat context (DM vs team) by replying to the same route.
+- Team context:
+  - `chat: team:<name>` + incoming `from: agent:<member>` means the message belongs to that team conversation.
+  - Reply to a specific member with `--to team:<name>:<member>`.
+  - Broadcast back to the full team with `--to team:<name>`.
 - Boss: channel messages from the boss include `[boss]` in `sender:`
 - Channel: `from: channel:<adapter>:<chat-id>`; group vs private is in `sender:` (`in group "..."` vs `in private chat`)
 - Cron/scheduled: `cron-id:` means it came from a cron schedule; `deliver-at:` means delayed

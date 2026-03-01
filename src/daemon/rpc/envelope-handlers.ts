@@ -69,9 +69,6 @@ export function createEnvelopeHandlers(ctx: DaemonContext): RpcMethodRegistry {
         interruptNow: p.interruptNow,
         parseMode: p.parseMode,
         replyToEnvelopeId: p.replyToEnvelopeId,
-        toSessionId: p.toSessionId,
-        toProviderSessionId: p.toProviderSessionId,
-        toProvider: p.toProvider,
         origin: p.origin,
       },
     });
