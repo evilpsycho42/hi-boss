@@ -4,7 +4,6 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   startDaemon,
-  startDaemonForeground,
   stopDaemon,
   daemonStatus,
   sendEnvelope,
@@ -66,15 +65,6 @@ daemon
   .option("--debug", "Include debug fields in daemon.log")
   .action((options) => {
     startDaemon({ token: options.token, debug: Boolean(options.debug) });
-  });
-
-daemon
-  .command("start-foreground")
-  .description("Start the daemon in the foreground (for pm2 / process managers)")
-  .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
-  .option("--debug", "Include debug fields in daemon.log")
-  .action((options) => {
-    startDaemonForeground({ token: options.token, debug: Boolean(options.debug) });
   });
 
 daemon
