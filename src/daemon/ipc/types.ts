@@ -64,10 +64,15 @@ export interface EnvelopeSendParams {
   interruptNow?: boolean;
   parseMode?: "plain" | "markdownv2" | "html";
   replyToEnvelopeId?: string;
-  toSessionId?: string;
-  toProviderSessionId?: string;
-  toProvider?: "claude" | "codex";
   origin?: "cli" | "internal";
+}
+
+export interface EnvelopeSendResult {
+  id?: string;
+  ids?: string[];
+  noRecipients?: boolean;
+  interruptedWork?: boolean;
+  priorityApplied?: boolean;
 }
 
 export interface EnvelopeListParams {
@@ -367,9 +372,6 @@ export interface TeamSendParams {
   deliverAt?: string;
   interruptNow?: boolean;
   replyToEnvelopeId?: string;
-  toSessionId?: string;
-  toProviderSessionId?: string;
-  toProvider?: "claude" | "codex";
   origin?: "cli" | "internal";
 }
 

@@ -393,13 +393,13 @@ export function createTeamHandlers(ctx: DaemonContext): RpcMethodRegistry {
               deliverAt: p.deliverAt,
               interruptNow: p.interruptNow,
               replyToEnvelopeId: p.replyToEnvelopeId,
-              toSessionId: p.toSessionId,
-              toProviderSessionId: p.toProviderSessionId,
-              toProvider: p.toProvider,
               origin: p.origin,
             },
             interruptReason: "rpc:team.send:interrupt-now",
           });
+          if (!("id" in sendResult) || typeof sendResult.id !== "string" || !sendResult.id.trim()) {
+            throw new Error("Unexpected team.send result: missing envelope id");
+          }
           results.push({
             agentName,
             success: true,

@@ -471,7 +471,7 @@ test("team.send rejects admin principal", async () => {
   });
 });
 
-test("team.send supports reply-to and session targeting with partial success", async () => {
+test("team.send supports reply-to with partial success", async () => {
   await withTempDb(async ({ db, dataDir }) => {
     db.registerAgent({ name: "sender" });
     db.registerAgent({ name: "alice" });
@@ -487,11 +487,6 @@ test("team.send supports reply-to and session targeting with partial success", a
       content: { text: "root" },
       metadata: { origin: "cli" },
     });
-    const session = db.createAgentSession({
-      agentName: "alice",
-      provider: "codex",
-    });
-    const sessionPrefix = session.id.replace(/-/g, "").slice(0, 8);
 
     const routed: CreateEnvelopeInput[] = [];
     const ctx = createContext({
@@ -500,6 +495,9 @@ test("team.send supports reply-to and session targeting with partial success", a
       reloadedAgentNames: [],
       principal: { kind: "agent", agentName: "sender" },
       routeEnvelope: async (input) => {
+        if (input.to === "agent:bob") {
+          throw new Error("mock-failure:bob");
+        }
         routed.push(input);
         return {
           id: "env-alice",
@@ -520,7 +518,6 @@ test("team.send supports reply-to and session targeting with partial success", a
       teamName: "alpha",
       text: "hello",
       replyToEnvelopeId: root.id,
-      toSessionId: sessionPrefix,
     }) as {
       sentCount: number;
       failedCount: number;
@@ -532,11 +529,11 @@ test("team.send supports reply-to and session targeting with partial success", a
     assert.deepEqual(result.results.map((item) => item.agentName), ["alice", "bob"]);
     assert.equal(result.results[0]?.success, true);
     assert.equal(result.results[1]?.success, false);
-    assert.equal((result.results[1]?.error ?? "").includes("Session not found"), true);
+    assert.equal((result.results[1]?.error ?? "").includes("mock-failure:bob"), true);
 
     assert.equal(routed.length, 1);
     const metadata = routed[0]?.metadata as Record<string, unknown> | undefined;
     assert.equal(metadata?.replyToEnvelopeId, root.id);
-    assert.equal(metadata?.targetSessionId, session.id);
+    assert.equal(metadata?.targetSessionId, undefined);
   });
 });

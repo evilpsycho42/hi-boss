@@ -4,6 +4,9 @@ to: {{ envelope.to }}
 {% if envelope.senderLine %}
 sender: {{ envelope.senderLine }}
 {% endif %}
+{% if envelope.chatScope %}
+chat: {{ envelope.chatScope }}
+{% endif %}
 created-at: {{ envelope.createdAt.iso }}
 {% if envelope.deliverAt.present %}
 deliver-at: {{ envelope.deliverAt.iso }}

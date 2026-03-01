@@ -24,13 +24,33 @@ Key files:
 
 Session scope resolution:
 
+- Agent source + `metadata.chatScope`: resolve default session via `channel_session_bindings` using `adapter_type="internal"` and `chat_id=metadata.chatScope`.
 - Channel source (`from = channel:<adapter>:<chat-id>`): resolve default session via `channel_session_bindings`.
-- Non-channel source: use default per-agent scope.
+- Agent source without `chatScope` (legacy/cron inline): use default per-agent scope.
 
 Execution semantics:
 
 - same session id => serial execution
 - different session ids => can run in parallel (subject to configured limits)
+
+## Agent-to-Agent Flow
+
+Agent-origin addressing in `envelope.send`:
+
+- `--to agent:<name>`
+  - daemon canonicalizes agent names
+  - stamps `metadata.chatScope = agent-dm:<sorted-a>:<sorted-b>`
+  - creates one envelope
+- `--to team:<name>`
+  - daemon validates active team
+  - fans out one envelope per member excluding sender
+  - each envelope targets `agent:<member>` and stamps `metadata.chatScope = team:<name>`
+- `--to team:<name>:<agent>`
+  - daemon validates active team + membership
+  - creates one envelope to the mentioned member
+  - stamps `metadata.chatScope = team:<name>`
+
+`--interrupt-now` is allowed only for single-agent destinations (`agent:<name>`, `team:<name>:<agent>`), not for `team:<name>` broadcast.
 
 ## Outbound Flow (Agent -> Channel)
 

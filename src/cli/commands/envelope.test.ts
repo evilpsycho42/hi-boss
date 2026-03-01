@@ -76,3 +76,59 @@ test("sendEnvelope without interruptNow keeps legacy single-line success output"
 
   assert.deepEqual(logs, [`id: ${formatShortId(id)}`]);
 });
+
+test("sendEnvelope prints one id per broadcast envelope", async () => {
+  const originalCall = IpcClient.prototype.call;
+  const originalLog = console.log;
+  const logs: string[] = [];
+  const ids = [
+    "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+    "11111111-2222-3333-4444-555555555555",
+  ];
+
+  IpcClient.prototype.call = async function call<T = unknown>(): Promise<T> {
+    return { ids } as T;
+  };
+  console.log = (...args: unknown[]) => {
+    logs.push(args.map(String).join(" "));
+  };
+
+  try {
+    await sendEnvelope({
+      token: "agent-token",
+      to: "team:research",
+      text: "hello",
+    });
+  } finally {
+    IpcClient.prototype.call = originalCall;
+    console.log = originalLog;
+  }
+
+  assert.deepEqual(logs, ids.map((id) => `id: ${formatShortId(id)}`));
+});
+
+test("sendEnvelope prints no-recipients for empty broadcast", async () => {
+  const originalCall = IpcClient.prototype.call;
+  const originalLog = console.log;
+  const logs: string[] = [];
+
+  IpcClient.prototype.call = async function call<T = unknown>(): Promise<T> {
+    return { ids: [], noRecipients: true } as T;
+  };
+  console.log = (...args: unknown[]) => {
+    logs.push(args.map(String).join(" "));
+  };
+
+  try {
+    await sendEnvelope({
+      token: "agent-token",
+      to: "team:research",
+      text: "hello",
+    });
+  } finally {
+    IpcClient.prototype.call = originalCall;
+    console.log = originalLog;
+  }
+
+  assert.deepEqual(logs, ["no-recipients: true"]);
+});

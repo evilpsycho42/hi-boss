@@ -106,6 +106,9 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
     } catch (err) {
       rpcError(RPC_ERRORS.INVALID_PARAMS, err instanceof Error ? err.message : "Invalid to");
     }
+    if (destination.type === "team" || destination.type === "team-mention") {
+      rpcError(RPC_ERRORS.INVALID_PARAMS, "Cron schedules cannot use team destinations");
+    }
 
     const metadata: Record<string, unknown> = {};
 

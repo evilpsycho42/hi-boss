@@ -120,7 +120,7 @@ export function registerTeamCommands(program: Command): void {
 
   team
     .command("send")
-    .description("Send an envelope to all team members")
+    .description("Send an envelope to all team members (deprecated; prefer `hiboss envelope send --to team:<name>`)")
     .requiredOption("--name <name>", "Team name")
     .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
     .option("--text <text>", "Envelope text (use - to read from stdin)")
@@ -137,9 +137,6 @@ export function registerTeamCommands(program: Command): void {
     )
     .option("--interrupt-now", "Interrupt current run and prioritize this envelope")
     .option("--reply-to <envelope-id>", "Reply to an envelope")
-    .option("--to-session-id <id>", "Pin delivery to a specific target agent session (short id/prefix/full UUID)")
-    .option("--to-provider-session-id <id>", "Pin delivery by provider session/thread id on the target agent")
-    .option("--to-provider <provider>", "Provider for --to-provider-session-id: claude or codex")
     .action((options) => {
       sendTeam({
         token: options.token,
@@ -150,9 +147,6 @@ export function registerTeamCommands(program: Command): void {
         deliverAt: options.deliverAt,
         interruptNow: options.interruptNow,
         replyTo: options.replyTo,
-        toSessionId: options.toSessionId,
-        toProviderSessionId: options.toProviderSessionId,
-        toProvider: options.toProvider,
       });
     });
 

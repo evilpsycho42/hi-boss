@@ -196,32 +196,80 @@ test("resolveExecutionScope respects envelope channelSessionId pin even after de
   });
 });
 
-test("resolveExecutionScope respects metadata.targetSessionId for non-channel and channel envelopes", () => {
+test("resolveExecutionScope routes agent-origin chatScope via internal channel sessions", () => {
   withTempDb((db) => {
     db.registerAgent({ name: "nex", provider: "claude" });
-    const pinned = db.createAgentSession({
-      agentName: "nex",
-      provider: "claude",
-    });
 
     const executor = new AgentExecutor();
     const agent = { name: "nex", provider: "claude" } as any;
 
-    const directEnvelope = {
+    const dmEnvelope = {
       id: "env-direct",
       from: "agent:other",
       to: "agent:nex",
       fromBoss: false,
       metadata: {
-        targetSessionId: pinned.id,
+        chatScope: "agent-dm:alice:bob",
       },
     } as any;
-    const directScope = (executor as any).resolveExecutionScope(agent, db, directEnvelope) as {
+    const dmScope = (executor as any).resolveExecutionScope(agent, db, dmEnvelope) as {
       kind: string;
       agentSessionId?: string;
+      adapterType?: string;
+      chatId?: string;
     };
-    assert.equal(directScope.kind, "pinned");
-    assert.equal(directScope.agentSessionId, pinned.id);
+    assert.equal(dmScope.kind, "channel");
+    assert.equal(dmScope.adapterType, "internal");
+    assert.equal(dmScope.chatId, "agent-dm:alice:bob");
+
+    const teamEnvelope = {
+      id: "env-team",
+      from: "agent:other",
+      to: "agent:nex",
+      fromBoss: false,
+      metadata: {
+        chatScope: "team:research",
+      },
+    } as any;
+    const teamScope = (executor as any).resolveExecutionScope(agent, db, teamEnvelope) as {
+      kind: string;
+      agentSessionId?: string;
+      adapterType?: string;
+      chatId?: string;
+    };
+    assert.equal(teamScope.kind, "channel");
+    assert.equal(teamScope.adapterType, "internal");
+    assert.equal(teamScope.chatId, "team:research");
+    assert.notEqual(teamScope.agentSessionId, dmScope.agentSessionId);
+  });
+});
+
+test("resolveExecutionScope keeps backward compatibility for agent envelopes without chatScope", () => {
+  withTempDb((db) => {
+    db.registerAgent({ name: "nex", provider: "claude" });
+    const executor = new AgentExecutor();
+    const agent = { name: "nex", provider: "claude" } as any;
+
+    const env = {
+      id: "env-default",
+      from: "agent:other",
+      to: "agent:nex",
+      fromBoss: false,
+      metadata: { origin: "cli" },
+    } as any;
+
+    const scope = (executor as any).resolveExecutionScope(agent, db, env) as {
+      kind: string;
+    };
+    assert.equal(scope.kind, "default");
+  });
+});
+
+test("resolveExecutionScope ignores chatScope for channel-origin envelopes", () => {
+  withTempDb((db) => {
+    db.registerAgent({ name: "nex", provider: "claude" });
+    const executor = new AgentExecutor();
+    const agent = { name: "nex", provider: "claude" } as any;
 
     const channelEnvelope = {
       id: "env-channel",
@@ -229,14 +277,17 @@ test("resolveExecutionScope respects metadata.targetSessionId for non-channel an
       to: "agent:nex",
       fromBoss: false,
       metadata: {
-        targetSessionId: pinned.id,
+        chatScope: "team:research",
       },
     } as any;
     const channelScope = (executor as any).resolveExecutionScope(agent, db, channelEnvelope) as {
       kind: string;
       agentSessionId?: string;
+      adapterType?: string;
+      chatId?: string;
     };
-    assert.equal(channelScope.kind, "pinned");
-    assert.equal(channelScope.agentSessionId, pinned.id);
+    assert.equal(channelScope.kind, "channel");
+    assert.equal(channelScope.adapterType, "telegram");
+    assert.equal(channelScope.chatId, "chat-1");
   });
 });

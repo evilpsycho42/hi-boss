@@ -122,6 +122,18 @@ export class MessageRouter {
       await this.deliverToAgent(envelope, destination.agentName);
     } else if (destination.type === "channel") {
       await this.deliverToChannel(envelope, destination.adapter, destination.chatId);
+    } else {
+      const msg = `Unsupported delivery destination type: ${destination.type}`;
+      this.recordDeliveryError(envelope, {
+        kind: "unsupported-destination",
+        message: msg,
+      });
+      this.markEnvelopeDoneBestEffort(envelope, "router-unsupported-destination");
+      this.throwDeliveryFailed(msg, {
+        envelopeId: envelope.id,
+        to: envelope.to,
+        reason: "unsupported-destination",
+      });
     }
   }
 

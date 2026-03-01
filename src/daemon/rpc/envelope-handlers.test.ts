@@ -6,7 +6,6 @@ import { RPC_ERRORS } from "../ipc/types.js";
 import type { DaemonContext } from "./context.js";
 import type { CreateEnvelopeInput, Envelope } from "../../envelope/types.js";
 import type { Agent } from "../../agent/types.js";
-import type { AgentSessionRecord } from "../db/database.js";
 import { INTERNAL_VERSION } from "../../shared/version.js";
 
 function makeAgent(name: string): Agent {
@@ -21,19 +20,33 @@ function makeAgent(name: string): Agent {
 
 function makeContext(params: {
   sender: Agent;
-  targetAgent?: Agent;
+  knownAgents?: Agent[];
+  teams?: Array<{
+    name: string;
+    status?: "active" | "archived";
+    members: string[];
+  }>;
   routeEnvelope?: (input: CreateEnvelopeInput) => Promise<Envelope>;
   abortCurrentRun?: (agentName: string, reason: string) => boolean;
-  getAgentSessionById?: (id: string) => AgentSessionRecord | null;
-  findAgentSessionsByIdPrefix?: (agentName: string, compactPrefix: string) => AgentSessionRecord[];
-  findAgentSessionByProviderSessionId?: (input: {
-    agentName: string;
-    providerSessionId: string;
-    provider?: "claude" | "codex";
-  }) => AgentSessionRecord | null;
   boundAdapterTypes?: string[];
 }): DaemonContext {
-  const targetAgent = params.targetAgent ?? null;
+  const knownAgents = new Map<string, Agent>();
+  for (const agent of params.knownAgents ?? [params.sender]) {
+    knownAgents.set(agent.name.toLowerCase(), agent);
+  }
+  if (!knownAgents.has(params.sender.name.toLowerCase())) {
+    knownAgents.set(params.sender.name.toLowerCase(), params.sender);
+  }
+
+  const teams = new Map<string, { name: string; status: "active" | "archived"; members: string[] }>();
+  for (const team of params.teams ?? []) {
+    teams.set(team.name.toLowerCase(), {
+      name: team.name,
+      status: team.status ?? "active",
+      members: [...team.members],
+    });
+  }
+
   const boundAdapterTypes = new Set(params.boundAdapterTypes ?? []);
   const routeEnvelope =
     params.routeEnvelope ??
@@ -54,8 +67,22 @@ function makeContext(params: {
   return {
     db: {
       updateAgentLastSeen: () => undefined,
-      getAgentByNameCaseInsensitive: (name: string) =>
-        targetAgent && targetAgent.name.toLowerCase() === name.toLowerCase() ? targetAgent : null,
+      getAgentByNameCaseInsensitive: (name: string) => knownAgents.get(name.toLowerCase()) ?? null,
+      getTeamByNameCaseInsensitive: (name: string) => {
+        const team = teams.get(name.toLowerCase());
+        if (!team) return null;
+        return {
+          id: `${team.name}-id`,
+          name: team.name,
+          status: team.status,
+          kind: "manual",
+          createdAt: Date.now(),
+        };
+      },
+      listTeamMemberAgentNames: (teamName: string) => {
+        const team = teams.get(teamName.toLowerCase());
+        return team ? [...team.members] : [];
+      },
       getAgentBindingByType: (_agentName: string, adapterType: string) =>
         boundAdapterTypes.has(adapterType)
           ? {
@@ -68,11 +95,6 @@ function makeContext(params: {
           : null,
       getBossTimezone: () => "UTC",
       getEnvelopeById: () => null,
-      getAgentSessionById: params.getAgentSessionById ?? (() => null),
-      findAgentSessionsByIdPrefix:
-        params.findAgentSessionsByIdPrefix ?? (() => []),
-      findAgentSessionByProviderSessionId:
-        params.findAgentSessionByProviderSessionId ?? (() => null),
     } as unknown as DaemonContext["db"],
     router: {
       routeEnvelope,
@@ -122,7 +144,7 @@ async function assertRpcError(
 test("envelope.send rejects non-boolean interruptNow", async () => {
   const sender = makeAgent("sender");
   const target = makeAgent("target");
-  const ctx = makeContext({ sender, targetAgent: target });
+  const ctx = makeContext({ sender, knownAgents: [sender, target] });
   const handlers = createEnvelopeHandlers(ctx);
 
   await assertRpcError(
@@ -141,7 +163,7 @@ test("envelope.send rejects non-boolean interruptNow", async () => {
 test("envelope.send rejects interruptNow with deliverAt", async () => {
   const sender = makeAgent("sender");
   const target = makeAgent("target");
-  const ctx = makeContext({ sender, targetAgent: target });
+  const ctx = makeContext({ sender, knownAgents: [sender, target] });
   const handlers = createEnvelopeHandlers(ctx);
 
   await assertRpcError(
@@ -172,7 +194,7 @@ test("envelope.send rejects interruptNow for channel destinations", async () => 
         interruptNow: true,
       }),
     RPC_ERRORS.INVALID_PARAMS,
-    "interrupt-now is only supported for agent destinations"
+    "interrupt-now is only supported for single agent destinations"
   );
 });
 
@@ -184,7 +206,7 @@ test("envelope.send interruptNow aborts work and creates priority envelope", asy
 
   const ctx = makeContext({
     sender,
-    targetAgent: target,
+    knownAgents: [sender, target],
     abortCurrentRun: (agentName: string, reason: string) => {
       abortCalls.push({ agentName, reason });
       return true;
@@ -218,97 +240,164 @@ test("envelope.send interruptNow aborts work and creates priority envelope", asy
     reason: "rpc:envelope.send:interrupt-now",
   });
   assert.notEqual(routedInput, null);
-  assert.equal((routedInput as any).priority, 1);
+  const routed = routedInput as unknown as CreateEnvelopeInput;
+  assert.equal(routed.priority, 1);
   assert.equal(result.id, "env-priority");
   assert.equal(result.interruptedWork, true);
   assert.equal(result.priorityApplied, true);
 });
 
-test("envelope.send rejects session targeting for channel destinations", async () => {
-  const sender = makeAgent("sender");
-  const ctx = makeContext({ sender, boundAdapterTypes: ["telegram"] });
+test("envelope.send stamps chatScope for agent DM using canonical sorted names", async () => {
+  const sender = makeAgent("bob");
+  const target = makeAgent("alice");
+  let routedInput: CreateEnvelopeInput | null = null;
+  const ctx = makeContext({
+    sender,
+    knownAgents: [sender, target],
+    routeEnvelope: async (input) => {
+      routedInput = input;
+      return {
+        id: "env-dm",
+        from: input.from,
+        to: input.to,
+        fromBoss: false,
+        content: input.content,
+        priority: input.priority,
+        status: "pending",
+        createdAt: Date.now(),
+        metadata: input.metadata,
+      };
+    },
+  });
+  const handlers = createEnvelopeHandlers(ctx);
+
+  await handlers["envelope.send"]({
+    token: sender.token,
+    to: "agent:alice",
+    text: "hello",
+  });
+
+  assert.notEqual(routedInput, null);
+  const metadata = (routedInput as unknown as CreateEnvelopeInput).metadata as Record<string, unknown> | undefined;
+  assert.equal(metadata?.chatScope, "agent-dm:alice:bob");
+});
+
+test("envelope.send team mention stamps team chatScope", async () => {
+  const sender = makeAgent("carol");
+  const bob = makeAgent("bob");
+  let routedInput: CreateEnvelopeInput | null = null;
+  const ctx = makeContext({
+    sender,
+    knownAgents: [sender, bob],
+    teams: [
+      { name: "research", members: ["bob"] },
+    ],
+    routeEnvelope: async (input) => {
+      routedInput = input;
+      return {
+        id: "env-mention",
+        from: input.from,
+        to: input.to,
+        fromBoss: false,
+        content: input.content,
+        priority: input.priority,
+        status: "pending",
+        createdAt: Date.now(),
+        metadata: input.metadata,
+      };
+    },
+  });
+  const handlers = createEnvelopeHandlers(ctx);
+
+  await handlers["envelope.send"]({
+    token: sender.token,
+    to: "team:research:bob",
+    text: "ping",
+  });
+
+  assert.notEqual(routedInput, null);
+  const routed = routedInput as unknown as CreateEnvelopeInput;
+  const metadata = routed.metadata as Record<string, unknown> | undefined;
+  assert.equal(routed.to, "agent:bob");
+  assert.equal(metadata?.chatScope, "team:research");
+});
+
+test("envelope.send team mention rejects non-member", async () => {
+  const sender = makeAgent("carol");
+  const ctx = makeContext({
+    sender,
+    teams: [{ name: "research", members: ["bob"] }],
+  });
   const handlers = createEnvelopeHandlers(ctx);
 
   await assertRpcError(
     () =>
       handlers["envelope.send"]({
         token: sender.token,
-        to: "channel:telegram:123",
-        text: "hello",
-        toSessionId: "abcd1234",
+        to: "team:research:alice",
+        text: "ping",
       }),
-    RPC_ERRORS.INVALID_PARAMS,
-    "Session targeting is only supported for agent destinations"
+    RPC_ERRORS.NOT_FOUND,
+    "Team member not found"
   );
 });
 
-test("envelope.send resolves to-session-id prefix and stamps targetSessionId metadata", async () => {
-  const sender = makeAgent("sender");
-  const target = makeAgent("target");
-  let routedInput: CreateEnvelopeInput | null = null;
-
+test("envelope.send team mention rejects archived team", async () => {
+  const sender = makeAgent("carol");
   const ctx = makeContext({
     sender,
-    targetAgent: target,
-    findAgentSessionsByIdPrefix: () => [
-      {
-        id: "11111111-2222-3333-4444-555555555555",
-        agentName: "target",
-        provider: "claude",
-        createdAt: 1,
-        lastActiveAt: 2,
-      },
-    ],
-    routeEnvelope: async (input) => {
-      routedInput = input;
-      return {
-        id: "env-1",
-        from: input.from,
-        to: input.to,
-        fromBoss: false,
-        content: input.content,
-        priority: input.priority,
-        status: "pending",
-        createdAt: Date.now(),
-        metadata: input.metadata,
-      };
-    },
+    teams: [{ name: "research", status: "archived", members: ["bob"] }],
   });
   const handlers = createEnvelopeHandlers(ctx);
 
-  await handlers["envelope.send"]({
-    token: sender.token,
-    to: "agent:target",
-    text: "hello",
-    toSessionId: "11111111",
-  });
-
-  assert.notEqual(routedInput, null);
-  const routed = routedInput as unknown as CreateEnvelopeInput;
-  const metadata = routed.metadata as Record<string, unknown> | undefined;
-  assert.equal(metadata?.targetSessionId, "11111111-2222-3333-4444-555555555555");
+  await assertRpcError(
+    () =>
+      handlers["envelope.send"]({
+        token: sender.token,
+        to: "team:research:bob",
+        text: "ping",
+      }),
+    RPC_ERRORS.INVALID_PARAMS,
+    "Cannot send to archived team"
+  );
 });
 
-test("envelope.send resolves to-provider-session-id and stamps targetSessionId metadata", async () => {
+test("envelope.send rejects interruptNow for team broadcast", async () => {
   const sender = makeAgent("sender");
-  const target = makeAgent("target");
-  let routedInput: CreateEnvelopeInput | null = null;
-
+  const alice = makeAgent("alice");
   const ctx = makeContext({
     sender,
-    targetAgent: target,
-    findAgentSessionByProviderSessionId: () => ({
-      id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
-      agentName: "target",
-      provider: "codex",
-      providerSessionId: "thread_123",
-      createdAt: 1,
-      lastActiveAt: 2,
-    }),
+    knownAgents: [sender, alice],
+    teams: [{ name: "alpha", members: ["sender", "alice"] }],
+  });
+  const handlers = createEnvelopeHandlers(ctx);
+
+  await assertRpcError(
+    () =>
+      handlers["envelope.send"]({
+        token: sender.token,
+        to: "team:alpha",
+        text: "hello",
+        interruptNow: true,
+      }),
+    RPC_ERRORS.INVALID_PARAMS,
+    "interrupt-now is not supported for team broadcast"
+  );
+});
+
+test("envelope.send team broadcast fans out and returns ids", async () => {
+  const sender = makeAgent("sender");
+  const alice = makeAgent("alice");
+  const bob = makeAgent("bob");
+  const routed: CreateEnvelopeInput[] = [];
+  const ctx = makeContext({
+    sender,
+    knownAgents: [sender, alice, bob],
+    teams: [{ name: "alpha", members: ["sender", "alice", "bob"] }],
     routeEnvelope: async (input) => {
-      routedInput = input;
+      routed.push(input);
       return {
-        id: "env-2",
+        id: `env-${routed.length}`,
         from: input.from,
         to: input.to,
         fromBoss: false,
@@ -322,16 +411,108 @@ test("envelope.send resolves to-provider-session-id and stamps targetSessionId m
   });
   const handlers = createEnvelopeHandlers(ctx);
 
-  await handlers["envelope.send"]({
+  const result = (await handlers["envelope.send"]({
     token: sender.token,
-    to: "agent:target",
-    text: "hello",
-    toProviderSessionId: "thread_123",
-    toProvider: "codex",
-  });
+    to: "team:alpha",
+    text: "hello team",
+  })) as { ids: string[] };
 
-  assert.notEqual(routedInput, null);
-  const routed = routedInput as unknown as CreateEnvelopeInput;
-  const metadata = routed.metadata as Record<string, unknown> | undefined;
-  assert.equal(metadata?.targetSessionId, "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+  assert.deepEqual(result.ids, ["env-1", "env-2"]);
+  assert.deepEqual(routed.map((item) => item.to), ["agent:alice", "agent:bob"]);
+  assert.deepEqual(
+    routed.map((item) => (item.metadata as Record<string, unknown> | undefined)?.chatScope),
+    ["team:alpha", "team:alpha"]
+  );
+});
+
+test("envelope.send team broadcast failure includes partial delivery ids", async () => {
+  const sender = makeAgent("sender");
+  const alice = makeAgent("alice");
+  const bob = makeAgent("bob");
+  let sendCount = 0;
+  const ctx = makeContext({
+    sender,
+    knownAgents: [sender, alice, bob],
+    teams: [{ name: "alpha", members: ["sender", "alice", "bob"] }],
+    routeEnvelope: async (input) => {
+      sendCount += 1;
+      if (sendCount === 2) {
+        throw new Error(`failed to deliver to ${input.to}`);
+      }
+      return {
+        id: `env-${sendCount}`,
+        from: input.from,
+        to: input.to,
+        fromBoss: false,
+        content: input.content,
+        priority: input.priority,
+        status: "pending",
+        createdAt: Date.now(),
+        metadata: input.metadata,
+      };
+    },
+  });
+  const handlers = createEnvelopeHandlers(ctx);
+
+  await assert.rejects(
+    () =>
+      handlers["envelope.send"]({
+        token: sender.token,
+        to: "team:alpha",
+        text: "hello team",
+      }),
+    (err: unknown) => {
+      const e = err as Error & { code?: number; data?: unknown };
+      assert.equal(e.code, RPC_ERRORS.DELIVERY_FAILED);
+      assert.equal(e.message.includes("failed to deliver to agent:bob"), true);
+      const data =
+        e.data && typeof e.data === "object" ? (e.data as Record<string, unknown>) : null;
+      assert.notEqual(data, null);
+      assert.deepEqual(data?.ids, ["env-1"]);
+      assert.equal(data?.partialDelivery, true);
+      assert.equal(data?.deliveredCount, 1);
+      assert.equal(data?.totalRecipients, 2);
+      assert.equal(data?.failedAgentName, "bob");
+      return true;
+    }
+  );
+});
+
+test("envelope.send team broadcast returns no-recipients for sender-only team", async () => {
+  const sender = makeAgent("sender");
+  const ctx = makeContext({
+    sender,
+    teams: [{ name: "alpha", members: ["sender"] }],
+  });
+  const handlers = createEnvelopeHandlers(ctx);
+
+  const result = (await handlers["envelope.send"]({
+    token: sender.token,
+    to: "team:alpha",
+    text: "hello",
+  })) as { ids: string[]; noRecipients?: boolean };
+
+  assert.deepEqual(result.ids, []);
+  assert.equal(result.noRecipients, true);
+});
+
+test("envelope.send validates team broadcast params even with no recipients", async () => {
+  const sender = makeAgent("sender");
+  const ctx = makeContext({
+    sender,
+    teams: [{ name: "alpha", members: ["sender"] }],
+  });
+  const handlers = createEnvelopeHandlers(ctx);
+
+  await assertRpcError(
+    () =>
+      handlers["envelope.send"]({
+        token: sender.token,
+        to: "team:alpha",
+        text: "hello",
+        deliverAt: "not-a-time",
+      }),
+    RPC_ERRORS.INVALID_PARAMS,
+    "Invalid deliver-at"
+  );
 });
