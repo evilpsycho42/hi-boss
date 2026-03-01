@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { DEFAULT_PERMISSION_POLICY } from "./defaults.js";
-import { parseSettingsV4Json } from "./settings.js";
+import { parseSettingsJson } from "./settings.js";
 import { INTERNAL_VERSION } from "./version.js";
 
 function buildSettingsJson(extra: Record<string, unknown>): string {
   return JSON.stringify({
-    version: 4,
+    version: INTERNAL_VERSION,
     boss: {
       name: "boss",
       timezone: "UTC",
@@ -54,8 +54,8 @@ function buildSettingsJson(extra: Record<string, unknown>): string {
   });
 }
 
-test("parseSettingsV4Json accepts valid user-permission-policy", () => {
-  const settings = parseSettingsV4Json(
+test("parseSettingsJson accepts valid user-permission-policy", () => {
+  const settings = parseSettingsJson(
     buildSettingsJson({
       "user-permission-policy": {
         version: INTERNAL_VERSION,
@@ -78,15 +78,15 @@ test("parseSettingsV4Json accepts valid user-permission-policy", () => {
     })
   );
 
-  assert.equal(settings.userPermissionPolicy?.defaults.unmappedUserRole, "operator");
-  assert.equal(settings.userPermissionPolicy?.bindings[0]?.userId, "u-1");
-  assert.equal(settings.userPermissionPolicy?.bindings[0]?.token, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+  assert.equal(settings.userPermissionPolicy.defaults.unmappedUserRole, "operator");
+  assert.equal(settings.userPermissionPolicy.bindings[0]?.userId, "u-1");
+  assert.equal(settings.userPermissionPolicy.bindings[0]?.token, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
 });
 
-test("parseSettingsV4Json rejects invalid user-permission-policy", () => {
+test("parseSettingsJson rejects invalid user-permission-policy", () => {
   assert.throws(
     () =>
-      parseSettingsV4Json(
+      parseSettingsJson(
         buildSettingsJson({
           "user-permission-policy": {
             version: INTERNAL_VERSION,

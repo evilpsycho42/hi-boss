@@ -230,7 +230,7 @@ export class ChannelBridge {
     const agent = this.db.getAgentByNameCaseInsensitive(binding.agentName);
     const ownerUserId = authz.token;
     const channelSession = agent
-      ? this.db.getOrCreateChannelActiveSession({
+      ? this.db.getOrCreateChannelDefaultSession({
           agentName: binding.agentName,
           adapterType: platform,
           chatId: message.chat.id,

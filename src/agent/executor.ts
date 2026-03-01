@@ -514,13 +514,6 @@ export class AgentExecutor {
     if (parsedFrom && parsedFrom.type === "channel") {
       const provider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
       const md = metadata;
-      const channelUserRaw =
-        md && typeof md.channelUser === "object" && md.channelUser
-          ? (md.channelUser as Record<string, unknown>)
-          : undefined;
-      const ownerUserId = envelope.fromBoss && typeof channelUserRaw?.id === "string" && channelUserRaw.id.trim()
-        ? channelUserRaw.id.trim()
-      const md = envelope.metadata as Record<string, unknown> | undefined;
       const ownerUserId = typeof md?.userToken === "string" && md.userToken.trim()
         ? md.userToken.trim()
         : undefined;
