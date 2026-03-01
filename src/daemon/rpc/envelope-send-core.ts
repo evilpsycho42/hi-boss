@@ -142,20 +142,41 @@ export async function sendEnvelopeFromAgent(params: {
 
     const ids: string[] = [];
     for (const recipient of recipients) {
-      const sent = await sendEnvelopeFromAgent({
-        ctx: params.ctx,
-        senderAgent: params.senderAgent,
-        input: {
-          ...p,
-          to: formatAgentAddress(recipient),
-          chatScope: computeTeamChatId(team.name),
-        },
-        interruptReason: params.interruptReason,
-      });
-      if (!("id" in sent)) {
-        rpcError(RPC_ERRORS.INTERNAL_ERROR, "Unexpected team broadcast result");
+      try {
+        const sent = await sendEnvelopeFromAgent({
+          ctx: params.ctx,
+          senderAgent: params.senderAgent,
+          input: {
+            ...p,
+            to: formatAgentAddress(recipient),
+            chatScope: computeTeamChatId(team.name),
+          },
+          interruptReason: params.interruptReason,
+        });
+        if (!("id" in sent)) {
+          rpcError(RPC_ERRORS.INTERNAL_ERROR, "Unexpected team broadcast result");
+        }
+        ids.push(sent.id);
+      } catch (err) {
+        if (ids.length === 0) {
+          throw err;
+        }
+        const e = err as Error & { code?: number; data?: unknown };
+        const originalData =
+          e.data && typeof e.data === "object" ? (e.data as Record<string, unknown>) : {};
+        rpcError(
+          typeof e.code === "number" ? e.code : RPC_ERRORS.DELIVERY_FAILED,
+          e.message || "Team broadcast delivery failed",
+          {
+            ...originalData,
+            partialDelivery: true,
+            deliveredCount: ids.length,
+            totalRecipients: recipients.length,
+            failedAgentName: recipient,
+            ids,
+          }
+        );
       }
-      ids.push(sent.id);
     }
     return { ids };
   }
@@ -220,7 +241,6 @@ export async function sendEnvelopeFromAgent(params: {
     }
   }
 
-
   const finalMetadata = Object.keys(metadata).length > 0 ? metadata : undefined;
   let interruptedWork = false;
 
@@ -246,7 +266,7 @@ export async function sendEnvelopeFromAgent(params: {
       priority: interruptNow ? 1 : 0,
       deliverAt,
       metadata: finalMetadata,
-      });
+    });
 
     params.ctx.scheduler.onEnvelopeCreated(envelope);
     if (interruptNow) {

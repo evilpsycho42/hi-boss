@@ -39,13 +39,13 @@ Output (parseable):
 
 Single-envelope success output:
 
-```
+```text
 id: <envelope-id>  # short id
 ```
 
 Team broadcast success output:
 
-```
+```text
 id: <envelope-id-1>  # short id
 id: <envelope-id-2>  # short id
 ...
@@ -53,13 +53,13 @@ id: <envelope-id-2>  # short id
 
 Team broadcast with only sender in team:
 
-```
+```text
 no-recipients: true
 ```
 
 When `--interrupt-now` is used:
 
-```
+```text
 id: <envelope-id>  # short id
 interrupt-now: true
 interrupted-work: true|false
@@ -97,7 +97,7 @@ Lists envelopes relevant to the authenticated agent.
 
 Empty output:
 
-```
+```text
 no-envelopes: true
 ```
 

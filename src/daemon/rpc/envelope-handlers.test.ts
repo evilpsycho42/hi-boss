@@ -425,6 +425,59 @@ test("envelope.send team broadcast fans out and returns ids", async () => {
   );
 });
 
+test("envelope.send team broadcast failure includes partial delivery ids", async () => {
+  const sender = makeAgent("sender");
+  const alice = makeAgent("alice");
+  const bob = makeAgent("bob");
+  let sendCount = 0;
+  const ctx = makeContext({
+    sender,
+    knownAgents: [sender, alice, bob],
+    teams: [{ name: "alpha", members: ["sender", "alice", "bob"] }],
+    routeEnvelope: async (input) => {
+      sendCount += 1;
+      if (sendCount === 2) {
+        throw new Error(`failed to deliver to ${input.to}`);
+      }
+      return {
+        id: `env-${sendCount}`,
+        from: input.from,
+        to: input.to,
+        fromBoss: false,
+        content: input.content,
+        priority: input.priority,
+        status: "pending",
+        createdAt: Date.now(),
+        metadata: input.metadata,
+      };
+    },
+  });
+  const handlers = createEnvelopeHandlers(ctx);
+
+  await assert.rejects(
+    () =>
+      handlers["envelope.send"]({
+        token: sender.token,
+        to: "team:alpha",
+        text: "hello team",
+      }),
+    (err: unknown) => {
+      const e = err as Error & { code?: number; data?: unknown };
+      assert.equal(e.code, RPC_ERRORS.DELIVERY_FAILED);
+      assert.equal(e.message.includes("failed to deliver to agent:bob"), true);
+      const data =
+        e.data && typeof e.data === "object" ? (e.data as Record<string, unknown>) : null;
+      assert.notEqual(data, null);
+      assert.deepEqual(data?.ids, ["env-1"]);
+      assert.equal(data?.partialDelivery, true);
+      assert.equal(data?.deliveredCount, 1);
+      assert.equal(data?.totalRecipients, 2);
+      assert.equal(data?.failedAgentName, "bob");
+      return true;
+    }
+  );
+});
+
 test("envelope.send team broadcast returns no-recipients for sender-only team", async () => {
   const sender = makeAgent("sender");
   const ctx = makeContext({
