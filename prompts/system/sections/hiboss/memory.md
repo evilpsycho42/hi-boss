@@ -5,7 +5,7 @@ Hi-Boss provides **file-based memory** inside your `internal_space/`.
 Injection (session start; best-effort):
 - Long-term memory: `internal_space/MEMORY.md` (truncated to {{ internalSpace.longtermMaxChars }} chars)
 - Daily memory: latest {{ internalSpace.dailyRecentFiles }} daily file(s) from `internal_space/memories/` ({{ internalSpace.dailyPerFileMaxChars }} chars per file; {{ internalSpace.dailyMaxChars }} chars total)
-- Session handoffs: latest {{ internalSpace.sessionHandoffRecentDays }} day(s) from `internal_space/history/**/<session-id>.md` (`summary + handoff`; {{ internalSpace.sessionHandoffPerSessionMaxChars }} chars per session)
+- Session handoffs: latest {{ internalSpace.sessionHandoffRecentDays | default(3) }} day(s) from `internal_space/history/**/<session-id>.md` (`summary + handoff`; {{ internalSpace.sessionHandoffPerSessionMaxChars | default(24000) }} chars per session)
 
 If you see a `<<truncated ...>>` marker, shorten the underlying file(s).
 
@@ -55,7 +55,7 @@ internal-space-session-handoffs-snapshot: {{ hiboss.dir }}/agents/{{ agent.name 
 {{ internalSpace.sessionHandoffs }}
 {{ internalSpace.sessionHandoffsFence }}
 {% else %}
-(empty; no readable handoffs found in latest {{ internalSpace.sessionHandoffRecentDays }} day(s))
+(empty; no readable handoffs found in latest {{ internalSpace.sessionHandoffRecentDays | default(3) }} day(s))
 {% endif %}
 {% endif %}
 

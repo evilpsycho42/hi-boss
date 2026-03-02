@@ -3,8 +3,10 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { HiBossDatabase } from "../src/daemon/db/database.js";
+import { SESSION_FILE_VERSION } from "../src/daemon/history/types.js";
 import { buildCliEnvelopePromptContext, buildSystemPromptContext, buildTurnPromptContext } from "../src/shared/prompt-context.js";
 import { renderPrompt } from "../src/shared/prompt-renderer.js";
+import { serializeSessionHistoryMarkdown, type SessionHistoryMarkdownDocument } from "../src/shared/session-history-markdown.js";
 import {
   ensureAgentInternalSpaceLayout,
   readAgentInternalDailyMemorySnapshot,
@@ -51,6 +53,80 @@ function chooseFence(text: string): string {
   return fence;
 }
 
+function seedExampleSessionHistory(hibossDir: string, agentName: string): void {
+  const sessions = [
+    {
+      sessionId: "7f9a1b2c",
+      dateDir: "2026-01-29",
+      chatDir: "-100123456789",
+      startedAt: "2026-01-29T08:30:00.000Z",
+      endedAt: "2026-01-29T09:20:00.000Z",
+      summary: "Handled Project X group updates and triaged open deployment questions.",
+      handoff: "Follow up with Eve on staging deploy result and post build status to Project X Dev.",
+    },
+    {
+      sessionId: "3d4e5f6a",
+      dateDir: "2026-01-28",
+      chatDir: "_no_chat",
+      startedAt: "2026-01-28T10:00:00.000Z",
+      endedAt: "2026-01-28T10:35:00.000Z",
+      summary: "Collected weekly update blockers and prioritized unresolved TODOs.",
+      handoff: "Ask Alice for ETA confirmation and remind Kevin about weekly update deadline.",
+    },
+  ] as const;
+
+  for (const session of sessions) {
+    const dir = path.join(
+      hibossDir,
+      "agents",
+      agentName,
+      "internal_space",
+      "history",
+      session.dateDir,
+      session.chatDir,
+    );
+    fs.mkdirSync(dir, { recursive: true });
+
+    const startedAtMs = Date.parse(session.startedAt);
+    const endedAtMs = Date.parse(session.endedAt);
+    const jsonPath = path.join(dir, `${session.sessionId}.json`);
+    fs.writeFileSync(
+      jsonPath,
+      JSON.stringify(
+        {
+          version: SESSION_FILE_VERSION,
+          sessionId: session.sessionId,
+          agentName,
+          startedAtMs,
+          endedAtMs,
+          events: [],
+        },
+        null,
+        2,
+      ) + "\n",
+      "utf-8",
+    );
+
+    const mdPath = path.join(dir, `${session.sessionId}.md`);
+    const markdownDoc: SessionHistoryMarkdownDocument = {
+      frontmatter: {
+        sessionId: session.sessionId,
+        agentName,
+        startedAt: session.startedAt,
+        endedAt: session.endedAt,
+        summary: session.summary,
+        handoff: session.handoff,
+        handoffStatus: "ready",
+        handoffAttempts: 1,
+        handoffUpdatedAt: session.endedAt,
+        handoffError: "",
+      },
+      body: "## conversation\nfrom: channel\nto: agent\ncontent:\n(summary omitted in examples)\n",
+    };
+    fs.writeFileSync(mdPath, serializeSessionHistoryMarkdown(markdownDoc), "utf-8");
+  }
+}
+
 async function main(): Promise<void> {
   for (const dir of OUTPUT_DIRS) {
     ensureOutputDir(dir);
@@ -68,6 +144,7 @@ async function main(): Promise<void> {
     const bossName = db.getBossName() ?? "";
     const bossTelegramId = db.getAdapterBossId("telegram") ?? "";
     const bossTimezone = db.getBossTimezone();
+    seedExampleSessionHistory(fixture.hibossDir, agent.name);
 
     // =============================================================================
     // System prompt examples
