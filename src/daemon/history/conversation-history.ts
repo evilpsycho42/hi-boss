@@ -223,19 +223,27 @@ export class ConversationHistory {
       this.withFileLock(agentName, () => {
         appendEvent(filePath, event);
         if (event.type === "envelope-created") {
-          const session = readSessionFile(filePath);
-          if (session) {
-            ensureSessionMarkdownForJson({
-              sessionJsonPath: filePath,
-              session,
+          const markdownPath = getSessionMarkdownPath(filePath);
+          let shouldAppendCurrentEntry = true;
+          if (!fs.existsSync(markdownPath)) {
+            const session = readSessionFile(filePath);
+            if (session) {
+              ensureSessionMarkdownForJson({
+                sessionJsonPath: filePath,
+                session,
+              });
+              // Backfill already includes the just-appended event.
+              shouldAppendCurrentEntry = false;
+            }
+          }
+          if (shouldAppendCurrentEntry) {
+            appendSessionMarkdownConversation(markdownPath, {
+              timestampMs: event.timestampMs,
+              from: event.envelope.from,
+              to: event.envelope.to,
+              content: extractEnvelopeContentText(event.envelope),
             });
           }
-          appendSessionMarkdownConversation(getSessionMarkdownPath(filePath), {
-            timestampMs: event.timestampMs,
-            from: event.envelope.from,
-            to: event.envelope.to,
-            content: extractEnvelopeContentText(event.envelope),
-          });
         }
       });
     }

@@ -213,6 +213,80 @@ test("channel bridge batches same-chat messages within 200ms into one envelope",
   });
 });
 
+test("channel bridge clears metadata.userToken when batching mixed-user messages", async () => {
+  await withTempDb(async (db) => {
+    db.registerAgent({ name: "nex", provider: "codex" });
+    db.createBinding("nex", "telegram", "bot-token");
+    db.setConfig(
+      "user_permission_policy",
+      JSON.stringify({
+        tokens: [
+          {
+            name: "LPC",
+            token: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            role: "user",
+            agents: ["nex"],
+          },
+          {
+            name: "Alice",
+            token: "cccccccccccccccccccccccccccccccc",
+            role: "user",
+            agents: ["nex"],
+          },
+        ],
+      })
+    );
+    db.setChannelUserAuth({
+      adapterType: "telegram",
+      channelUserId: "tg-u-1",
+      token: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    });
+    db.setChannelUserAuth({
+      adapterType: "telegram",
+      channelUserId: "tg-u-2",
+      token: "cccccccccccccccccccccccccccccccc",
+    });
+
+    const envelopes: Array<{ metadata?: Record<string, unknown> }> = [];
+    const router = {
+      registerAdapter: () => undefined,
+      routeEnvelope: async (payload: { metadata?: Record<string, unknown> }) => {
+        envelopes.push(payload);
+      },
+    } as any;
+
+    const bridge = new ChannelBridge(router, db, {} as any);
+    const adapter = new TestAdapter();
+    bridge.connect(adapter, "bot-token");
+
+    await adapter.emitMessage({
+      id: "m1",
+      platform: "telegram",
+      channelUser: { id: "tg-u-1", username: "alice", displayName: "Alice" },
+      chat: { id: "chat-1", name: "group-1" },
+      content: { text: "hello" },
+      raw: {},
+    });
+    await adapter.emitMessage({
+      id: "m2",
+      platform: "telegram",
+      channelUser: { id: "tg-u-2", username: "bob", displayName: "Bob" },
+      chat: { id: "chat-1", name: "group-1" },
+      content: { text: "world" },
+      raw: {},
+    });
+
+    await waitForChannelBatchFlush();
+
+    assert.equal(envelopes.length, 1);
+    assert.equal(envelopes[0]?.metadata?.userToken, undefined);
+    assert.deepEqual(envelopes[0]?.metadata?.userTokens, [
+      "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "cccccccccccccccccccccccccccccccc",
+    ]);
+  });
+});
+
 test("channel bridge authorizes commands by logged-in token agent scope", async () => {
   await withTempDb(async (db) => {
     db.registerAgent({ name: "nex", provider: "codex" });

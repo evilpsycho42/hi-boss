@@ -84,6 +84,9 @@ export class ChannelMessageBatcher {
     ));
     if (userTokens.length > 1) {
       metadataBase.userTokens = userTokens;
+      delete metadataBase.userToken;
+    } else if (userTokens.length === 1) {
+      metadataBase.userToken = userTokens[0];
     }
 
     const latestReply = [...items].reverse().find((item) => item.message.inReplyTo)?.message.inReplyTo;

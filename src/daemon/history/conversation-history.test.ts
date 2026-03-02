@@ -146,3 +146,45 @@ test("channel envelopes are stored under chat-id directory", async () => {
     assert.equal(fs.existsSync(alphaPath!), true);
   });
 });
+
+test("appendEnvelopeCreated avoids duplicate markdown entry when backfilling missing markdown", async () => {
+  await withTempAgentsDir(async (agentsDir) => {
+    const history = new ConversationHistory({ agentsDir, timezone: "UTC" });
+    const first = makeEnvelope({
+      id: "env-first",
+      from: "agent:alpha",
+      to: "agent:beta",
+      text: "first-message",
+    });
+
+    history.appendEnvelopeCreated({
+      envelope: first,
+      origin: "internal",
+      timestampMs: first.createdAt,
+    });
+    await waitForHistoryWrites();
+
+    const alphaPath = history.getCurrentSessionFilePath("alpha");
+    assert.ok(alphaPath);
+    const alphaMarkdownPath = getSessionMarkdownPath(alphaPath!);
+    fs.unlinkSync(alphaMarkdownPath);
+
+    const second = makeEnvelope({
+      id: "env-second",
+      from: "agent:alpha",
+      to: "agent:beta",
+      text: "second-message",
+    });
+    history.appendEnvelopeCreated({
+      envelope: second,
+      origin: "internal",
+      timestampMs: second.createdAt,
+    });
+    await waitForHistoryWrites();
+
+    const alphaMd = readSessionMarkdownFile(alphaMarkdownPath);
+    assert.ok(alphaMd);
+    assert.equal((alphaMd?.body.match(/^## /gm) ?? []).length, 2);
+    assert.equal((alphaMd?.body.match(/second-message/g) ?? []).length, 1);
+  });
+});
