@@ -476,12 +476,10 @@ export interface SetupCheckResult {
   userInfo: {
     bossName?: string;
     bossTimezone?: string;
-    telegramBossId?: string;
     hasAdminToken: boolean;
     missing: {
       bossName: boolean;
       bossTimezone: boolean;
-      telegramBossId: boolean;
       adminToken: boolean;
     };
   };

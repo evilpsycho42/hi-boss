@@ -38,6 +38,7 @@ When there are pending envelopes, each envelope is printed as:
 ```
 envelope-id: <id>                  # always (short id)
 from: <address>
+chat: <chat-id>                    # only when metadata.chatScope exists
 sender: <sender line>             # only for channel messages
 created-at: <local ISO-8601>
 deliver-at: <local ISO-8601>      # only when present

@@ -101,7 +101,9 @@ channel user policy stored at:
 - `settings.json.user-permission-policy` (required; source-of-truth)
 - mirrored to `config.user_permission_policy` in SQLite runtime cache
 
-`channel.command.*` and `channel.message.send` are checked by role allow-lists.
-Role bindings support adapter-scoped `user-id` (preferred) and optional `username`.
-Each binding must include a global `token` (32 lowercase hex chars), used as the
-session owner identity across bots and channels.
+`user-permission-policy` is token-centric authorization:
+- policy defines `users[]` entries (`name`, `token`, `role`, optional `agents`)
+- `role: admin` implies access to all agents
+- `role: user` must list allowed `agents[]`
+- platform identity (e.g. Telegram user id) is authenticated at runtime via `/login <token>` and persisted in DB (`channel_user_auth`)
+- command/message access is decided by the logged-in token's role/scope against the adapter's bound target agent

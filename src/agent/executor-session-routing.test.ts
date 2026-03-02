@@ -136,6 +136,76 @@ test("abortCurrentRun skips old queued tasks but allows new tasks queued after a
   assert.deepEqual(calls, ["e1", "e3"]);
 });
 
+test("abortCurrentRunForChannel skips queued tasks only for the targeted chat scope", async () => {
+  const executor = new AgentExecutor({
+    sessionConcurrencyPerAgent: 1,
+    sessionConcurrencyGlobal: 1,
+  });
+  const calls: string[] = [];
+
+  let releaseFirst!: () => void;
+  const firstRunGate = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+
+  (executor as any).runSessionExecution = async (params: { envelopes: Array<{ id: string }> }) => {
+    const id = params.envelopes[0]?.id;
+    if (id) calls.push(id);
+    if (id === "e1") {
+      await firstRunGate;
+    }
+  };
+
+  const agent = { name: "nex" } as any;
+  const db = {} as any;
+  const scopeChat1 = {
+    kind: "channel",
+    cacheKey: "channel-session:nex:s-chat-1",
+    agentSessionId: "s-chat-1",
+    adapterType: "telegram",
+    chatId: "chat-1",
+  } as any;
+  const scopeChat2 = {
+    kind: "channel",
+    cacheKey: "channel-session:nex:s-chat-2",
+    agentSessionId: "s-chat-2",
+    adapterType: "telegram",
+    chatId: "chat-2",
+  } as any;
+
+  (executor as any).queueSessionExecution({
+    agent,
+    db,
+    scope: scopeChat1,
+    envelopes: [{ id: "e1" }],
+    refreshReasons: [],
+  });
+  await new Promise((resolve) => setImmediate(resolve));
+
+  (executor as any).queueSessionExecution({
+    agent,
+    db,
+    scope: scopeChat2,
+    envelopes: [{ id: "e2" }],
+    refreshReasons: [],
+  });
+  (executor as any).queueSessionExecution({
+    agent,
+    db,
+    scope: scopeChat1,
+    envelopes: [{ id: "e3" }],
+    refreshReasons: [],
+  });
+
+  const cancelled = executor.abortCurrentRunForChannel("nex", "telegram", "chat-1", "test:/abort");
+  assert.equal(cancelled, true);
+
+  releaseFirst();
+  await waitUntilIdle(executor, "nex");
+
+  assert.deepEqual(calls, ["e1", "e2"]);
+});
+
 test("resolveExecutionScope respects envelope channelSessionId pin even after default mapping changed", () => {
   withTempDb((db) => {
     db.registerAgent({ name: "nex", provider: "codex" });
@@ -209,7 +279,7 @@ test("resolveExecutionScope routes agent-origin chatScope via internal channel s
       to: "agent:nex",
       fromBoss: false,
       metadata: {
-        chatScope: "agent-dm:alice:bob",
+        chatScope: "agent-chat-demo-1",
       },
     } as any;
     const dmScope = (executor as any).resolveExecutionScope(agent, db, dmEnvelope) as {
@@ -220,7 +290,7 @@ test("resolveExecutionScope routes agent-origin chatScope via internal channel s
     };
     assert.equal(dmScope.kind, "channel");
     assert.equal(dmScope.adapterType, "internal");
-    assert.equal(dmScope.chatId, "agent-dm:alice:bob");
+    assert.equal(dmScope.chatId, "agent-chat-demo-1");
 
     const teamEnvelope = {
       id: "env-team",

@@ -1,12 +1,18 @@
 import * as path from "node:path";
 
 import {
-  DEFAULT_PERMISSION_POLICY,
+  DEFAULT_SESSION_HANDOFF_MAX_RETRIES,
+  DEFAULT_SESSION_HANDOFF_PER_SESSION_MAX_CHARS,
+  DEFAULT_SESSION_HANDOFF_RECENT_DAYS,
   DEFAULT_SESSION_CONCURRENCY_GLOBAL,
   DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
   DEFAULT_SETUP_PERMISSION_LEVEL,
 } from "./defaults.js";
-import { isPermissionLevel, parsePermissionPolicyFromObject, type PermissionPolicy } from "./permissions.js";
+import {
+  isPermissionLevel,
+  type PermissionLevel,
+  type PermissionPolicy,
+} from "./permissions.js";
 import { parseDailyResetAt, parseDurationToMs } from "./session-policy.js";
 import { isValidIanaTimeZone } from "./timezone.js";
 import {
@@ -23,7 +29,6 @@ export const SETTINGS_FILE_MODE = 0o600 as const;
 export type SettingsProvider = "claude" | "codex";
 export type SettingsReasoningEffort = "none" | "low" | "medium" | "high" | "xhigh";
 const AGENT_TOKEN_REGEX = /^[0-9a-f]{32}$/;
-const MIN_ADMIN_TOKEN_LENGTH = 16;
 
 export interface SettingsBinding {
   adapterType: string;
@@ -55,22 +60,32 @@ export interface SettingsRuntime {
     perAgent?: number;
     global?: number;
   };
+  sessionHandoff?: {
+    recentDays?: number;
+    perSessionMaxChars?: number;
+    maxRetries?: number;
+  };
+  deployment?: {
+    mode: "docker" | "pm2";
+    outputDir: string;
+  };
+}
+
+export interface SettingsProviderCliConfig {
+  env?: Record<string, string>;
+}
+
+export interface SettingsProviderCli {
+  claude?: SettingsProviderCliConfig;
+  codex?: SettingsProviderCliConfig;
 }
 
 export interface Settings {
   version: typeof SETTINGS_VERSION;
-  boss: {
-    name: string;
-    timezone: string;
-  };
-  admin: {
-    token: string;
-  };
-  telegram: {
-    bossIds: string[];
-  };
+  timezone: string;
   permissionPolicy: PermissionPolicy;
-  userPermissionPolicy: UserPermissionPolicy;
+  tokens: UserPermissionPolicy["tokens"];
+  providerCli?: SettingsProviderCli;
   runtime?: SettingsRuntime;
   agents: SettingsAgent[];
 }
@@ -79,67 +94,99 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function isAbsolutePathCrossPlatform(value: string): boolean {
+  // Accept both host-native and Windows absolute paths so a shared settings.json
+  // can be validated on either side of a mixed Windows+Linux runtime setup.
+  return path.isAbsolute(value) || path.win32.isAbsolute(value);
+}
+
 function fail(fieldPath: string, message: string): never {
   throw new Error(`Invalid settings (${fieldPath}): ${message}`);
 }
 
-function normalizeBossId(raw: string): string {
-  return raw.trim().replace(/^@/, "");
+function parseEnvMap(raw: unknown, fieldPath: string): Record<string, string> | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (!isObject(raw)) {
+    fail(fieldPath, "must be an object");
+  }
+
+  const env: Record<string, string> = {};
+  for (const [rawKey, rawValue] of Object.entries(raw)) {
+    const key = rawKey.trim();
+    if (!key) continue;
+    if (typeof rawValue !== "string") {
+      fail(`${fieldPath}.${key}`, "must be a string");
+    }
+    env[key] = rawValue;
+  }
+
+  return Object.keys(env).length > 0 ? env : undefined;
 }
 
-function validateBossIds(raw: unknown): string[] {
-  if (!Array.isArray(raw)) {
-    fail("telegram.boss-ids", "must be an array of strings");
+function parseProviderCli(raw: unknown): Settings["providerCli"] {
+  if (raw === undefined || raw === null) return undefined;
+  if (!isObject(raw)) {
+    fail("providerCli", "must be an object");
   }
-  const ids = raw.map((value, index) => {
-    if (typeof value !== "string") {
-      fail(`telegram.boss-ids[${index}]`, "must be a string");
+
+  const next: SettingsProviderCli = {};
+  for (const provider of ["claude", "codex"] as const) {
+    const providerRaw = raw[provider];
+    if (providerRaw === undefined || providerRaw === null) continue;
+    if (!isObject(providerRaw)) {
+      fail(`providerCli.${provider}`, "must be an object");
     }
-    const normalized = normalizeBossId(value);
-    if (!normalized) {
-      fail(`telegram.boss-ids[${index}]`, "must not be empty");
+
+    const env = parseEnvMap(providerRaw.env, `providerCli.${provider}.env`);
+    if (env) {
+      next[provider] = { env };
     }
-    return normalized;
-  });
-  if (ids.length < 1) {
-    fail("telegram.boss-ids", "must contain at least one boss id");
   }
-  const seen = new Set<string>();
-  for (const id of ids) {
-    const key = id.toLowerCase();
-    if (seen.has(key)) {
-      fail("telegram.boss-ids", `duplicate boss id '${id}'`);
-    }
-    seen.add(key);
-  }
-  return ids;
+
+  return Object.keys(next).length > 0 ? next : undefined;
 }
 
-function parseBossIds(raw: unknown): string[] {
-  return validateBossIds(raw);
+function normalizeOperations(operations: Record<string, PermissionLevel>): Record<string, PermissionLevel> {
+  const normalized: Record<string, PermissionLevel> = {};
+  for (const [key, value] of Object.entries(operations)) {
+    if (typeof key !== "string" || key.trim() === "") {
+      fail("permission-policy", "contains invalid operation key");
+    }
+    if (!isPermissionLevel(value)) {
+      fail(`permission-policy.${key}`, "must be restricted|standard|privileged|admin");
+    }
+    normalized[key] = value;
+  }
+  return normalized;
 }
 
 function parsePermissionPolicy(raw: unknown): Settings["permissionPolicy"] {
   if (!isObject(raw)) {
     fail("permission-policy", "must be an object");
   }
+  return {
+    operations: normalizeOperations(raw as Record<string, PermissionLevel>),
+  };
+}
+
+function parseTokenPolicy(raw: unknown): Settings["tokens"] {
+  if (!Array.isArray(raw)) {
+    fail("tokens", "must be an array");
+  }
+
   try {
-    const parsed = parsePermissionPolicyFromObject(raw);
-    return parsed;
+    return parseUserPermissionPolicyFromObject({ tokens: raw }).tokens;
   } catch (err) {
-    fail("permission-policy", (err as Error).message);
+    fail("tokens", (err as Error).message);
   }
 }
 
-function parseUserPermissionPolicy(raw: unknown): Settings["userPermissionPolicy"] {
-  if (!isObject(raw)) {
-    fail("user-permission-policy", "is required and must be an object");
+function parseTimezone(raw: unknown): string {
+  const timezone = typeof raw === "string" ? raw.trim() : "";
+  if (!timezone || !isValidIanaTimeZone(timezone)) {
+    fail("timezone", "must be a valid IANA timezone");
   }
-  try {
-    return parseUserPermissionPolicyFromObject(raw);
-  } catch (err) {
-    fail("user-permission-policy", (err as Error).message);
-  }
+  return timezone;
 }
 
 function parsePositiveInt(
@@ -166,6 +213,11 @@ function parseRuntime(raw: unknown): SettingsRuntime {
         perAgent: DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
         global: DEFAULT_SESSION_CONCURRENCY_GLOBAL,
       },
+      sessionHandoff: {
+        recentDays: DEFAULT_SESSION_HANDOFF_RECENT_DAYS,
+        perSessionMaxChars: DEFAULT_SESSION_HANDOFF_PER_SESSION_MAX_CHARS,
+        maxRetries: DEFAULT_SESSION_HANDOFF_MAX_RETRIES,
+      },
     };
   }
 
@@ -191,11 +243,70 @@ function parseRuntime(raw: unknown): SettingsRuntime {
     { min: 1, max: 256 }
   );
 
+  const handoffRaw = raw["session-handoff"];
+  if (handoffRaw !== undefined && !isObject(handoffRaw)) {
+    fail("runtime.session-handoff", "must be an object");
+  }
+
+  const handoffRecentDays = parsePositiveInt(
+    handoffRaw ? handoffRaw["recent-days"] : undefined,
+    "runtime.session-handoff.recent-days",
+    DEFAULT_SESSION_HANDOFF_RECENT_DAYS,
+    { min: 1, max: 30 },
+  );
+  const handoffPerSessionMaxChars = parsePositiveInt(
+    handoffRaw ? handoffRaw["per-session-max-chars"] : undefined,
+    "runtime.session-handoff.per-session-max-chars",
+    DEFAULT_SESSION_HANDOFF_PER_SESSION_MAX_CHARS,
+    { min: 1_000, max: 1_000_000 },
+  );
+  const handoffMaxRetries = parsePositiveInt(
+    handoffRaw ? handoffRaw["max-retries"] : undefined,
+    "runtime.session-handoff.max-retries",
+    DEFAULT_SESSION_HANDOFF_MAX_RETRIES,
+    { min: 0, max: 20 },
+  );
+
+  const deploymentRaw = raw.deployment;
+  let deployment: SettingsRuntime["deployment"];
+  if (deploymentRaw !== undefined) {
+    if (!isObject(deploymentRaw)) {
+      fail("runtime.deployment", "must be an object");
+    }
+    const modeRaw = typeof deploymentRaw.mode === "string" ? deploymentRaw.mode.trim().toLowerCase() : "";
+    if (modeRaw !== "docker" && modeRaw !== "pm2") {
+      fail("runtime.deployment.mode", "must be docker or pm2");
+    }
+    const outputDirRaw =
+      typeof deploymentRaw["output-dir"] === "string"
+        ? deploymentRaw["output-dir"]
+        : typeof deploymentRaw.outputDir === "string"
+          ? deploymentRaw.outputDir
+          : "";
+    const outputDir = outputDirRaw.trim();
+    if (!outputDir) {
+      fail("runtime.deployment.output-dir", "must be a non-empty path");
+    }
+    if (!isAbsolutePathCrossPlatform(outputDir)) {
+      fail("runtime.deployment.output-dir", "must be an absolute path");
+    }
+    deployment = {
+      mode: modeRaw,
+      outputDir,
+    };
+  }
+
   return {
     sessionConcurrency: {
       perAgent,
       global: globalLimit,
     },
+    sessionHandoff: {
+      recentDays: handoffRecentDays,
+      perSessionMaxChars: handoffPerSessionMaxChars,
+      maxRetries: handoffMaxRetries,
+    },
+    ...(deployment ? { deployment } : {}),
   };
 }
 
@@ -366,15 +477,18 @@ function parseAgent(raw: unknown, index: number): SettingsAgent {
 }
 
 export function assertValidSettings(settings: Settings): void {
-  if (settings.admin.token.trim().length < MIN_ADMIN_TOKEN_LENGTH) {
-    fail("admin.token", `must be at least ${MIN_ADMIN_TOKEN_LENGTH} characters`);
+  if (!settings.timezone || !isValidIanaTimeZone(settings.timezone)) {
+    fail("timezone", "must be a valid IANA timezone");
   }
-  validateBossIds(settings.telegram.bossIds);
   try {
-    parseUserPermissionPolicyFromObject(settings.userPermissionPolicy);
+    parseUserPermissionPolicyFromObject({ tokens: settings.tokens });
   } catch (err) {
-    fail("user-permission-policy", (err as Error).message);
+    fail("tokens", (err as Error).message);
   }
+  settings.permissionPolicy = {
+    operations: normalizeOperations(settings.permissionPolicy.operations),
+  };
+  settings.providerCli = parseProviderCli(settings.providerCli);
   const perAgent = settings.runtime?.sessionConcurrency?.perAgent ?? DEFAULT_SESSION_CONCURRENCY_PER_AGENT;
   const globalLimit = settings.runtime?.sessionConcurrency?.global ?? DEFAULT_SESSION_CONCURRENCY_GLOBAL;
   if (!Number.isFinite(perAgent) || Math.trunc(perAgent) < 1 || Math.trunc(perAgent) > 64) {
@@ -385,6 +499,37 @@ export function assertValidSettings(settings: Settings): void {
   }
   if (Math.trunc(globalLimit) < Math.trunc(perAgent)) {
     fail("runtime.session-concurrency.global", "must be >= runtime.session-concurrency.per-agent");
+  }
+  const handoffRecentDays = settings.runtime?.sessionHandoff?.recentDays ?? DEFAULT_SESSION_HANDOFF_RECENT_DAYS;
+  const handoffPerSessionMaxChars =
+    settings.runtime?.sessionHandoff?.perSessionMaxChars ?? DEFAULT_SESSION_HANDOFF_PER_SESSION_MAX_CHARS;
+  const handoffMaxRetries =
+    settings.runtime?.sessionHandoff?.maxRetries ?? DEFAULT_SESSION_HANDOFF_MAX_RETRIES;
+  if (!Number.isFinite(handoffRecentDays) || Math.trunc(handoffRecentDays) < 1 || Math.trunc(handoffRecentDays) > 30) {
+    fail("runtime.session-handoff.recent-days", "must be between 1 and 30");
+  }
+  if (
+    !Number.isFinite(handoffPerSessionMaxChars) ||
+    Math.trunc(handoffPerSessionMaxChars) < 1000 ||
+    Math.trunc(handoffPerSessionMaxChars) > 1_000_000
+  ) {
+    fail("runtime.session-handoff.per-session-max-chars", "must be between 1000 and 1000000");
+  }
+  if (!Number.isFinite(handoffMaxRetries) || Math.trunc(handoffMaxRetries) < 0 || Math.trunc(handoffMaxRetries) > 20) {
+    fail("runtime.session-handoff.max-retries", "must be between 0 and 20");
+  }
+  const deploymentMode = settings.runtime?.deployment?.mode;
+  const deploymentOutputDir = settings.runtime?.deployment?.outputDir?.trim() ?? "";
+  if (deploymentMode !== undefined && deploymentMode !== "docker" && deploymentMode !== "pm2") {
+    fail("runtime.deployment.mode", "must be docker or pm2");
+  }
+  if (deploymentMode !== undefined) {
+    if (!deploymentOutputDir) {
+      fail("runtime.deployment.output-dir", "must be a non-empty path");
+    }
+    if (!isAbsolutePathCrossPlatform(deploymentOutputDir)) {
+      fail("runtime.deployment.output-dir", "must be an absolute path");
+    }
   }
 
   const byName = new Set<string>();
@@ -434,32 +579,6 @@ export function parseSettingsJson(json: string): Settings {
     fail("version", `expected ${SETTINGS_VERSION}`);
   }
 
-  const bossRaw = raw.boss;
-  if (!isObject(bossRaw)) {
-    fail("boss", "must be an object");
-  }
-  const bossName = typeof bossRaw.name === "string" ? bossRaw.name.trim() : "";
-  if (!bossName) fail("boss.name", "is required");
-
-  const bossTimezone = typeof bossRaw.timezone === "string" ? bossRaw.timezone.trim() : "";
-  if (!bossTimezone || !isValidIanaTimeZone(bossTimezone)) {
-    fail("boss.timezone", "must be a valid IANA timezone");
-  }
-
-  const adminRaw = raw.admin;
-  if (!isObject(adminRaw)) {
-    fail("admin", "must be an object");
-  }
-  const adminToken = typeof adminRaw.token === "string" ? adminRaw.token.trim() : "";
-  if (adminToken.length < MIN_ADMIN_TOKEN_LENGTH) {
-    fail("admin.token", `must be at least ${MIN_ADMIN_TOKEN_LENGTH} characters`);
-  }
-
-  const telegramRaw = raw.telegram;
-  if (!isObject(telegramRaw)) {
-    fail("telegram", "must be an object");
-  }
-
   const agentsRaw = raw.agents;
   if (!Array.isArray(agentsRaw) || agentsRaw.length < 1) {
     fail("agents", "must be a non-empty array");
@@ -467,18 +586,10 @@ export function parseSettingsJson(json: string): Settings {
 
   const settings: Settings = {
     version: SETTINGS_VERSION,
-    boss: {
-      name: bossName,
-      timezone: bossTimezone,
-    },
-    admin: {
-      token: adminToken,
-    },
-    telegram: {
-      bossIds: parseBossIds(telegramRaw["boss-ids"]),
-    },
-    permissionPolicy: parsePermissionPolicy(raw["permission-policy"] ?? DEFAULT_PERMISSION_POLICY),
-    userPermissionPolicy: parseUserPermissionPolicy(raw["user-permission-policy"] ?? undefined),
+    timezone: parseTimezone(raw.timezone),
+    permissionPolicy: parsePermissionPolicy(raw["permission-policy"] ?? undefined),
+    tokens: parseTokenPolicy(raw.tokens),
+    providerCli: parseProviderCli(raw.providerCli ?? raw["provider-cli"]),
     runtime: parseRuntime(raw.runtime),
     agents: agentsRaw.map((agent, index) => parseAgent(agent, index)),
   };
@@ -489,27 +600,57 @@ export function parseSettingsJson(json: string): Settings {
 
 export function stringifySettings(settings: Settings): string {
   assertValidSettings(settings);
+  const providerCli = settings.providerCli;
   return `${JSON.stringify({
     version: SETTINGS_VERSION,
-    boss: {
-      name: settings.boss.name,
-      timezone: settings.boss.timezone,
-    },
-    admin: {
-      token: settings.admin.token,
-    },
-    telegram: {
-      "boss-ids": settings.telegram.bossIds,
-    },
-    "permission-policy": settings.permissionPolicy,
-    "user-permission-policy": settings.userPermissionPolicy,
+    timezone: settings.timezone,
+    "permission-policy": settings.permissionPolicy.operations,
+    tokens: settings.tokens.map((token) => ({
+      name: token.name,
+      token: token.token,
+      role: token.role,
+      ...(token.agents ? { agents: token.agents } : {}),
+      ...(token.bindings && token.bindings.length > 0
+        ? {
+            bindings: token.bindings.map((binding) => ({
+              "adapter-type": binding.adapterType,
+              uid: binding.uid,
+            })),
+          }
+        : {}),
+    })),
     runtime: {
       "session-concurrency": {
         "per-agent":
           settings.runtime?.sessionConcurrency?.perAgent ?? DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
         global: settings.runtime?.sessionConcurrency?.global ?? DEFAULT_SESSION_CONCURRENCY_GLOBAL,
       },
+      "session-handoff": {
+        "recent-days":
+          settings.runtime?.sessionHandoff?.recentDays ?? DEFAULT_SESSION_HANDOFF_RECENT_DAYS,
+        "per-session-max-chars":
+          settings.runtime?.sessionHandoff?.perSessionMaxChars ??
+          DEFAULT_SESSION_HANDOFF_PER_SESSION_MAX_CHARS,
+        "max-retries":
+          settings.runtime?.sessionHandoff?.maxRetries ?? DEFAULT_SESSION_HANDOFF_MAX_RETRIES,
+      },
+      ...(settings.runtime?.deployment
+        ? {
+            deployment: {
+              mode: settings.runtime.deployment.mode,
+              "output-dir": settings.runtime.deployment.outputDir,
+            },
+          }
+        : {}),
     },
+    ...(providerCli
+      ? {
+          providerCli: {
+            ...(providerCli.claude?.env ? { claude: { env: providerCli.claude.env } } : {}),
+            ...(providerCli.codex?.env ? { codex: { env: providerCli.codex.env } } : {}),
+          },
+        }
+      : {}),
     agents: settings.agents.map((agent) => ({
       name: agent.name,
       token: agent.token,
@@ -541,8 +682,4 @@ export function stringifySettings(settings: Settings): string {
       })),
     })),
   }, null, 2)}\n`;
-}
-
-export function normalizeBossIds(ids: string[]): string[] {
-  return ids.map(normalizeBossId).filter((value) => value.length > 0);
 }

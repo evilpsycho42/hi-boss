@@ -1,11 +1,8 @@
 import { DEFAULT_PERMISSION_POLICY } from "./defaults.js";
-import { INTERNAL_VERSION } from "./version.js";
 
 export type PermissionLevel = "restricted" | "standard" | "privileged" | "admin";
-export const PERMISSION_POLICY_VERSION = INTERNAL_VERSION;
 
 export interface PermissionPolicy {
-  version: typeof PERMISSION_POLICY_VERSION;
   operations: Record<string, PermissionLevel>;
 }
 
@@ -67,15 +64,7 @@ export function parsePermissionPolicyFromObject(parsed: unknown): PermissionPoli
   }
 
   const obj = parsed as Record<string, unknown>;
-  if (obj.version !== PERMISSION_POLICY_VERSION) {
-    throw new Error(`Invalid permission policy version (expected ${PERMISSION_POLICY_VERSION})`);
-  }
-
-  if (typeof obj.operations !== "object" || obj.operations === null) {
-    throw new Error("Invalid permission policy (expected operations object)");
-  }
-
-  const operationsRaw = obj.operations as Record<string, unknown>;
+  const operationsRaw = obj;
   const operations: Record<string, PermissionLevel> = {};
 
   for (const [key, value] of Object.entries(operationsRaw)) {
@@ -88,7 +77,7 @@ export function parsePermissionPolicyFromObject(parsed: unknown): PermissionPoli
     operations[key] = value;
   }
 
-  return { version: PERMISSION_POLICY_VERSION, operations };
+  return { operations };
 }
 
 export function parsePermissionPolicyOrDefault(

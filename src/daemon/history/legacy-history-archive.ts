@@ -48,19 +48,56 @@ function historyContainsLegacyHistory(historyDir: string): boolean {
 
   for (const dateDir of dateDirs) {
     const dateDirPath = path.join(historyDir, dateDir);
-    let files: string[];
-    try {
-      files = fs.readdirSync(dateDirPath).filter((name) => name.endsWith(".json"));
-    } catch {
-      continue;
-    }
+    const files = listDateSessionFiles(dateDirPath);
     for (const file of files) {
-      if (isLegacySessionFile(path.join(dateDirPath, file))) {
+      if (isLegacySessionFile(file)) {
         return true;
       }
     }
   }
   return false;
+}
+
+function listDateSessionFiles(dateDirPath: string): string[] {
+  let entries: string[] = [];
+  try {
+    entries = fs.readdirSync(dateDirPath);
+  } catch {
+    return [];
+  }
+
+  const files: string[] = [];
+  for (const entry of entries) {
+    const entryPath = path.join(dateDirPath, entry);
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(entryPath);
+    } catch {
+      continue;
+    }
+
+    if (!stat.isDirectory()) continue;
+
+    let subEntries: string[] = [];
+    try {
+      subEntries = fs.readdirSync(entryPath);
+    } catch {
+      continue;
+    }
+    for (const subEntry of subEntries) {
+      if (!subEntry.endsWith(".json")) continue;
+      const subEntryPath = path.join(entryPath, subEntry);
+      try {
+        if (fs.statSync(subEntryPath).isFile()) {
+          files.push(subEntryPath);
+        }
+      } catch {
+        // ignore unreadable files
+      }
+    }
+  }
+
+  return files;
 }
 
 /**

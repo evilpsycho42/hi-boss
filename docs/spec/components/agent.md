@@ -36,7 +36,7 @@ The daemon authorizes token-authenticated operations using `config.permission_po
 
 - Each agent has a `permissionLevel`: `restricted`, `standard`, `privileged`, or `admin`.
 - Admin operations require a token whose effective permission level is `admin` (admin token or an admin-level agent token).
-- `permissionLevel: admin` grants authorization only; channel `fromBoss` / `[boss]` are derived from `user-permission-policy` role resolution (`role: boss`), not agent permission level.
+- `permissionLevel: admin` grants authorization only; channel `fromBoss` / `[boss]` are derived from token-based channel login + `user-permission-policy` user role (`role: admin`), not agent permission level.
 
 See:
 - `src/shared/defaults.ts` (`DEFAULT_PERMISSION_POLICY`)
@@ -98,6 +98,7 @@ Each agent has a home directory for persona and memory files.
 └── internal_space/      # Agent's private space
     └── MEMORY.md        # Agent long-term memory (auto-injected into system prompt; truncated)
     └── memories/        # Per-agent daily memory files (YYYY-MM-DD.md; not always injected)
+    └── history/         # Per-session history (`.json` + `.md`; handoff source)
 ```
 
 ### Setup Functions
@@ -121,6 +122,7 @@ System instructions define the agent's behavior and context. Instructions are re
 On each new session, Hi-Boss injects:
 - a truncated snapshot of the agent long-term memory file (`internal_space/MEMORY.md`)
 - optionally, a truncated snapshot of recent daily memory files (`internal_space/memories/`; see `docs/spec/components/file-memory.md`)
+- session handoff snapshots from recent history markdown files (`internal_space/history/**/<session-id>.md`; includes `summary + handoff + session-id + path`)
 It intentionally does not inject additional persona/profile files (the system prompt is designed to be minimal).
 
 ### Template System
@@ -284,7 +286,8 @@ Note: `agent_runs` audit history is retained across normal configuration sync fr
 An agent run can be cancelled by the boss (for example via Telegram `/abort`, or CLI `hiboss agent abort`).
 
 Semantics:
-- `abort`: cancel current run and clear due pending non-cron inbox.
+- Channel `/abort`: cancel current run and queue for the current chat scope only, and clear due pending non-cron inbox for that chat only.
+- CLI/RPC `agent.abort`: cancel current run and clear due pending non-cron inbox for the whole agent.
 - A cancelled run is terminal and is recorded as `status = cancelled`.
 - Already-read envelopes remain `done` (at-most-once); cancelled runs do not retry.
 

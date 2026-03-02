@@ -37,9 +37,13 @@ Execution semantics:
 
 Agent-origin addressing in `envelope.send`:
 
-- `--to agent:<name>`
+- `--to agent:<name>:new`
   - daemon canonicalizes agent names
-  - stamps `metadata.chatScope = agent-dm:<sorted-a>:<sorted-b>`
+  - stamps `metadata.chatScope = agent-chat-...` (generated)
+  - creates one envelope
+- `--to agent:<name>:<chat-id>`
+  - daemon canonicalizes agent names
+  - stamps `metadata.chatScope = <chat-id>`
   - creates one envelope
 - `--to team:<name>`
   - daemon validates active team
@@ -50,7 +54,7 @@ Agent-origin addressing in `envelope.send`:
   - creates one envelope to the mentioned member
   - stamps `metadata.chatScope = team:<name>`
 
-`--interrupt-now` is allowed only for single-agent destinations (`agent:<name>`, `team:<name>:<agent>`), not for `team:<name>` broadcast.
+`--interrupt-now` is allowed only for single-agent destinations (`agent:<name>:new`, `agent:<name>:<chat-id>`, `team:<name>:<agent>`), not for `team:<name>` broadcast.
 
 ## Outbound Flow (Agent -> Channel)
 

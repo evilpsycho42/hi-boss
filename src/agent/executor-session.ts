@@ -130,6 +130,7 @@ export async function getOrCreateAgentSession(params: {
         hibossDir: params.hibossDir,
         boss,
         teams,
+        sessionHandoffConfig: params.db.getRuntimeSessionHandoffConfig(),
       });
 
       // Resolve session open mode (fresh vs resume)

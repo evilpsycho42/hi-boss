@@ -15,6 +15,9 @@ Canonical mapping (selected):
 - `config.bossTimezone` → SQLite `config.boss_timezone` → setup `boss-timezone` → `boss-timezone:`
 - `config.uiLocale` → SQLite `config.ui_locale` → env override `HIBOSS_UI_LOCALE` (fixed system-message locale)
 - `config.userPermissionPolicy` → SQLite `config.user_permission_policy` → `settings.user-permission-policy`
+- `runtime.sessionHandoff.recentDays` → SQLite `config.runtime_session_handoff_recent_days` → `settings.runtime.session-handoff.recent-days`
+- `runtime.sessionHandoff.perSessionMaxChars` → SQLite `config.runtime_session_handoff_per_session_max_chars` → `settings.runtime.session-handoff.per-session-max-chars`
+- `runtime.sessionHandoff.maxRetries` → SQLite `config.runtime_session_handoff_max_retries` → `settings.runtime.session-handoff.max-retries`
 
 Derived (not stored):
 - `daemon-timezone:` is computed from the daemon host (`Intl.DateTimeFormat().resolvedOptions().timeZone`) and printed by setup for operator clarity.
@@ -26,6 +29,8 @@ Derived (not stored):
 | Type | Format | Example |
 |------|--------|---------|
 | Agent | `agent:<name>` | `agent:nex` |
+| Agent send (new chat) | `agent:<name>:new` | `agent:nex:new` |
+| Agent send (existing chat) | `agent:<name>:<chat-id>` | `agent:nex:agent-chat-123` |
 | Team broadcast | `team:<name>` | `team:research` |
 | Team mention | `team:<name>:<agent>` | `team:research:nex` |
 | Channel | `channel:<adapter>:<chat-id>` | `channel:telegram:123456` |
@@ -157,7 +162,7 @@ Command flags:
 Notes:
 - Channel platform message ids (e.g., Telegram `message_id`) are stored internally in `envelope.metadata.channelMessageId` for adapter delivery, but are intentionally **not rendered** in agent prompts/CLI envelope instructions.
 - Agents should use `envelope-id:` + `hiboss envelope send --reply-to <envelope-id>` for quoting (channels) and threading (agent↔agent).
-- Chat-scoped routing stores `envelope.metadata.chatScope` (`agent-dm:<a>:<b>` or `team:<name>`) and routes agent-origin envelopes via internal channel bindings (`adapter_type="internal"`).
+- Chat-scoped routing stores `envelope.metadata.chatScope` (for example `agent-chat-...` or `team:<name>`) and routes agent-origin envelopes via internal channel bindings (`adapter_type="internal"`).
 - Envelope creation source is tracked in `envelope.metadata.origin` (`cli | channel | cron | internal`) for history/audit.
 
 ### CLI Output (Cron Schedules)

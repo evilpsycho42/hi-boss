@@ -109,6 +109,12 @@ export function createCronHandlers(ctx: DaemonContext): RpcMethodRegistry {
     if (destination.type === "team" || destination.type === "team-mention") {
       rpcError(RPC_ERRORS.INVALID_PARAMS, "Cron schedules cannot use team destinations");
     }
+    if (destination.type === "agent-new-chat" || destination.type === "agent-chat") {
+      rpcError(
+        RPC_ERRORS.INVALID_PARAMS,
+        "Cron schedules cannot use agent chat targets (use agent:<name>)"
+      );
+    }
 
     const metadata: Record<string, unknown> = {};
 

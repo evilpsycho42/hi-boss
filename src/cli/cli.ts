@@ -94,7 +94,7 @@ envelope
   .description("Send an envelope")
   .requiredOption(
     "--to <address>",
-    "Destination address (agent:<name>, team:<name>, team:<name>:<agent>, or channel:<adapter>:<chat-id>)"
+    "Destination address (agent:<name>:new, agent:<name>:<chat-id>, team:<name>, team:<name>:<agent>, or channel:<adapter>:<chat-id>)"
   )
   .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
   .option("--text <text>", "Envelope text (use - to read from stdin)")
@@ -118,7 +118,7 @@ envelope
       "  - Default is plain text. Use --parse-mode html for long or formatted messages (bold/italic/links; structured blocks via <pre>/<code>, incl. ASCII tables).",
       "  - Use --parse-mode markdownv2 only if you can escape special characters correctly.",
       "  - Most Telegram users reply without quoting; only use --reply-to when it prevents confusion (busy groups, multiple questions).",
-      "  - --interrupt-now only works with single-agent destinations (--to agent:<name> or --to team:<name>:<agent>) and cannot be combined with --deliver-at.",
+      "  - --interrupt-now only works with single-agent destinations (--to agent:<name>:new, --to agent:<name>:<chat-id>, or --to team:<name>:<agent>) and cannot be combined with --deliver-at.",
       "",
     ].join("\n")
   )

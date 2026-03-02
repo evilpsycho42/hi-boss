@@ -147,6 +147,16 @@ CREATE TABLE IF NOT EXISTS channel_session_links (
   FOREIGN KEY (session_id) REFERENCES agent_sessions(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS channel_user_auth (
+  id TEXT PRIMARY KEY,
+  adapter_type TEXT NOT NULL,
+  channel_user_id TEXT NOT NULL,
+  token TEXT NOT NULL,
+  channel_username TEXT,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(adapter_type, channel_user_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_envelopes_to ON envelopes("to", status);
 CREATE INDEX IF NOT EXISTS idx_envelopes_from ON envelopes("from", created_at);
 CREATE INDEX IF NOT EXISTS idx_envelopes_status_deliver_at ON envelopes(status, deliver_at);
@@ -163,4 +173,5 @@ CREATE INDEX IF NOT EXISTS idx_agent_sessions_agent_last_active ON agent_session
 CREATE INDEX IF NOT EXISTS idx_channel_session_bindings_lookup ON channel_session_bindings(agent_name, adapter_type, chat_id);
 CREATE INDEX IF NOT EXISTS idx_channel_session_links_agent_owner_last_seen ON channel_session_links(agent_name, owner_user_id, last_seen_at DESC);
 CREATE INDEX IF NOT EXISTS idx_channel_session_links_agent_chat_last_seen ON channel_session_links(agent_name, adapter_type, chat_id, last_seen_at DESC);
+CREATE INDEX IF NOT EXISTS idx_channel_user_auth_lookup ON channel_user_auth(adapter_type, channel_user_id);
 `;

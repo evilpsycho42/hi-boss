@@ -18,7 +18,7 @@ Hi-Boss supplies fields as template variables (see `prompts/VARIABLES.md`).
 | `envelope-id` | Always | Envelope id (short id). Use with `--reply-to <envelope-id>` for threading/quoting and `hiboss reaction set --envelope-id ...` |
 | `from` | Always | Raw address for routing (use with `--to` when replying) |
 | `sender` | Only for channel messages | Sender and chat context (e.g. `Alice (@alice) in group "hiboss-test"` or `Alice (@alice) in private chat`) |
-| `chat` | Optional | Internal chat scope for agent-origin routing (e.g. `agent-dm:alice:bob`, `team:research`) |
+| `chat` | Optional | Internal chat scope for agent-origin routing (e.g. `agent-chat-...`, `team:research`) |
 | `created-at` | Always | Timestamp (boss timezone offset) |
 | `deliver-at` | Only for scheduled messages | Requested delivery time |
 | `cron-id` | Only for cron messages | Cron schedule id (short id) |
@@ -65,7 +65,7 @@ attachments:
 ```text
 envelope-id: 1f2a3b4c
 from: agent:scheduler
-chat: agent-dm:scheduler:worker
+chat: agent-chat-44c8c6c9-4f3a-4af6-a4bb-302a0a80d4e2
 created-at: 2026-01-28T20:08:45+08:00
 
 Time to run the daily backup.

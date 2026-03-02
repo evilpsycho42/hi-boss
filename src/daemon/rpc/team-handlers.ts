@@ -35,6 +35,7 @@ import { ensureTeamspaceDir, removeTeamspaceDir } from "../../team/teamspace.js"
 import { errorMessage } from "../../shared/daemon-log.js";
 import { sendEnvelopeFromAgent } from "./envelope-send-core.js";
 import { validateTeamSendParams } from "./team-send-params.js";
+import { computeTeamChatId } from "../../shared/chat-scope.js";
 
 function requestSessionContextReloadForAgents(
   ctx: DaemonContext,
@@ -388,6 +389,7 @@ export function createTeamHandlers(ctx: DaemonContext): RpcMethodRegistry {
             senderAgent: sender,
             input: {
               to: formatAgentAddress(agentName),
+              chatScope: computeTeamChatId(team.name),
               text: p.text,
               attachments: p.attachments,
               deliverAt: p.deliverAt,

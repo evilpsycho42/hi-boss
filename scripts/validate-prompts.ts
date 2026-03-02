@@ -132,6 +132,7 @@ function validateSystemPrompt(): void {
     assert.ok(out.includes("## Quick Start"), "system prompt should include quick start section");
     assert.ok(out.includes("## Tools"), "system prompt should include tools section");
     assert.ok(out.includes("## Memory"), "system prompt should include memory section");
+    assert.ok(out.includes("### Session handoff memory"), "system prompt should include session handoff memory section");
     assert.ok(out.includes("## Environment"), "system prompt should include environment section");
     assert.ok(out.includes("## Operating Rules"), "system prompt should include operating rules section");
     assert.ok(!out.includes("## Your Identity"), "system prompt should not include legacy identity section");

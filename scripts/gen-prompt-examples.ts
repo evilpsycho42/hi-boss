@@ -5,7 +5,12 @@ import { fileURLToPath } from "node:url";
 import { HiBossDatabase } from "../src/daemon/db/database.js";
 import { buildCliEnvelopePromptContext, buildSystemPromptContext, buildTurnPromptContext } from "../src/shared/prompt-context.js";
 import { renderPrompt } from "../src/shared/prompt-renderer.js";
-import { ensureAgentInternalSpaceLayout, readAgentInternalDailyMemorySnapshot, readAgentInternalMemorySnapshot } from "../src/shared/internal-space.js";
+import {
+  ensureAgentInternalSpaceLayout,
+  readAgentInternalDailyMemorySnapshot,
+  readAgentInternalMemorySnapshot,
+  readAgentInternalSessionHandoffSnapshot,
+} from "../src/shared/internal-space.js";
 
 import { createExampleFixture } from "./examples/fixtures.js";
 
@@ -97,6 +102,9 @@ async function main(): Promise<void> {
           spaceContext.daily = "";
           spaceContext.dailyFence = "```";
           spaceContext.dailyError = ensured.error;
+          spaceContext.sessionHandoffs = "";
+          spaceContext.sessionHandoffsFence = "```";
+          spaceContext.sessionHandoffsError = ensured.error;
         } else {
           const snapshot = readAgentInternalMemorySnapshot({ hibossDir: fixture.hibossDir, agentName: agent.name });
           if (snapshot.ok) {
@@ -118,6 +126,25 @@ async function main(): Promise<void> {
             spaceContext.daily = "";
             spaceContext.dailyFence = "```";
             spaceContext.dailyError = dailySnapshot.error;
+          }
+
+          const handoffRuntime = db.getRuntimeSessionHandoffConfig();
+          const handoffSnapshot = readAgentInternalSessionHandoffSnapshot({
+            hibossDir: fixture.hibossDir,
+            agentName: agent.name,
+            recentDays: handoffRuntime.recentDays,
+            perSessionMaxChars: handoffRuntime.perSessionMaxChars,
+          });
+          spaceContext.sessionHandoffRecentDays = handoffRuntime.recentDays;
+          spaceContext.sessionHandoffPerSessionMaxChars = handoffRuntime.perSessionMaxChars;
+          if (handoffSnapshot.ok) {
+            spaceContext.sessionHandoffs = handoffSnapshot.note;
+            spaceContext.sessionHandoffsFence = chooseFence(handoffSnapshot.note);
+            spaceContext.sessionHandoffsError = "";
+          } else {
+            spaceContext.sessionHandoffs = "";
+            spaceContext.sessionHandoffsFence = "```";
+            spaceContext.sessionHandoffsError = handoffSnapshot.error;
           }
         }
 

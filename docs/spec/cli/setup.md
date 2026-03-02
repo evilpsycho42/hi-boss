@@ -57,13 +57,19 @@ Key fields:
 - `boss.name`
 - `boss.timezone`
 - `admin.token` (plaintext)
-- `telegram.boss-ids[]` (supports multiple boss usernames)
+- `telegram.boss-ids[]` (optional; setup metadata only, not auth source)
 - `permission-policy` (`version: "v0.0.0"`)
 - `user-permission-policy` (`version: "v0.0.0"`, required)
-- `user-permission-policy.bindings[]`:
+- `user-permission-policy.users[]`:
+  - each entry must include `name`
   - each entry must include `token` (32 lowercase hex chars)
+  - each entry must include `role` (`admin` or `user`)
+  - `role: user` entries must include `agents[]`
 - `runtime.session-concurrency.per-agent` (default `4`)
 - `runtime.session-concurrency.global` (default `16`, must be `>= per-agent`)
+- `runtime.session-handoff.recent-days` (default `3`)
+- `runtime.session-handoff.per-session-max-chars` (default `24000`)
+- `runtime.session-handoff.max-retries` (default `3`)
 - `agents[].token` (plaintext)
 - `agents[].bindings[]`
 - `agents[].metadata.providerCli.<provider>.env` (optional per-agent provider CLI env overrides)
@@ -91,5 +97,8 @@ Core mappings:
 - `user-permission-policy` → `config.user_permission_policy`
 - `runtime.session-concurrency.per-agent` → `config.runtime_session_concurrency_per_agent`
 - `runtime.session-concurrency.global` → `config.runtime_session_concurrency_global`
+- `runtime.session-handoff.recent-days` → `config.runtime_session_handoff_recent_days`
+- `runtime.session-handoff.per-session-max-chars` → `config.runtime_session_handoff_per_session_max_chars`
+- `runtime.session-handoff.max-retries` → `config.runtime_session_handoff_max_retries`
 - `agents[]` → `agents`
 - `agents[].bindings[]` → `agent_bindings`

@@ -12,7 +12,10 @@ import { CronScheduler } from "./scheduler/cron-scheduler.js";
 import { ConversationHistory } from "./history/conversation-history.js";
 import { archiveLegacyHistory } from "./history/legacy-history-archive.js";
 import { bindHistoryHooks } from "./history/history-runtime-hooks.js";
+import { migrateHistoryChatLayout } from "./history/history-chat-layout-migration.js";
 import { purgeSessionSummaryFields } from "./history/purge-session-summaries.js";
+import { purgeLegacyInternalDmHistory } from "./history/purge-legacy-internal-dm-history.js";
+import { SessionHandoffService } from "./history/session-handoff-service.js";
 import type { RpcMethodRegistry } from "./ipc/types.js";
 import { RPC_ERRORS } from "./ipc/types.js";
 import type { ChatAdapter } from "../adapters/types.js";
@@ -104,6 +107,7 @@ export class Daemon {
   private scheduler: EnvelopeScheduler;
   private cronScheduler: CronScheduler | null = null;
   private conversationHistory: ConversationHistory;
+  private sessionHandoffService: SessionHandoffService;
   private adapters: Map<string, ChatAdapter> = new Map(); // token -> adapter
   private telegramTypingManager: TelegramTypingManager;
   private running = false;
@@ -151,6 +155,10 @@ export class Daemon {
     });
     this.scheduler = new EnvelopeScheduler(this.db, this.router, this.executor);
     this.cronScheduler = new CronScheduler(this.db, this.scheduler);
+    this.sessionHandoffService = new SessionHandoffService({
+      db: this.db,
+      hibossDir: config.dataDir,
+    });
 
     this.registerRpcMethods();
   }
@@ -245,7 +253,26 @@ export class Daemon {
         dataDir: this.config.dataDir,
         agentsDir: path.join(this.config.dataDir, "agents"),
       });
+      migrateHistoryChatLayout({
+        dataDir: this.config.dataDir,
+        agentsDir: path.join(this.config.dataDir, "agents"),
+      });
       purgeSessionSummaryFields({
+        agentsDir: path.join(this.config.dataDir, "agents"),
+      });
+      const purgedLegacyInternalDm = this.db.purgeLegacyInternalDmSessionScopes();
+      if (
+        purgedLegacyInternalDm.deletedBindings > 0 ||
+        purgedLegacyInternalDm.deletedLinks > 0 ||
+        purgedLegacyInternalDm.deletedSessions > 0
+      ) {
+        logEvent("info", "legacy-internal-dm-session-scopes-purged", {
+          "bindings-deleted": purgedLegacyInternalDm.deletedBindings,
+          "links-deleted": purgedLegacyInternalDm.deletedLinks,
+          "sessions-deleted": purgedLegacyInternalDm.deletedSessions,
+        });
+      }
+      purgeLegacyInternalDmHistory({
         agentsDir: path.join(this.config.dataDir, "agents"),
       });
 
@@ -293,6 +320,7 @@ export class Daemon {
 
       // Start scheduler after adapters/handlers are ready
       this.scheduler.start();
+      this.sessionHandoffService.start();
 
       // Process any pending envelopes from before restart
       await this.processPendingEnvelopes();
@@ -451,6 +479,7 @@ export class Daemon {
 
     // Stop scheduler first (prevents new work while shutting down)
     this.scheduler.stop();
+    this.sessionHandoffService.stop();
 
     // Stop all adapters
     for (const adapter of this.adapters.values()) {

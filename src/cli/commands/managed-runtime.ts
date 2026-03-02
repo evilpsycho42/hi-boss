@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import { getDefaultConfig } from "../../daemon/daemon.js";
-import { getSettingsPath } from "../../shared/settings-io.js";
+import { getSettingsPath, readSettingsFile } from "../../shared/settings-io.js";
 
 export type ManagedDaemonAction = "start" | "stop" | "status";
 type DeploymentMode = "docker" | "pm2";
@@ -96,6 +96,27 @@ function readDeploymentConfig(): DeploymentConfig | null {
     mode,
     outputDir: path.resolve(outputDir),
   };
+}
+
+function shouldBypassManagedRuntime(): boolean {
+  const explicit = (process.env.HIBOSS_MANAGED_RUNTIME ?? "").trim().toLowerCase();
+  if (explicit === "1" || explicit === "true" || explicit === "force") {
+    return false;
+  }
+  if (explicit === "0" || explicit === "false" || explicit === "off") {
+    return true;
+  }
+
+  // In containerized runtimes, managed host orchestration (docker compose / pm2)
+  // is usually unavailable and should be bypassed in favor of direct daemon control.
+  if ((process.env.IS_SANDBOX ?? "").trim() === "1") {
+    return true;
+  }
+  if (process.platform !== "win32" && fs.existsSync("/.dockerenv")) {
+    return true;
+  }
+
+  return false;
 }
 
 function resolvePm2Command(): string {
@@ -198,6 +219,102 @@ function runDockerComposeCommand(args: string[], options: RunCommandOptions = {}
   return runCommand(DOCKER_COMPOSE_COMMAND.command, [...DOCKER_COMPOSE_COMMAND.baseArgs, ...args], options);
 }
 
+const PROVIDER_ENV_SYNC_BEGIN = "# BEGIN hiboss-sync: providerCli.claude.env";
+const PROVIDER_ENV_SYNC_END = "# END hiboss-sync: providerCli.claude.env";
+const LEGACY_PROVIDER_ENV_SYNC_COMMENT = "# Synced from settings.json (single source of truth for provider env)";
+
+function parseEnvFileLine(line: string): { key: string; value: string } | null {
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.startsWith("#")) return null;
+  const eq = trimmed.indexOf("=");
+  if (eq <= 0) return null;
+  const key = trimmed.slice(0, eq).trim();
+  if (!key) return null;
+  const value = trimmed.slice(eq + 1);
+  return { key, value };
+}
+
+function readGlobalClaudeEnvFromSettings(hibossDir: string): Record<string, string> {
+  const settingsPath = getSettingsPath(hibossDir);
+  if (!fs.existsSync(settingsPath)) return {};
+
+  const settings = readSettingsFile(hibossDir);
+  const rawEnv = settings.providerCli?.claude?.env;
+  if (!rawEnv || typeof rawEnv !== "object") return {};
+
+  const env: Record<string, string> = {};
+  for (const [rawKey, rawValue] of Object.entries(rawEnv)) {
+    const key = rawKey.trim();
+    if (!key) continue;
+    if (typeof rawValue !== "string") continue;
+    env[key] = rawValue;
+  }
+  return env;
+}
+
+function syncDockerEnvFileFromSettings(params: { hibossDir: string; envFilePath: string }): void {
+  if (!fs.existsSync(params.envFilePath)) return;
+
+  const current = fs.readFileSync(params.envFilePath, "utf8");
+  const lines = current.split(/\r?\n/);
+  const claudeEnv = readGlobalClaudeEnvFromSettings(params.hibossDir);
+  const managedKeys = new Set<string>([
+    ...Object.keys(claudeEnv),
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_BASE_URL",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS",
+  ]);
+
+  const nextLines: string[] = [];
+  let insideManagedBlock = false;
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed === PROVIDER_ENV_SYNC_BEGIN) {
+      insideManagedBlock = true;
+      continue;
+    }
+    if (trimmed === PROVIDER_ENV_SYNC_END) {
+      insideManagedBlock = false;
+      continue;
+    }
+    if (insideManagedBlock) {
+      continue;
+    }
+    if (trimmed === LEGACY_PROVIDER_ENV_SYNC_COMMENT) {
+      continue;
+    }
+
+    const parsed = parseEnvFileLine(line);
+    if (!parsed) {
+      nextLines.push(line);
+      continue;
+    }
+    if (managedKeys.has(parsed.key)) {
+      // Canonicalized from settings.json on each managed start.
+      continue;
+    }
+    nextLines.push(line);
+  }
+
+  const insertions = Object.entries(claudeEnv).map(([key, value]) => `${key}=${value}`);
+
+  if (insertions.length > 0) {
+    if (nextLines.length > 0 && nextLines[nextLines.length - 1]?.trim() !== "") {
+      nextLines.push("");
+    }
+    nextLines.push(PROVIDER_ENV_SYNC_BEGIN);
+    nextLines.push(...insertions);
+    nextLines.push(PROVIDER_ENV_SYNC_END);
+  }
+
+  const normalized = `${nextLines.join("\n").replace(/\n+$/u, "")}\n`;
+  if (normalized !== current) {
+    fs.writeFileSync(params.envFilePath, normalized, "utf8");
+  }
+}
+
 function resolveDockerRuntimeEnv(hibossDir: string): NodeJS.ProcessEnv {
   const dockerConfigDir = path.join(hibossDir, ".docker-runtime");
   try {
@@ -222,13 +339,17 @@ function runDocker(action: ManagedDaemonAction, outputDir: string): void {
   const composePath = path.join(outputDir, "docker-compose.yml");
   const daemonConfig = getDefaultConfig();
   const hibossDir = (process.env.HIBOSS_DIR ?? "").trim() || daemonConfig.dataDir;
-  const dockerEnv = resolveDockerRuntimeEnv(hibossDir);
 
   if (!fs.existsSync(composePath)) {
     throw new Error(`docker-compose.yml not found at ${composePath}. Run 'hiboss setup' maintenance first.`);
   }
 
   const envFilePath = path.join(outputDir, ".env.docker");
+  if (action === "start" && fs.existsSync(envFilePath)) {
+    syncDockerEnvFileFromSettings({ hibossDir, envFilePath });
+  }
+
+  const dockerEnv = resolveDockerRuntimeEnv(hibossDir);
   const commonArgs = [
     ...(fs.existsSync(envFilePath) ? ["--env-file", envFilePath] : []),
     "-f",
@@ -238,7 +359,7 @@ function runDocker(action: ManagedDaemonAction, outputDir: string): void {
   ];
 
   if (action === "status") {
-    runDockerComposeCommand([...commonArgs, "ps"], { env: dockerEnv });
+    runDockerComposeCommand([...commonArgs, "ps", "-a"], { env: dockerEnv });
     return;
   }
 
@@ -247,12 +368,35 @@ function runDocker(action: ManagedDaemonAction, outputDir: string): void {
     return;
   }
 
-  runDockerComposeCommand([...commonArgs, "up", "-d"], { env: dockerEnv });
+  try {
+    runDockerComposeCommand([...commonArgs, "up", "-d"], { env: dockerEnv });
+  } catch (err) {
+    const message = (err as Error).message ?? "";
+    if (message.includes("already in progress") || message.includes("network") && message.includes("not found")) {
+      try {
+        const psOutput = runDockerComposeCommand([...commonArgs, "ps"], {
+          env: dockerEnv,
+          quiet: true,
+        });
+        const normalized = psOutput.toLowerCase();
+        if (normalized.includes("hiboss-daemon") && normalized.includes("up")) {
+          console.log("docker compose up raced with container removal; service is already running.");
+          return;
+        }
+      } catch {
+        // Fall through to rethrow original error.
+      }
+    }
+    throw err;
+  }
 }
 
 export function runManagedDaemonAction(action: ManagedDaemonAction): { handled: boolean; mode?: DeploymentMode } {
   const deployment = readDeploymentConfig();
   if (!deployment) return { handled: false };
+  if (shouldBypassManagedRuntime()) {
+    return { handled: false };
+  }
 
   if (deployment.mode === "pm2") {
     runPm2(action, deployment.outputDir);

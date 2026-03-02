@@ -1,7 +1,7 @@
 import type { Agent } from "../../agent/types.js";
 import { formatAgentAddress, parseAddress } from "../../adapters/types.js";
 import type { EnvelopeOrigin } from "../../envelope/types.js";
-import { computeDmChatId, computeTeamChatId } from "../../shared/chat-scope.js";
+import { createNewAgentChatId, computeTeamChatId } from "../../shared/chat-scope.js";
 import { parseDateTimeInputToUnixMsInTimeZone } from "../../shared/time.js";
 import type { EnvelopeSendParams } from "../ipc/types.js";
 import { RPC_ERRORS } from "../ipc/types.js";
@@ -181,14 +181,29 @@ export async function sendEnvelopeFromAgent(params: {
     return { ids };
   }
 
-  if (destination.type === "agent") {
+  if (
+    destination.type === "agent" ||
+    destination.type === "agent-new-chat" ||
+    destination.type === "agent-chat"
+  ) {
     const destAgent = params.ctx.db.getAgentByNameCaseInsensitive(destination.agentName);
     if (!destAgent) {
       rpcError(RPC_ERRORS.NOT_FOUND, "Agent not found");
     }
     destinationAgentName = destAgent.name;
     to = formatAgentAddress(destAgent.name);
-    metadata.chatScope = p.chatScope ?? computeDmChatId(params.senderAgent.name, destAgent.name);
+    if (typeof p.chatScope === "string" && p.chatScope.trim().length > 0) {
+      metadata.chatScope = p.chatScope.trim();
+    } else if (destination.type === "agent-new-chat") {
+      metadata.chatScope = createNewAgentChatId();
+    } else if (destination.type === "agent-chat") {
+      metadata.chatScope = destination.chatId;
+    } else {
+      rpcError(
+        RPC_ERRORS.INVALID_PARAMS,
+        "Invalid to (agent destinations must use agent:<name>:new or agent:<name>:<chat-id>)"
+      );
+    }
   }
 
   if (destination.type === "team-mention") {
@@ -212,7 +227,13 @@ export async function sendEnvelopeFromAgent(params: {
     metadata.chatScope = p.chatScope ?? computeTeamChatId(team.name);
   }
 
-  if (interruptNow && destination.type !== "agent" && destination.type !== "team-mention") {
+  if (
+    interruptNow &&
+    destination.type !== "agent" &&
+    destination.type !== "agent-new-chat" &&
+    destination.type !== "agent-chat" &&
+    destination.type !== "team-mention"
+  ) {
     rpcError(
       RPC_ERRORS.INVALID_PARAMS,
       "interrupt-now is only supported for single agent destinations"

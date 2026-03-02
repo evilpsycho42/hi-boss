@@ -58,6 +58,9 @@ export class CronScheduler {
     if (destination.type === "team" || destination.type === "team-mention") {
       throw new Error("Cron schedules cannot use team destinations");
     }
+    if (destination.type === "agent-new-chat" || destination.type === "agent-chat") {
+      throw new Error("Cron schedules cannot use agent chat targets (use agent:<name>)");
+    }
     if (destination.type !== "channel") return;
 
     const binding = this.db.getAgentBindingByType(schedule.agentName, destination.adapter);

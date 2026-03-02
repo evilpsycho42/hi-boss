@@ -13,9 +13,12 @@ import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 import { resolveUiLocale } from "../../shared/ui-locale.js";
 import { getUiText } from "../../shared/ui-text.js";
 import { DEFAULT_AGENT_PROVIDER } from "../../shared/defaults.js";
+import type { CreateEnvelopeInput } from "../../envelope/types.js";
+import { ChannelMessageBatcher } from "./channel-message-batcher.js";
 import {
-  evaluateUserPermission,
+  evaluateUserPermissionByToken,
   parseUserPermissionPolicy,
+  resolveUserPermissionUserByToken,
 } from "../../shared/user-permissions.js";
 
 /**
@@ -25,6 +28,7 @@ import {
 export class ChannelBridge {
   private adapterTokens: Map<ChatAdapter, string> = new Map();
   private commandHandler: ChannelCommandHandler | null = null;
+  private channelMessageBatcher: ChannelMessageBatcher;
 
   private getUnboundAdapterText(platform: string): string {
     const ui = getUiText(resolveUiLocale(this.db.getConfig("ui_locale")));
@@ -35,11 +39,49 @@ export class ChannelBridge {
     private router: MessageRouter,
     private db: HiBossDatabase,
     private config: DaemonConfig
-  ) {}
+  ) {
+    this.channelMessageBatcher = new ChannelMessageBatcher(async (input, batchSize) => {
+      try {
+        await this.router.routeEnvelope(input);
+      } catch (err) {
+        logEvent("error", "channel-batch-route-failed", {
+          from: input.from,
+          to: input.to,
+          "batch-size": batchSize,
+          error: errorMessage(err),
+        });
+      }
+    });
+  }
 
   private getChannelAccessDeniedText(): string {
     const ui = getUiText(resolveUiLocale(this.db.getConfig("ui_locale")));
     return ui.channel.accessDenied;
+  }
+
+  private getChannelLoginRequiredText(): string {
+    const ui = getUiText(resolveUiLocale(this.db.getConfig("ui_locale")));
+    return ui.channel.loginRequired;
+  }
+
+  private getChannelLoginUsageText(): string {
+    const ui = getUiText(resolveUiLocale(this.db.getConfig("ui_locale")));
+    return ui.channel.loginUsage;
+  }
+
+  private getChannelLoginOkText(params: {
+    token: string;
+    fromBoss: boolean;
+    userName: string;
+    role: "admin" | "user";
+  }): string {
+    const ui = getUiText(resolveUiLocale(this.db.getConfig("ui_locale")));
+    return ui.channel.loginOk({
+      tokenPrefix: params.token.slice(0, 8),
+      fromBoss: params.fromBoss,
+      userName: params.userName,
+      role: params.role,
+    });
   }
 
   private getUserPermissionPolicy() {
@@ -50,28 +92,29 @@ export class ChannelBridge {
     return parseUserPermissionPolicy(raw);
   }
 
-  private commandToAction(commandNameRaw: string): string {
-    const commandName = commandNameRaw.trim().replace(/^\//, "").toLowerCase();
-    return `channel.command.${commandName || "unknown"}`;
+  private normalizeCommandName(commandNameRaw: string): string {
+    return commandNameRaw.trim().replace(/^\//, "").toLowerCase();
   }
 
-  private isActionAllowed(params: {
-    adapterType: string;
-    channelUserId?: string;
-    channelUsername?: string;
-    action: string;
-  }): { allowed: boolean; role: string; token?: string } {
+  private resolveTokenAuthorization(params: {
+    token: string;
+    targetAgentName: string;
+  }): { allowed: boolean; token?: string; fromBoss: boolean; role?: "admin" | "user"; userName?: string } {
     const policy = this.getUserPermissionPolicy();
-    const decision = evaluateUserPermission(
-      policy,
-      {
-        adapterType: params.adapterType,
-        channelUserId: params.channelUserId,
-        channelUsername: params.channelUsername,
-      },
-      params.action
-    );
-    return { allowed: decision.allowed, role: decision.role, token: decision.token };
+    const decision = evaluateUserPermissionByToken(policy, params.token, params.targetAgentName);
+    return {
+      allowed: decision.allowed,
+      token: decision.token,
+      fromBoss: decision.fromBoss,
+      role: decision.role,
+      userName: decision.userName,
+    };
+  }
+
+  private resolveBossByToken(token: string): boolean {
+    const policy = this.getUserPermissionPolicy();
+    const user = resolveUserPermissionUserByToken(policy, token);
+    return user?.role === "admin";
   }
 
   /**
@@ -93,12 +136,65 @@ export class ChannelBridge {
       await this.handleChannelMessage(adapter, adapterToken, message);
     });
 
-    // Connect command handler if adapter supports it
-    if (adapter.onCommand && this.commandHandler) {
+    // Connect command entrypoint if adapter supports it.
+    // /login is handled in the bridge itself, so this must not depend on commandHandler presence.
+    if (adapter.onCommand) {
       adapter.onCommand(async (command) => {
         return await this.handleCommand(adapter, adapterToken, command);
       });
     }
+  }
+
+  private async handleLoginCommand(
+    adapter: ChatAdapter,
+    command: ChannelCommand
+  ): Promise<ChannelCommandResponse> {
+    const channelUserId = command.channelUserId?.trim() ?? "";
+    const channelUsername = command.channelUsername?.trim().replace(/^@/, "").toLowerCase() ?? "";
+    if (!channelUserId && !channelUsername) {
+      return { text: this.getChannelLoginUsageText() };
+    }
+    const token = (command.args ?? "").trim().split(/\s+/).filter(Boolean)[0] ?? "";
+    if (!token) {
+      return { text: this.getChannelLoginUsageText() };
+    }
+
+    const policy = this.getUserPermissionPolicy();
+    const user = resolveUserPermissionUserByToken(policy, token);
+    if (!user) {
+      logEvent("info", "channel-login-denied", {
+        "adapter-type": adapter.platform,
+        "chat-id": command.chatId,
+        ...(channelUserId ? { "channel-user-id": channelUserId } : {}),
+        ...(channelUsername ? { "channel-username": channelUsername } : {}),
+        "token-prefix": token.slice(0, 8).toLowerCase(),
+      });
+      return { text: this.getChannelAccessDeniedText() };
+    }
+
+    this.db.setChannelUserAuth({
+      adapterType: adapter.platform,
+      channelUserId: channelUserId || undefined,
+      token: user.token,
+      channelUsername: channelUsername || undefined,
+    });
+    logEvent("info", "channel-login-ok", {
+      "adapter-type": adapter.platform,
+      "chat-id": command.chatId,
+      ...(channelUserId ? { "channel-user-id": channelUserId } : {}),
+      ...(channelUsername ? { "channel-username": channelUsername } : {}),
+      "token-prefix": user.token.slice(0, 8),
+      role: user.role,
+    });
+
+    return {
+      text: this.getChannelLoginOkText({
+        token: user.token,
+        fromBoss: user.role === "admin",
+        userName: user.name,
+        role: user.role,
+      }),
+    };
   }
 
   private async handleCommand(
@@ -106,22 +202,71 @@ export class ChannelBridge {
     adapterToken: string,
     command: ChannelCommand
   ): Promise<ChannelCommandResponse | void> {
-    const action = this.commandToAction(command.command);
-    const authz = this.isActionAllowed({
+    const channelUserId = command.channelUserId?.trim() ?? "";
+    const channelUsername = command.channelUsername?.trim().replace(/^@/, "").toLowerCase() ?? "";
+    // Find the agent bound to this adapter
+    const binding = this.db.getBindingByAdapter(adapter.platform, adapterToken);
+    if (!binding) {
+      const loggedInToken = channelUserId || channelUsername
+        ? this.db.getChannelUserAuthToken({
+            adapterType: adapter.platform,
+            channelUserId: channelUserId || undefined,
+            channelUsername: channelUsername || undefined,
+          })
+        : undefined;
+      const fromBoss = loggedInToken ? this.resolveBossByToken(loggedInToken) : false;
+      logEvent("warn", "channel-no-binding", {
+        "message-kind": "command",
+        "adapter-type": adapter.platform,
+        "chat-id": command.chatId,
+        ...(channelUserId ? { "channel-user-id": channelUserId } : {}),
+        ...(channelUsername ? { "channel-username": channelUsername } : {}),
+        "from-boss": fromBoss,
+      });
+
+      return { text: this.getUnboundAdapterText(adapter.platform) };
+    }
+
+    const commandName = this.normalizeCommandName(command.command);
+    if (commandName === "login") {
+      return this.handleLoginCommand(adapter, command);
+    }
+    if (!channelUserId && !channelUsername) {
+      return { text: this.getChannelLoginRequiredText() };
+    }
+
+    const loggedInToken = this.db.getChannelUserAuthToken({
       adapterType: adapter.platform,
-      channelUserId: command.channelUserId,
-      channelUsername: command.channelUsername,
-      action,
+      channelUserId: channelUserId || undefined,
+      channelUsername: channelUsername || undefined,
     });
-    const fromBoss = authz.role === "boss";
+    if (!loggedInToken) {
+      logEvent("info", "channel-authz-denied-not-logged-in", {
+        "message-kind": "command",
+        "adapter-type": adapter.platform,
+        "chat-id": command.chatId,
+        ...(channelUserId ? { "channel-user-id": channelUserId } : {}),
+        ...(channelUsername ? { "channel-username": channelUsername } : {}),
+        "target-agent": binding.agentName,
+      });
+      return { text: this.getChannelLoginRequiredText() };
+    }
+
+    const authz = this.resolveTokenAuthorization({
+      token: loggedInToken,
+      targetAgentName: binding.agentName,
+    });
+    const fromBoss = authz.fromBoss;
     if (!authz.allowed) {
       logEvent("info", "channel-authz-denied", {
         "message-kind": "command",
         "adapter-type": adapter.platform,
         "chat-id": command.chatId,
+        ...(channelUserId ? { "channel-user-id": channelUserId } : {}),
+        ...(channelUsername ? { "channel-username": channelUsername } : {}),
         "from-boss": fromBoss,
-        action,
-        role: authz.role,
+        "target-agent": binding.agentName,
+        "token-prefix": loggedInToken.slice(0, 8),
       });
       return { text: this.getChannelAccessDeniedText() };
     }
@@ -130,28 +275,15 @@ export class ChannelBridge {
         "message-kind": "command",
         "adapter-type": adapter.platform,
         "chat-id": command.chatId,
-        action,
-        role: authz.role,
+        "target-agent": binding.agentName,
       });
       return { text: this.getChannelAccessDeniedText() };
-    }
-
-    // Find the agent bound to this adapter
-    const binding = this.db.getBindingByAdapter(adapter.platform, adapterToken);
-    if (!binding) {
-      logEvent("warn", "channel-no-binding", {
-        "message-kind": "command",
-        "adapter-type": adapter.platform,
-        "chat-id": command.chatId,
-        "from-boss": fromBoss,
-      });
-
-      return { text: this.getUnboundAdapterText(adapter.platform) };
     }
 
     // Enrich command with agent name
     const enrichedCommand: ChannelCommand & { agentName: string } = {
       ...command,
+      command: commandName,
       adapterType: command.adapterType ?? adapter.platform,
       fromBoss,
       userToken: authz.token,
@@ -169,42 +301,26 @@ export class ChannelBridge {
     message: ChannelMessage
   ): Promise<void> {
     const platform = adapter.platform;
-    const authz = this.isActionAllowed({
-      adapterType: platform,
-      channelUserId: message.channelUser.id,
-      channelUsername: message.channelUser.username,
-      action: "channel.message.send",
-    });
-    const fromBoss = authz.role === "boss";
-    if (!authz.allowed) {
-      logEvent("info", "channel-authz-denied", {
-        "message-kind": "message",
-        "adapter-type": platform,
-        "chat-id": message.chat.id,
-        "from-boss": fromBoss,
-        action: "channel.message.send",
-        role: authz.role,
-      });
-      return;
-    }
-    if (!authz.token) {
-      logEvent("warn", "channel-authz-denied-missing-token", {
-        "message-kind": "message",
-        "adapter-type": platform,
-        "chat-id": message.chat.id,
-        action: "channel.message.send",
-        role: authz.role,
-      });
-      return;
-    }
+    const channelUserId = message.channelUser.id?.trim() ?? "";
+    const channelUsername = message.channelUser.username?.trim().replace(/^@/, "").toLowerCase() ?? "";
 
     // Find the agent bound to this adapter
     const binding = this.db.getBindingByAdapter(platform, adapterToken);
     if (!binding) {
+      const loggedInToken = channelUserId || channelUsername
+        ? this.db.getChannelUserAuthToken({
+            adapterType: platform,
+            channelUserId: channelUserId || undefined,
+            channelUsername: channelUsername || undefined,
+          })
+        : undefined;
+      const fromBoss = loggedInToken ? this.resolveBossByToken(loggedInToken) : false;
       logEvent("warn", "channel-no-binding", {
         "message-kind": "message",
         "adapter-type": platform,
         "chat-id": message.chat.id,
+        ...(channelUserId ? { "channel-user-id": channelUserId } : {}),
+        ...(channelUsername ? { "channel-username": channelUsername } : {}),
         "from-boss": fromBoss,
       });
 
@@ -225,6 +341,65 @@ export class ChannelBridge {
       return;
     }
 
+    const loggedInToken = channelUserId || channelUsername
+      ? this.db.getChannelUserAuthToken({
+          adapterType: platform,
+          channelUserId: channelUserId || undefined,
+          channelUsername: channelUsername || undefined,
+        })
+      : undefined;
+    if (!loggedInToken) {
+      logEvent("info", "channel-authz-denied-not-logged-in", {
+        "message-kind": "message",
+        "adapter-type": platform,
+        "chat-id": message.chat.id,
+        ...(channelUserId ? { "channel-user-id": channelUserId } : {}),
+        ...(channelUsername ? { "channel-username": channelUsername } : {}),
+        "target-agent": binding.agentName,
+      });
+      try {
+        await adapter.sendMessage(message.chat.id, {
+          text: this.getChannelLoginRequiredText(),
+        });
+      } catch (err) {
+        logEvent("warn", "channel-send-failed", {
+          "message-kind": "message",
+          "adapter-type": platform,
+          "chat-id": message.chat.id,
+          error: errorMessage(err),
+        });
+      }
+      return;
+    }
+
+    const authz = this.resolveTokenAuthorization({
+      token: loggedInToken,
+      targetAgentName: binding.agentName,
+    });
+    const fromBoss = authz.fromBoss;
+    if (!authz.allowed) {
+      logEvent("info", "channel-authz-denied", {
+        "message-kind": "message",
+        "adapter-type": platform,
+        "chat-id": message.chat.id,
+        ...(channelUserId ? { "channel-user-id": channelUserId } : {}),
+        ...(channelUsername ? { "channel-username": channelUsername } : {}),
+        "from-boss": fromBoss,
+        "target-agent": binding.agentName,
+        "token-prefix": loggedInToken.slice(0, 8),
+      });
+      return;
+    }
+    if (!authz.token) {
+      logEvent("warn", "channel-authz-denied-missing-token", {
+        "message-kind": "message",
+        "adapter-type": platform,
+        "chat-id": message.chat.id,
+        "target-agent": binding.agentName,
+      });
+      return;
+    }
+
     const fromAddress = formatChannelAddress(platform, message.chat.id);
     const toAddress = formatAgentAddress(binding.agentName);
     const agent = this.db.getAgentByNameCaseInsensitive(binding.agentName);
@@ -239,7 +414,7 @@ export class ChannelBridge {
         })
       : null;
 
-    await this.router.routeEnvelope({
+    const envelopeInput: CreateEnvelopeInput = {
       from: fromAddress,
       to: toAddress,
       fromBoss,
@@ -261,6 +436,8 @@ export class ChannelBridge {
         chat: message.chat,
         ...(message.inReplyTo ? { inReplyTo: message.inReplyTo } : {}),
       },
-    });
+    };
+
+    this.channelMessageBatcher.enqueue(message, envelopeInput);
   }
 }

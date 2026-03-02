@@ -133,17 +133,17 @@ test("/new uses command adapter type instead of hardcoded telegram", async () =>
   });
 });
 
-test("/abort uses adapter-specific reason", async () => {
+test("/abort aborts only current chat scope with adapter-specific reason", async () => {
   await withTempDb(async (db) => {
     db.registerAgent({ name: "nex", provider: "codex" });
-    let abortReason = "";
+    let abortArgs: { agentName: string; adapterType: string; chatId: string; reason: string } | null = null;
 
     const handler = createChannelCommandHandler({
       db,
       executor: {
         isAgentBusy: () => false,
-        abortCurrentRun: (_agent: string, reason: string) => {
-          abortReason = reason;
+        abortCurrentRunForChannel: (agentName: string, adapterType: string, chatId: string, reason: string) => {
+          abortArgs = { agentName, adapterType, chatId, reason };
           return false;
         },
         invalidateChannelSessionCache: () => undefined,
@@ -161,7 +161,78 @@ test("/abort uses adapter-specific reason", async () => {
       agentName: "nex",
     } as any);
 
-    assert.equal(abortReason, "slack:/abort");
+    assert.deepEqual(abortArgs, {
+      agentName: "nex",
+      adapterType: "slack",
+      chatId: "channel-1",
+      reason: "slack:/abort",
+    });
+  });
+});
+
+test("/abort clears only due pending envelopes from current chat", async () => {
+  await withTempDb(async (db) => {
+    db.registerAgent({ name: "nex", provider: "codex" });
+    const nowMs = Date.now();
+
+    const target = db.createEnvelope({
+      from: "channel:telegram:chat-1",
+      to: "agent:nex",
+      content: { text: "chat-1 due" },
+      metadata: { origin: "channel" },
+    });
+    const otherChat = db.createEnvelope({
+      from: "channel:telegram:chat-2",
+      to: "agent:nex",
+      content: { text: "chat-2 due" },
+      metadata: { origin: "channel" },
+    });
+    const future = db.createEnvelope({
+      from: "channel:telegram:chat-1",
+      to: "agent:nex",
+      content: { text: "chat-1 future" },
+      deliverAt: nowMs + 60_000,
+      metadata: { origin: "channel" },
+    });
+    const cron = db.createEnvelope({
+      from: "channel:telegram:chat-1",
+      to: "agent:nex",
+      content: { text: "chat-1 cron" },
+      metadata: { origin: "channel", cronScheduleId: "cron-1" },
+    });
+    const internal = db.createEnvelope({
+      from: "agent:alice",
+      to: "agent:nex",
+      content: { text: "internal due" },
+      metadata: { origin: "internal" },
+    });
+
+    const handler = createChannelCommandHandler({
+      db,
+      executor: {
+        isAgentBusy: () => false,
+        abortCurrentRunForChannel: () => false,
+        invalidateChannelSessionCache: () => undefined,
+      } as any,
+      router: { routeEnvelope: async () => undefined } as any,
+    });
+
+    const response = await handler({
+      command: "abort",
+      args: "",
+      adapterType: "telegram",
+      chatId: "chat-1",
+      authorId: "u-1",
+      authorUsername: "alice",
+      agentName: "nex",
+    } as any);
+
+    assert.equal(response?.text?.includes("cleared-pending-count: 1"), true);
+    assert.equal(db.getEnvelopeById(target.id)?.status, "done");
+    assert.equal(db.getEnvelopeById(otherChat.id)?.status, "pending");
+    assert.equal(db.getEnvelopeById(future.id)?.status, "pending");
+    assert.equal(db.getEnvelopeById(cron.id)?.status, "pending");
+    assert.equal(db.getEnvelopeById(internal.id)?.status, "pending");
   });
 });
 
@@ -461,6 +532,57 @@ test("/trace reads Codex run traces", async () => {
       assert.equal(response?.text?.includes("trace: ok"), true);
       assert.equal(response?.text?.includes("provider: codex"), true);
       assert.equal(response?.text?.includes("entry-2-tool: bash"), true);
+    } finally {
+      fs.rmSync(hibossDir, { recursive: true, force: true });
+    }
+  });
+});
+
+test("/trace displays the latest 20 entries when trace is longer", async () => {
+  const hibossDir = fs.mkdtempSync(path.join(os.tmpdir(), "hiboss-trace-latest-test-"));
+  await withTempDb(async (db) => {
+    try {
+      db.registerAgent({ name: "nex", provider: "claude" });
+      const run = db.createAgentRun("nex", ["env-1"]);
+      db.completeAgentRun(run.id, "done", 1234);
+      writeAgentRunTrace(hibossDir, {
+        version: INTERNAL_VERSION,
+        runId: run.id,
+        agentName: "nex",
+        provider: "claude",
+        status: "success",
+        startedAt: Date.now() - 1000,
+        completedAt: Date.now(),
+        entries: Array.from({ length: 25 }, (_, index) => ({
+          type: "assistant" as const,
+          text: `step-${index + 1}`,
+        })),
+      });
+
+      const handler = createChannelCommandHandler({
+        db,
+        executor: {
+          isAgentBusy: () => false,
+          abortCurrentRun: () => false,
+          invalidateChannelSessionCache: () => undefined,
+        } as any,
+        router: { routeEnvelope: async () => undefined } as any,
+        hibossDir,
+      });
+
+      const response = await handler({
+        command: "trace",
+        args: "",
+        chatId: "chat-1",
+        channelUserId: "u-1",
+        channelUsername: "alice",
+        agentName: "nex",
+      } as any);
+
+      assert.equal(response?.text?.includes("entries-displayed: 20"), true);
+      assert.equal(response?.text?.includes("entry-1-text: step-6"), true);
+      assert.equal(response?.text?.includes("entry-20-text: step-25"), true);
+      assert.equal(/entry-\d+-text: step-1\b/.test(response?.text ?? ""), false);
     } finally {
       fs.rmSync(hibossDir, { recursive: true, force: true });
     }

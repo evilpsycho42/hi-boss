@@ -49,7 +49,13 @@ Sessions are refreshed when:
 
 ### Session Close
 
-When Hi-Boss closes the current runtime session (manual `/new`, policy refresh, or daemon shutdown), it only marks `endedAtMs` in the session history file. Session close does not generate or inject summaries.
+When Hi-Boss closes the current runtime session (manual `/new`, policy refresh, or daemon shutdown), it:
+
+- marks `endedAtMs` in the session JSON history file
+- marks markdown frontmatter `ended-at` and `handoff-status: pending`
+- schedules asynchronous `summary + handoff` generation (best-effort)
+
+`summary + handoff` generation uses the agent's configured provider (Claude/Codex), retries up to the configured limit, and writes results into the session markdown frontmatter.
 
 ## Storage
 
@@ -77,11 +83,17 @@ Legacy best-effort default resume handle remains in `agents.metadata.sessionHand
 
 Per-agent session history files:
 
-- path: `agents/<agent>/internal_space/history/YYYY-MM-DD/<session-id>.json`
+- path: `agents/<agent>/internal_space/history/YYYY-MM-DD/<chat-id>/<session-id>.json`
 - schema version: `"v0.0.0"`
 - payload model: `events[]` (envelope lifecycle), not chat-turn transcripts
   - `envelope-created` (full envelope snapshot + origin)
   - `envelope-status-changed` (`fromStatus`, `toStatus`, `reason`, `outcome`, `origin`)
+- markdown companion: `agents/<agent>/internal_space/history/YYYY-MM-DD/<chat-id>/<session-id>.md`
+  - body model: real conversation records (`from`, `to`, `content`)
+  - frontmatter model: `summary`, `handoff`, `handoff-status`, retry/error metadata
+
+Compatibility note:
+- startup migration `purge-session-summaries` only removes legacy `summary` fields from JSON session files; it does not modify markdown frontmatter.
 
 ## Session Listing / Switching (Telegram)
 
@@ -124,6 +136,9 @@ Config keys mirrored into SQLite config cache:
 
 - `runtime_session_concurrency_per_agent`
 - `runtime_session_concurrency_global`
+- `runtime_session_handoff_recent_days`
+- `runtime_session_handoff_per_session_max_chars`
+- `runtime_session_handoff_max_retries`
 
 ## Key Files
 
@@ -134,5 +149,6 @@ Config keys mirrored into SQLite config cache:
 | `src/daemon/channel-commands.ts` | `/new`, `/sessions`, `/session`, `/trace`, `/provider` behavior |
 | `src/daemon/channel-provider-command.ts` | `/provider` provider switch + session refresh behavior |
 | `src/daemon/channel-trace-command.ts` | `/trace` run-trace read/render behavior |
+| `src/daemon/history/session-handoff-service.ts` | async session close handoff generation + backfill |
 | `src/adapters/telegram.adapter.ts` | Telegram command + callback wiring |
 | `src/shared/settings.ts` | runtime session concurrency parsing/validation |

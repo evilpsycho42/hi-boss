@@ -293,6 +293,7 @@ export class OneShotExecutor {
       hibossDir: this.deps.hibossDir,
       boss,
       teams,
+      sessionHandoffConfig: this.deps.db.getRuntimeSessionHandoffConfig(),
     });
 
     return {

@@ -14,15 +14,19 @@ import type { SessionPolicyConfig } from "../../shared/session-policy.js";
 import {
   DEFAULT_AGENT_PERMISSION_LEVEL,
   DEFAULT_AGENT_PROVIDER,
+  DEFAULT_SESSION_HANDOFF_MAX_RETRIES,
+  DEFAULT_SESSION_HANDOFF_PER_SESSION_MAX_CHARS,
+  DEFAULT_SESSION_HANDOFF_RECENT_DAYS,
   DEFAULT_SESSION_CONCURRENCY_GLOBAL,
   DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
   getDefaultAgentDescription,
 } from "../../shared/defaults.js";
-import { generateToken, hashToken, verifyToken } from "../../agent/auth.js";
+import { generateToken } from "../../agent/auth.js";
 import { generateUUID } from "../../shared/uuid.js";
 import { assertValidAgentName, assertValidTeamName } from "../../shared/validation.js";
 import { getDaemonIanaTimeZone } from "../../shared/timezone.js";
 import type { Settings } from "../../shared/settings.js";
+import { parseUserPermissionPolicy, resolveUserPermissionUserByToken } from "../../shared/user-permissions.js";
 import type { Team, TeamMember, TeamKind, TeamStatus } from "../../team/types.js";
 
 /**
@@ -365,6 +369,14 @@ export class HiBossDatabase {
         "first_seen_at",
         "last_seen_at",
       ],
+      channel_user_auth: [
+        "id",
+        "adapter_type",
+        "channel_user_id",
+        "token",
+        "channel_username",
+        "updated_at",
+      ],
     };
 
     const expectedIntegerColumns: Array<{ table: string; column: string }> = [
@@ -386,6 +398,7 @@ export class HiBossDatabase {
       { table: "channel_session_bindings", column: "updated_at" },
       { table: "channel_session_links", column: "first_seen_at" },
       { table: "channel_session_links", column: "last_seen_at" },
+      { table: "channel_user_auth", column: "updated_at" },
     ];
 
     for (const [table, requiredColumns] of Object.entries(requiredColumnsByTable)) {
@@ -468,6 +481,7 @@ export class HiBossDatabase {
     this.db.prepare("DELETE FROM cron_schedules").run();
     this.db.prepare("DELETE FROM channel_session_links").run();
     this.db.prepare("DELETE FROM channel_session_bindings").run();
+    this.db.prepare("DELETE FROM channel_user_auth").run();
     this.db.prepare("DELETE FROM agent_sessions").run();
     this.db.prepare("DELETE FROM team_members").run();
     this.db.prepare("DELETE FROM teams").run();
@@ -482,20 +496,28 @@ export class HiBossDatabase {
    */
   applySettingsSnapshot(settings: Settings): void {
     this.runInTransaction(() => {
-      this.setBossName(settings.boss.name);
-      this.setConfig("boss_timezone", settings.boss.timezone);
-      if (!this.verifyAdminToken(settings.admin.token)) {
-        this.setAdminToken(settings.admin.token);
-      }
-      this.setConfig("permission_policy", JSON.stringify(settings.permissionPolicy));
+      this.setConfig("boss_timezone", settings.timezone);
+      const primaryAdminName =
+        settings.tokens.find((item) => item.role === "admin")?.name ??
+        settings.tokens[0]?.name ??
+        "";
+      this.setBossName(primaryAdminName);
+      this.setConfig("permission_policy", JSON.stringify(settings.permissionPolicy.operations));
       this.setConfig(
         "user_permission_policy",
-        settings.userPermissionPolicy ? JSON.stringify(settings.userPermissionPolicy) : ""
+        JSON.stringify({ tokens: settings.tokens })
       );
-      this.setAdapterBossIds("telegram", settings.telegram.bossIds);
+      this.seedChannelUserAuthFromSettings(settings.tokens);
       this.setRuntimeSessionConcurrency({
         perAgent: settings.runtime?.sessionConcurrency?.perAgent ?? DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
         global: settings.runtime?.sessionConcurrency?.global ?? DEFAULT_SESSION_CONCURRENCY_GLOBAL,
+      });
+      this.setRuntimeSessionHandoffConfig({
+        recentDays: settings.runtime?.sessionHandoff?.recentDays ?? DEFAULT_SESSION_HANDOFF_RECENT_DAYS,
+        perSessionMaxChars:
+          settings.runtime?.sessionHandoff?.perSessionMaxChars ??
+          DEFAULT_SESSION_HANDOFF_PER_SESSION_MAX_CHARS,
+        maxRetries: settings.runtime?.sessionHandoff?.maxRetries ?? DEFAULT_SESSION_HANDOFF_MAX_RETRIES,
       });
 
       const existingAgents = this.listAgents();
@@ -532,7 +554,10 @@ export class HiBossDatabase {
       const now = Date.now();
       for (const agent of settings.agents) {
         const existing = existingByName.get(agent.name.toLowerCase());
+        const existingProvider = existing?.provider ?? DEFAULT_AGENT_PROVIDER;
+        const providerChanged = existing !== undefined && existingProvider !== agent.provider;
         const existingSessionHandle =
+          !providerChanged &&
           existing &&
           existing.metadata &&
           typeof existing.metadata.sessionHandle === "string" &&
@@ -562,6 +587,14 @@ export class HiBossDatabase {
           now,
           metadata ? JSON.stringify(metadata) : null
         );
+
+        if (providerChanged) {
+          this.db.prepare(`
+            UPDATE agent_sessions
+            SET provider = ?, provider_session_id = NULL
+            WHERE agent_name = ?
+          `).run(agent.provider, agent.name);
+        }
 
         const currentBindings = this.getBindingsByAgentName(agent.name);
         const currentByType = new Map(currentBindings.map((binding) => [binding.adapterType, binding]));
@@ -601,6 +634,34 @@ export class HiBossDatabase {
 
       this.markSetupComplete();
     });
+  }
+
+  private seedChannelUserAuthFromSettings(users: Settings["tokens"]): void {
+    this.db.prepare("DELETE FROM channel_user_auth").run();
+    const stmt = this.db.prepare(`
+      INSERT INTO channel_user_auth
+        (id, adapter_type, channel_user_id, token, channel_username, updated_at)
+      VALUES
+        (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(adapter_type, channel_user_id) DO UPDATE SET
+        token = excluded.token,
+        channel_username = excluded.channel_username,
+        updated_at = excluded.updated_at
+    `);
+
+    const now = Date.now();
+    for (const user of users) {
+      const token = user.token.trim().toLowerCase();
+      if (!/^[0-9a-f]{32}$/.test(token)) continue;
+      for (const binding of user.bindings ?? []) {
+        const adapterType = binding.adapterType.trim().toLowerCase();
+        const uid = binding.uid.trim().replace(/^@/, "").toLowerCase();
+        if (!adapterType || !uid) continue;
+        const channelUserId = adapterType === "telegram" ? `username:${uid}` : `uid:${uid}`;
+        const channelUsername = adapterType === "telegram" ? uid : null;
+        stmt.run(generateUUID(), adapterType, channelUserId, token, channelUsername, now);
+      }
+    }
   }
 
   // ==================== Agent Operations ====================
@@ -2045,6 +2106,63 @@ export class HiBossDatabase {
     return result.changes;
   }
 
+  /**
+   * Mark due pending non-cron channel envelopes for an agent/chat as done.
+   *
+   * Used by channel `/abort` to clear only the current chat inbox.
+   */
+  markDuePendingNonCronEnvelopesDoneForAgentChannel(
+    agentName: string,
+    adapterType: string,
+    chatId: string,
+    options?: {
+      reason?: string;
+      outcome?: string;
+      origin?: EnvelopeOrigin;
+    }
+  ): number {
+    const toAddress = `agent:${agentName}`;
+    const fromAddress = `channel:${adapterType}:${chatId}`;
+    const nowMs = Date.now();
+    const rows = this.db.prepare(`
+      SELECT * FROM envelopes
+      WHERE "to" = ?
+        AND "from" = ?
+        AND status = 'pending'
+        AND (deliver_at IS NULL OR deliver_at <= ?)
+        AND json_type(metadata, '$.cronScheduleId') IS NULL
+    `).all(toAddress, fromAddress, nowMs) as EnvelopeRow[];
+
+    const stmt = this.db.prepare(`
+      UPDATE envelopes
+      SET status = 'done'
+      WHERE "to" = ?
+        AND "from" = ?
+        AND status = 'pending'
+        AND (deliver_at IS NULL OR deliver_at <= ?)
+        AND json_type(metadata, '$.cronScheduleId') IS NULL
+    `);
+    const result = stmt.run(toAddress, fromAddress, nowMs);
+
+    for (const row of rows) {
+      const envelope = this.rowToEnvelope({
+        ...row,
+        status: "done",
+      });
+      this.emitEnvelopeStatusChanged({
+        envelope,
+        envelopeId: row.id,
+        fromStatus: "pending",
+        toStatus: "done",
+        reason: options?.reason,
+        outcome: options?.outcome,
+        origin: options?.origin ?? this.resolveEnvelopeOrigin(envelope.metadata, "internal"),
+        timestampMs: Date.now(),
+      });
+    }
+    return result.changes;
+  }
+
   private rowToAgentRun(row: AgentRunRow): AgentRun {
     return {
       id: row.id,
@@ -2433,6 +2551,70 @@ export class HiBossDatabase {
     });
   }
 
+  purgeLegacyInternalDmSessionScopes(): {
+    deletedBindings: number;
+    deletedLinks: number;
+    deletedSessions: number;
+  } {
+    return this.runInTransaction(() => {
+      const legacyBindings = this.db.prepare(`
+        SELECT default_session_id
+        FROM channel_session_bindings
+        WHERE adapter_type = 'internal'
+          AND chat_id LIKE 'agent-dm:%'
+      `).all() as Array<{ default_session_id: string }>;
+      const legacyLinks = this.db.prepare(`
+        SELECT session_id
+        FROM channel_session_links
+        WHERE adapter_type = 'internal'
+          AND chat_id LIKE 'agent-dm:%'
+      `).all() as Array<{ session_id: string }>;
+
+      const candidateSessionIds = Array.from(
+        new Set([
+          ...legacyBindings.map((row) => row.default_session_id),
+          ...legacyLinks.map((row) => row.session_id),
+        ])
+      );
+
+      const deletedLinks = this.db.prepare(`
+        DELETE FROM channel_session_links
+        WHERE adapter_type = 'internal'
+          AND chat_id LIKE 'agent-dm:%'
+      `).run().changes;
+
+      const deletedBindings = this.db.prepare(`
+        DELETE FROM channel_session_bindings
+        WHERE adapter_type = 'internal'
+          AND chat_id LIKE 'agent-dm:%'
+      `).run().changes;
+
+      let deletedSessions = 0;
+      if (candidateSessionIds.length > 0) {
+        const placeholders = candidateSessionIds.map(() => "?").join(", ");
+        const sql = `
+          DELETE FROM agent_sessions
+          WHERE id IN (${placeholders})
+            AND NOT EXISTS (
+              SELECT 1 FROM channel_session_bindings b
+              WHERE b.default_session_id = agent_sessions.id
+            )
+            AND NOT EXISTS (
+              SELECT 1 FROM channel_session_links l
+              WHERE l.session_id = agent_sessions.id
+            )
+        `;
+        deletedSessions = this.db.prepare(sql).run(...candidateSessionIds).changes;
+      }
+
+      return {
+        deletedBindings,
+        deletedLinks,
+        deletedSessions,
+      };
+    });
+  }
+
   listSessionsForScope(input: {
     agentName: string;
     scope: SessionListScope;
@@ -2555,6 +2737,78 @@ export class HiBossDatabase {
     stmt.run(agentName);
   }
 
+  getChannelUserAuthToken(input: {
+    adapterType: string;
+    channelUserId?: string;
+    channelUsername?: string;
+  }): string | undefined {
+    const adapterType = input.adapterType.trim().toLowerCase();
+    const channelUserId = input.channelUserId?.trim() ?? "";
+    const channelUsername = input.channelUsername?.trim().replace(/^@/, "").toLowerCase() ?? "";
+    if (!adapterType || (!channelUserId && !channelUsername)) return undefined;
+
+    const normalizeToken = (raw: string | undefined): string | undefined => {
+      const token = (raw ?? "").trim().toLowerCase();
+      return /^[0-9a-f]{32}$/.test(token) ? token : undefined;
+    };
+
+    if (channelUserId) {
+      const byId = this.db.prepare(`
+        SELECT token
+        FROM channel_user_auth
+        WHERE adapter_type = ? AND channel_user_id = ?
+      `).get(adapterType, channelUserId) as { token: string } | undefined;
+      const normalized = normalizeToken(byId?.token);
+      if (normalized) return normalized;
+    }
+
+    if (!channelUsername) return undefined;
+    const usernameSyntheticId = `username:${channelUsername}`;
+    const byUsername = this.db.prepare(`
+      SELECT token
+      FROM channel_user_auth
+      WHERE adapter_type = ?
+        AND (
+          channel_username = ?
+          OR channel_user_id = ?
+          OR channel_user_id = ?
+        )
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `).get(adapterType, channelUsername, channelUsername, usernameSyntheticId) as { token: string } | undefined;
+    return normalizeToken(byUsername?.token);
+  }
+
+  setChannelUserAuth(input: {
+    adapterType: string;
+    channelUserId?: string;
+    token: string;
+    channelUsername?: string;
+  }): void {
+    const adapterType = input.adapterType.trim().toLowerCase();
+    const channelUsername = input.channelUsername?.trim().replace(/^@/, "").toLowerCase() || null;
+    const channelUserId = (input.channelUserId?.trim() || (channelUsername ? `username:${channelUsername}` : "")).trim();
+    const token = input.token.trim().toLowerCase();
+    if (!adapterType || !channelUserId) {
+      throw new Error("Invalid channel auth identity");
+    }
+    if (!/^[0-9a-f]{32}$/.test(token)) {
+      throw new Error("Invalid channel auth token");
+    }
+    const now = Date.now();
+    const stmt = this.db.prepare(`
+      INSERT INTO channel_user_auth
+        (id, adapter_type, channel_user_id, token, channel_username, updated_at)
+      VALUES
+        (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(adapter_type, channel_user_id) DO UPDATE SET
+        token = excluded.token,
+        channel_username = excluded.channel_username,
+        updated_at = excluded.updated_at
+    `);
+    stmt.run(generateUUID(), adapterType, channelUserId, token, channelUsername, now);
+  }
+
   // ==================== Config Operations ====================
 
   /**
@@ -2596,17 +2850,22 @@ export class HiBossDatabase {
    * Set the admin token.
    */
   setAdminToken(token: string): void {
-    const tokenHash = hashToken(token);
-    this.setConfig("admin_token_hash", tokenHash);
+    void token;
   }
 
   /**
    * Verify an admin token.
    */
   verifyAdminToken(token: string): boolean {
-    const storedHash = this.getConfig("admin_token_hash");
-    if (!storedHash) return false;
-    return verifyToken(token, storedHash);
+    const raw = (this.getConfig("user_permission_policy") ?? "").trim();
+    if (!raw) return false;
+    try {
+      const policy = parseUserPermissionPolicy(raw);
+      const user = resolveUserPermissionUserByToken(policy, token);
+      return user?.role === "admin";
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -2701,5 +2960,47 @@ export class HiBossDatabase {
     const global = Math.max(perAgent, Math.min(256, Math.trunc(input.global)));
     this.setConfig("runtime_session_concurrency_per_agent", String(perAgent));
     this.setConfig("runtime_session_concurrency_global", String(global));
+  }
+
+  getRuntimeSessionHandoffConfig(): {
+    recentDays: number;
+    perSessionMaxChars: number;
+    maxRetries: number;
+  } {
+    const recentDaysRaw = (this.getConfig("runtime_session_handoff_recent_days") ?? "").trim();
+    const perSessionRaw = (this.getConfig("runtime_session_handoff_per_session_max_chars") ?? "").trim();
+    const maxRetriesRaw = (this.getConfig("runtime_session_handoff_max_retries") ?? "").trim();
+
+    const parsedRecentDays = recentDaysRaw.length > 0 ? Number(recentDaysRaw) : NaN;
+    const parsedPerSession = perSessionRaw.length > 0 ? Number(perSessionRaw) : NaN;
+    const parsedMaxRetries = maxRetriesRaw.length > 0 ? Number(maxRetriesRaw) : NaN;
+
+    const recentDays =
+      Number.isFinite(parsedRecentDays) && parsedRecentDays > 0
+        ? Math.max(1, Math.min(30, Math.trunc(parsedRecentDays)))
+        : DEFAULT_SESSION_HANDOFF_RECENT_DAYS;
+    const perSessionMaxChars =
+      Number.isFinite(parsedPerSession) && parsedPerSession >= 1000
+        ? Math.max(1000, Math.min(1_000_000, Math.trunc(parsedPerSession)))
+        : DEFAULT_SESSION_HANDOFF_PER_SESSION_MAX_CHARS;
+    const maxRetries =
+      Number.isFinite(parsedMaxRetries) && parsedMaxRetries >= 0
+        ? Math.max(0, Math.min(20, Math.trunc(parsedMaxRetries)))
+        : DEFAULT_SESSION_HANDOFF_MAX_RETRIES;
+
+    return { recentDays, perSessionMaxChars, maxRetries };
+  }
+
+  setRuntimeSessionHandoffConfig(input: {
+    recentDays: number;
+    perSessionMaxChars: number;
+    maxRetries: number;
+  }): void {
+    const recentDays = Math.max(1, Math.min(30, Math.trunc(input.recentDays)));
+    const perSessionMaxChars = Math.max(1_000, Math.min(1_000_000, Math.trunc(input.perSessionMaxChars)));
+    const maxRetries = Math.max(0, Math.min(20, Math.trunc(input.maxRetries)));
+    this.setConfig("runtime_session_handoff_recent_days", String(recentDays));
+    this.setConfig("runtime_session_handoff_per_session_max_chars", String(perSessionMaxChars));
+    this.setConfig("runtime_session_handoff_max_retries", String(maxRetries));
   }
 }

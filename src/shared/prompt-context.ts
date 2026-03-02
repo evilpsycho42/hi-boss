@@ -11,6 +11,8 @@ import { getAgentDir, getHiBossDir } from "../agent/home-setup.js";
 import {
   DEFAULT_AGENT_PROVIDER,
   DEFAULT_MEMORY_LONGTERM_MAX_CHARS,
+  DEFAULT_SESSION_HANDOFF_PER_SESSION_MAX_CHARS,
+  DEFAULT_SESSION_HANDOFF_RECENT_DAYS,
   DEFAULT_MEMORY_SHORTTERM_DAYS,
   DEFAULT_MEMORY_SHORTTERM_PER_DAY_MAX_CHARS,
   getDefaultRuntimeWorkspace,
@@ -305,6 +307,11 @@ export function buildSystemPromptContext(params: {
       dailyRecentFiles: DEFAULT_MEMORY_SHORTTERM_DAYS,
       dailyPerFileMaxChars: DEFAULT_MEMORY_SHORTTERM_PER_DAY_MAX_CHARS,
       dailyMaxChars: DEFAULT_MEMORY_SHORTTERM_PER_DAY_MAX_CHARS * DEFAULT_MEMORY_SHORTTERM_DAYS,
+      sessionHandoffs: "",
+      sessionHandoffsFence: "```",
+      sessionHandoffsError: "",
+      sessionHandoffRecentDays: DEFAULT_SESSION_HANDOFF_RECENT_DAYS,
+      sessionHandoffPerSessionMaxChars: DEFAULT_SESSION_HANDOFF_PER_SESSION_MAX_CHARS,
     },
     boss: {
       name: params.boss?.name ?? "",
@@ -390,6 +397,11 @@ export function buildTurnPromptContext(params: {
       const cronScheduleId = getCronScheduleId(env.metadata);
       return cronScheduleId ? formatShortId(cronScheduleId) : "";
     })();
+    const chatScope = (() => {
+      if (!env.metadata || typeof env.metadata !== "object") return "";
+      const raw = (env.metadata as Record<string, unknown>).chatScope;
+      return typeof raw === "string" && raw.trim() ? raw.trim() : "";
+    })();
 
     const deliverAtPresent = typeof env.deliverAt === "number";
     const deliverAt = deliverAtPresent
@@ -418,6 +430,7 @@ export function buildTurnPromptContext(params: {
       },
       deliverAt,
       cronId,
+      chatScope,
       content: {
         text: env.content.text ?? "(none)",
         attachments,

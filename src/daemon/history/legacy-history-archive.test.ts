@@ -31,8 +31,8 @@ test("archiveLegacyHistory moves only legacy history directories", () => {
     const alphaHistory = path.join(agentsDir, "alpha", "internal_space", "history");
     const betaHistory = path.join(agentsDir, "beta", "internal_space", "history");
 
-    writeSessionFile(path.join(alphaHistory, "2026-02-26", "s1.json"), "legacy-version");
-    writeSessionFile(path.join(betaHistory, "2026-02-26", "s2.json"), SESSION_FILE_VERSION);
+    writeSessionFile(path.join(alphaHistory, "2026-02-26", "chat-1", "s1.json"), "legacy-version");
+    writeSessionFile(path.join(betaHistory, "2026-02-26", "chat-1", "s2.json"), SESSION_FILE_VERSION);
 
     archiveLegacyHistory({ dataDir: root, agentsDir });
 

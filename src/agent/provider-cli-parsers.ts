@@ -344,7 +344,6 @@ export function parseCodexTraceEntries(
   const out: ProviderTraceEntry[] = [];
 
   const pushEntry = (entry: ProviderTraceEntry): void => {
-    if (out.length >= maxEntries) return;
     if (out.length > 0) {
       const prev = out[out.length - 1]!;
       if (prev.type === entry.type && prev.text === entry.text && prev.toolName === entry.toolName) {
@@ -352,6 +351,9 @@ export function parseCodexTraceEntries(
       }
     }
     out.push(entry);
+    if (out.length > maxEntries) {
+      out.shift();
+    }
   };
 
   for (const line of stdout.split("\n")) {
@@ -465,7 +467,6 @@ export function parseClaudeTraceEntries(
   const out: ProviderTraceEntry[] = [];
 
   const pushEntry = (entry: ProviderTraceEntry): void => {
-    if (out.length >= maxEntries) return;
     if (out.length > 0) {
       const prev = out[out.length - 1]!;
       if (prev.type === entry.type && prev.text === entry.text && prev.toolName === entry.toolName) {
@@ -473,6 +474,9 @@ export function parseClaudeTraceEntries(
       }
     }
     out.push(entry);
+    if (out.length > maxEntries) {
+      out.shift();
+    }
   };
 
   for (const line of stdout.split("\n")) {

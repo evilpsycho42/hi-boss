@@ -163,3 +163,70 @@ test("runtime session concurrency falls back to defaults and persists configured
     assert.deepEqual(db.getRuntimeSessionConcurrency(), { perAgent: 7, global: 7 });
   });
 });
+
+test("runtime session handoff config falls back to defaults and persists configured values", () => {
+  withTempDb((db) => {
+    assert.deepEqual(db.getRuntimeSessionHandoffConfig(), {
+      recentDays: 3,
+      perSessionMaxChars: 24000,
+      maxRetries: 3,
+    });
+
+    db.setRuntimeSessionHandoffConfig({
+      recentDays: 5,
+      perSessionMaxChars: 30000,
+      maxRetries: 2,
+    });
+    assert.deepEqual(db.getRuntimeSessionHandoffConfig(), {
+      recentDays: 5,
+      perSessionMaxChars: 30000,
+      maxRetries: 2,
+    });
+
+    db.setRuntimeSessionHandoffConfig({
+      recentDays: 999,
+      perSessionMaxChars: 100,
+      maxRetries: 999,
+    });
+    assert.deepEqual(db.getRuntimeSessionHandoffConfig(), {
+      recentDays: 30,
+      perSessionMaxChars: 1000,
+      maxRetries: 20,
+    });
+  });
+});
+
+test("purgeLegacyInternalDmSessionScopes removes legacy internal dm mappings and orphan sessions", () => {
+  withTempDb((db) => {
+    db.registerAgent({
+      name: "nex",
+      provider: "codex",
+    });
+
+    const legacy = db.getOrCreateChannelDefaultSession({
+      agentName: "nex",
+      adapterType: "internal",
+      chatId: "agent-dm:alice:bob",
+      ownerUserId: "u-1",
+      provider: "codex",
+    }).session;
+
+    const retained = db.getOrCreateChannelDefaultSession({
+      agentName: "nex",
+      adapterType: "internal",
+      chatId: "team:research",
+      ownerUserId: "u-1",
+      provider: "codex",
+    }).session;
+
+    const result = db.purgeLegacyInternalDmSessionScopes();
+    assert.equal(result.deletedBindings >= 1, true);
+    assert.equal(result.deletedLinks >= 1, true);
+
+    assert.equal(db.getChannelSessionBinding("nex", "internal", "agent-dm:alice:bob"), null);
+    assert.notEqual(db.getChannelSessionBinding("nex", "internal", "team:research"), null);
+
+    assert.equal(db.getAgentSessionById(legacy.id), null);
+    assert.notEqual(db.getAgentSessionById(retained.id), null);
+  });
+});

@@ -35,11 +35,32 @@ test("parseAddress keeps agent and channel behavior", () => {
     type: "agent",
     agentName: "alice",
   });
+  assert.deepEqual(parseAddress("agent:alice:new"), {
+    type: "agent-new-chat",
+    agentName: "alice",
+  });
+  assert.deepEqual(parseAddress("agent:alice:chat-123"), {
+    type: "agent-chat",
+    agentName: "alice",
+    chatId: "chat-123",
+  });
+  assert.deepEqual(parseAddress("agent:alice:team:research"), {
+    type: "agent-chat",
+    agentName: "alice",
+    chatId: "team:research",
+  });
   assert.deepEqual(parseAddress("channel:telegram:123"), {
     type: "channel",
     adapter: "telegram",
     chatId: "123",
   });
+});
+
+test("parseAddress rejects malformed agent chat targets", () => {
+  assert.throws(() => parseAddress("agent:"), /Invalid address format/);
+  assert.throws(() => parseAddress("agent::new"), /Invalid address format/);
+  assert.throws(() => parseAddress("agent:alice:"), /Invalid address format/);
+  assert.throws(() => parseAddress("agent:INVALID!:new"), /Invalid address format/);
 });
 
 test("address formatters include new team helpers", () => {

@@ -99,3 +99,40 @@ test("parseCodexTraceEntries includes assistant text and tool calls only", () =>
   assert.equal(entries[1]?.toolName, "bash");
   assert.equal(entries[1]?.text.includes("input="), true);
 });
+
+test("parseCodexTraceEntries keeps the latest entries when maxEntries is reached", () => {
+  const lines: string[] = [];
+  for (let i = 1; i <= 5; i++) {
+    lines.push(JSON.stringify({
+      type: "item.completed",
+      item: {
+        type: "agent_message",
+        text: `step ${i}`,
+      },
+    }));
+  }
+
+  const entries = parseCodexTraceEntries(lines.join("\n"), { maxEntries: 3 });
+  assert.deepEqual(
+    entries.map((entry) => entry.text),
+    ["step 3", "step 4", "step 5"],
+  );
+});
+
+test("parseClaudeTraceEntries keeps the latest entries when maxEntries is reached", () => {
+  const lines: string[] = [];
+  for (let i = 1; i <= 5; i++) {
+    lines.push(JSON.stringify({
+      type: "assistant",
+      message: {
+        content: [{ type: "text", text: `step ${i}` }],
+      },
+    }));
+  }
+
+  const entries = parseClaudeTraceEntries(lines.join("\n"), { maxEntries: 3 });
+  assert.deepEqual(
+    entries.map((entry) => entry.text),
+    ["step 3", "step 4", "step 5"],
+  );
+});

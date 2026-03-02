@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { computeDmChatId, computeTeamChatId } from "./chat-scope.js";
+import { createNewAgentChatId, computeTeamChatId } from "./chat-scope.js";
 
-test("computeDmChatId sorts canonical names and allows self DM", () => {
-  assert.equal(computeDmChatId("alice", "bob"), "agent-dm:alice:bob");
-  assert.equal(computeDmChatId("bob", "alice"), "agent-dm:alice:bob");
-  assert.equal(computeDmChatId("alice", "alice"), "agent-dm:alice:alice");
+test("createNewAgentChatId returns unique ids with stable prefix", () => {
+  const a = createNewAgentChatId();
+  const b = createNewAgentChatId();
+  assert.equal(a.startsWith("agent-chat-"), true);
+  assert.equal(b.startsWith("agent-chat-"), true);
+  assert.notEqual(a, b);
 });
 
 test("computeTeamChatId formats team scope", () => {

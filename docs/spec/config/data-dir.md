@@ -10,7 +10,8 @@ Operator-visible files:
 - `{{HIBOSS_DIR}}/agents/<agent-name>/SOUL.md` — optional per-agent persona
 - `{{HIBOSS_DIR}}/agents/<agent-name>/internal_space/MEMORY.md` — per-agent memory file injected into system instructions (may be truncated)
 - `{{HIBOSS_DIR}}/agents/<agent-name>/internal_space/memories/` — per-agent daily memory files (`YYYY-MM-DD.md`)
-- `{{HIBOSS_DIR}}/agents/<agent-name>/internal_space/history/YYYY-MM-DD/<session-id>.json` — per-session history files (event-based; version `"v0.0.0"`)
+- `{{HIBOSS_DIR}}/agents/<agent-name>/internal_space/history/YYYY-MM-DD/<chat-id>/<session-id>.json` — per-session history files (event-based; version `"v0.0.0"`)
+- `{{HIBOSS_DIR}}/agents/<agent-name>/internal_space/history/YYYY-MM-DD/<chat-id>/<session-id>.md` — per-session conversation markdown (`from/to/content`) + frontmatter (`summary`, `handoff`, status)
 
 Internal daemon files (do not touch):
 - `{{HIBOSS_DIR}}/.daemon/hiboss.db` — SQLite DB (durable queue + audit)
@@ -20,6 +21,7 @@ Internal daemon files (do not touch):
 - `{{HIBOSS_DIR}}/.daemon/daemon.log` — current daemon log
 - `{{HIBOSS_DIR}}/.daemon/log_history/` — archived daemon logs
 - `{{HIBOSS_DIR}}/_archive/history-legacy-<timestamp>/` — archived legacy history folders (migrated from non-current schema versions)
+- `{{HIBOSS_DIR}}/_archive/history-chat-layout-<timestamp>/` — archived session files that could not be auto-migrated into chat-id layout
 
 Note: there is no `--data-dir` flag; use `HIBOSS_DIR`.
 

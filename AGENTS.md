@@ -88,29 +88,43 @@ hiboss daemon start --token <boss-token>
 hiboss agent register --token <boss-token> --name nex --description "AI assistant" --workspace "$PWD"
 ```
 
-## Remote apply workflow (synced server)
+## Environment model (must follow)
 
-Use this flow when code is already synced to the server and you only need to apply runtime changes.
+- Development split:
+  - Mac is the main coding environment.
+  - Windows is the runtime/data environment (Docker + `C:\hiboss`).
+  - Code is synchronized between Mac and Windows via Syncthing.
+- Operational rule:
+  - Use `hiboss daemon stop/start/status` as the canonical lifecycle interface.
+  - Do not use PM2 for this project.
+  - Do not rely on ad-hoc manual `docker compose` as normal operation; reserve it for emergency recovery only.
+  - Runtime incident triage order is strict:
+    1. For runtime symptoms (`agent idle unexpectedly`, `pending-count` stuck, `/status` mismatch, message not sent), first verify on the Windows runtime host.
+    2. Run `hiboss daemon status --token <boss-token>` and check `~/hiboss/.daemon/daemon.log` (Windows side) before any Mac-local diagnosis.
+    3. Use Mac-local checks only after Windows runtime facts are collected.
 
-Pre-check:
-- Confirm remote repo path exists: `/root/hiboss/agents/Shieru/workspace/hi-boss-dev`
-- Confirm daemon manager and process name: `pm2` / `hiboss-daemon`
-- Confirm changed source files are present on remote (`git status --short`)
+## Remote apply workflow (Mac edit + Windows runtime)
 
-Apply on server:
+Use this flow when code is already synced to Windows (via Syncthing) and you only need to apply runtime changes.
+
+Apply on Windows host:
 ```bash
-cd /root/hiboss/agents/Shieru/workspace/hi-boss-dev
+cd C:\hiboss\agents\Shieru\workspace\hi-boss-dev
 npm run build && npm link
-pm2 restart hiboss-daemon
-pm2 describe hiboss-daemon
-pm2 logs hiboss-daemon --lines 80 --nostream
+hiboss daemon stop --token <boss-token>
+hiboss daemon start --token <boss-token>
+hiboss daemon status --token <boss-token>
 ```
+
+Notes:
+- If `settings.json` has `runtime.deployment.mode = docker`, the commands above orchestrate Docker runtime through `hiboss` directly.
+- Standard operators should not need to run `docker compose up/down` by hand.
 
 Rollback / recovery (quick):
 ```bash
-cd /root/hiboss/agents/Shieru/workspace/hi-boss-dev
-pm2 logs hiboss-daemon --lines 200 --nostream
-pm2 restart hiboss-daemon
+cd C:\hiboss\agents\Shieru\workspace\hi-boss-dev
+hiboss daemon stop --token <boss-token>
+hiboss daemon start --token <boss-token>
 ```
 
 Windows (Tailscale) access:
@@ -122,7 +136,12 @@ Windows (Tailscale) access:
 - Quick verification on host:
   - `where hiboss`
   - `hiboss --version`
+  - `hiboss daemon status --token <boss-token>`
   - `hiboss envelope send --help`
+  - Runtime incident first-response:
+    - `cd C:\hiboss\agents\Shieru\workspace\hi-boss-dev`
+    - `hiboss daemon status --token <boss-token>`
+    - `Get-Content C:\hiboss\.daemon\daemon.log -Tail 200`
 
 Credentials policy:
 - Read server credentials from local private knowledge files (for Shieru: `agents/Shieru/internal_space/knowledge/credentials.md`).

@@ -46,6 +46,7 @@ const MAX_ENVELOPES_PER_TURN = 10;
 
 type InFlightAgentRun = {
   runRecordId: string;
+  abortScopeKey: string;
   abortController: AbortController;
   childProcess: ChildProcess | null;
   abortReason?: string;
@@ -103,6 +104,8 @@ export class AgentExecutor {
   private globalRunSemaphore: AsyncSemaphore = new AsyncSemaphore(DEFAULT_SESSION_CONCURRENCY_GLOBAL);
   private perAgentRunSemaphores: Map<string, AsyncSemaphore> = new Map();
   private abortGenerationByAgent: Map<string, number> = new Map();
+  private abortGenerationByScopeKey: Map<string, number> = new Map();
+  private sessionAbortScopeKeyByCacheKey: Map<string, string> = new Map();
   private concurrencyPerAgent: number = DEFAULT_SESSION_CONCURRENCY_PER_AGENT;
   private concurrencyGlobal: number = DEFAULT_SESSION_CONCURRENCY_GLOBAL;
   private pendingSessionRefresh: Map<string, SessionRefreshRequest> = new Map();
@@ -185,12 +188,37 @@ export class AgentExecutor {
     return this.getAbortGeneration(agentName) === expected;
   }
 
+  private getAbortScopeGeneration(scopeKey: string): number {
+    return this.abortGenerationByScopeKey.get(scopeKey) ?? 0;
+  }
+
+  private bumpAbortScopeGeneration(scopeKey: string): number {
+    const next = this.getAbortScopeGeneration(scopeKey) + 1;
+    this.abortGenerationByScopeKey.set(scopeKey, next);
+    return next;
+  }
+
+  private isAbortScopeGenerationCurrent(scopeKey: string, expected: number): boolean {
+    return this.getAbortScopeGeneration(scopeKey) === expected;
+  }
+
   private buildDefaultSessionKey(agentName: string): string {
     return `default:${agentName}`;
   }
 
   private buildChannelSessionKey(agentName: string, sessionId: string): string {
     return `channel-session:${agentName}:${sessionId}`;
+  }
+
+  private buildChannelAbortScopeKey(agentName: string, adapterType: string, chatId: string): string {
+    return `channel:${agentName}:${adapterType}:${chatId}`;
+  }
+
+  private buildAbortScopeKey(agentName: string, scope: SessionExecutionScope): string {
+    if (scope.kind === "channel") {
+      return this.buildChannelAbortScopeKey(agentName, scope.adapterType, scope.chatId);
+    }
+    return `default:${agentName}`;
   }
 
   invalidateChannelSessionCache(agentName: string, adapterType: string, chatId: string): void {
@@ -223,29 +251,61 @@ export class AgentExecutor {
     if (!set || set.size === 0) return hadQueuedTasks;
 
     for (const inFlight of set) {
-      if (!inFlight.abortReason) {
-        inFlight.abortReason = reason;
-      }
-      inFlight.abortController.abort();
-
-      if (inFlight.childProcess) {
-        try {
-          if (inFlight.childProcess.pid) {
-            process.kill(-inFlight.childProcess.pid, "SIGTERM");
-          } else {
-            inFlight.childProcess.kill("SIGTERM");
-          }
-        } catch {
-          try {
-            inFlight.childProcess.kill("SIGTERM");
-          } catch {
-            // best-effort
-          }
-        }
-      }
+      this.abortInFlightRun(inFlight, reason);
     }
 
     return true;
+  }
+
+  /**
+   * Cancel the in-flight run and queued tasks for a specific channel chat (best-effort).
+   */
+  abortCurrentRunForChannel(
+    agentName: string,
+    adapterType: string,
+    chatId: string,
+    reason: string
+  ): boolean {
+    const scopeKey = this.buildChannelAbortScopeKey(agentName, adapterType, chatId);
+    this.bumpAbortScopeGeneration(scopeKey);
+
+    const set = this.inFlightRuns.get(agentName);
+    let cancelledAnyInFlight = false;
+    if (set && set.size > 0) {
+      for (const inFlight of set) {
+        if (inFlight.abortScopeKey !== scopeKey) continue;
+        this.abortInFlightRun(inFlight, reason);
+        cancelledAnyInFlight = true;
+      }
+    }
+
+    const hadQueuedTasksForScope = [...this.sessionAbortScopeKeyByCacheKey.values()].some(
+      (value) => value === scopeKey
+    );
+    return cancelledAnyInFlight || hadQueuedTasksForScope;
+  }
+
+  private abortInFlightRun(inFlight: InFlightAgentRun, reason: string): void {
+    if (!inFlight.abortReason) {
+      inFlight.abortReason = reason;
+    }
+    inFlight.abortController.abort();
+
+    if (inFlight.childProcess) {
+      try {
+        if (inFlight.childProcess.pid) {
+          process.kill(-inFlight.childProcess.pid, "SIGTERM");
+        } else {
+          inFlight.childProcess.kill("SIGTERM");
+        }
+      } catch {
+        try {
+          inFlight.childProcess.kill("SIGTERM");
+        } catch {
+          // best-effort
+        }
+      }
+    }
   }
 
   /**
@@ -381,6 +441,7 @@ export class AgentExecutor {
       hibossDir: this.hibossDir,
       boss,
       teams,
+      sessionHandoffConfig: db.getRuntimeSessionHandoffConfig(),
     });
 
     let updatedCount = 0;
@@ -577,23 +638,34 @@ export class AgentExecutor {
   }): void {
     const existingTail = this.sessionLocks.get(params.scope.cacheKey);
     const previous = (existingTail ?? Promise.resolve()).catch(() => undefined);
-    const expectedAbortGeneration = this.getAbortGeneration(params.agent.name);
+    const abortScopeKey = this.buildAbortScopeKey(params.agent.name, params.scope);
+    const expectedAgentAbortGeneration = this.getAbortGeneration(params.agent.name);
+    const expectedScopeAbortGeneration = this.getAbortScopeGeneration(abortScopeKey);
+    this.sessionAbortScopeKeyByCacheKey.set(params.scope.cacheKey, abortScopeKey);
     this.incrementAgentTaskCount(params.agent.name);
 
     const current = previous
       .then(async () => {
-        if (!this.isAbortGenerationCurrent(params.agent.name, expectedAbortGeneration)) {
+        if (
+          !this.isAbortGenerationCurrent(params.agent.name, expectedAgentAbortGeneration) ||
+          !this.isAbortScopeGenerationCurrent(abortScopeKey, expectedScopeAbortGeneration)
+        ) {
           return;
         }
         const releaseGlobal = await this.globalRunSemaphore.acquire();
         const releaseAgent = await this.getAgentSemaphore(params.agent.name).acquire();
         try {
-          if (!this.isAbortGenerationCurrent(params.agent.name, expectedAbortGeneration)) {
+          if (
+            !this.isAbortGenerationCurrent(params.agent.name, expectedAgentAbortGeneration) ||
+            !this.isAbortScopeGenerationCurrent(abortScopeKey, expectedScopeAbortGeneration)
+          ) {
             return;
           }
           await this.runSessionExecution({
             ...params,
-            abortGeneration: expectedAbortGeneration,
+            abortGeneration: expectedAgentAbortGeneration,
+            abortScopeKey,
+            abortScopeGeneration: expectedScopeAbortGeneration,
           });
         } finally {
           releaseAgent();
@@ -603,6 +675,7 @@ export class AgentExecutor {
       .finally(() => {
         if (this.sessionLocks.get(params.scope.cacheKey) === current) {
           this.sessionLocks.delete(params.scope.cacheKey);
+          this.sessionAbortScopeKeyByCacheKey.delete(params.scope.cacheKey);
         }
         this.decrementAgentTaskCount(params.agent.name);
       });
@@ -618,11 +691,16 @@ export class AgentExecutor {
     trigger?: AgentRunTrigger;
     refreshReasons: string[];
     abortGeneration: number;
+    abortScopeKey: string;
+    abortScopeGeneration: number;
   }): Promise<void> {
     const envelopeIds = params.envelopes.map((e) => e.id);
     const pendingRemainingCount = countDuePendingEnvelopesForAgent(params.db, params.agent.name);
     const triggerFields = getTriggerFields(params.trigger);
-    if (!this.isAbortGenerationCurrent(params.agent.name, params.abortGeneration)) {
+    if (
+      !this.isAbortGenerationCurrent(params.agent.name, params.abortGeneration) ||
+      !this.isAbortScopeGenerationCurrent(params.abortScopeKey, params.abortScopeGeneration)
+    ) {
       for (const env of params.envelopes) {
         params.db.recordEnvelopeStatusEvent({
           envelope: env,
@@ -698,6 +776,7 @@ export class AgentExecutor {
 
     const inFlight: InFlightAgentRun = {
       runRecordId: run.id,
+      abortScopeKey: params.abortScopeKey,
       abortController: new AbortController(),
       childProcess: null,
     };
@@ -982,19 +1061,35 @@ export class AgentExecutor {
     db: HiBossDatabase,
     scope: Extract<SessionExecutionScope, { kind: "channel" }>
   ): Promise<AgentSession> {
+    const desiredProvider = agent.provider ?? DEFAULT_AGENT_PROVIDER;
     const cached = this.channelSessions.get(scope.cacheKey);
     const policy = this.getSessionPolicy(agent);
     if (cached) {
-      const reason = getRefreshReasonForPolicy(cached, policy, new Date());
-      if (!reason) return cached;
-      this.channelSessions.delete(scope.cacheKey);
-      db.updateAgentSessionProviderSessionId(scope.agentSessionId, null, {
-        provider: cached.provider,
-      });
+      if (cached.provider !== desiredProvider) {
+        this.channelSessions.delete(scope.cacheKey);
+        db.updateAgentSessionProviderSessionId(scope.agentSessionId, null, {
+          provider: desiredProvider,
+        });
+      } else {
+        const reason = getRefreshReasonForPolicy(cached, policy, new Date());
+        if (!reason) return cached;
+        this.channelSessions.delete(scope.cacheKey);
+        db.updateAgentSessionProviderSessionId(scope.agentSessionId, null, {
+          provider: cached.provider,
+        });
+      }
     }
 
     const persistedRow = db.getAgentSessionById(scope.agentSessionId);
-    const provider = persistedRow?.provider ?? (agent.provider ?? DEFAULT_AGENT_PROVIDER);
+    let provider = persistedRow?.provider ?? desiredProvider;
+    let providerSessionId = persistedRow?.providerSessionId ?? undefined;
+    if (provider !== desiredProvider) {
+      provider = desiredProvider;
+      providerSessionId = undefined;
+      db.updateAgentSessionProviderSessionId(scope.agentSessionId, null, {
+        provider: desiredProvider,
+      });
+    }
     const providerEnvOverrides = getProviderCliEnvOverrides(agent.metadata, provider);
 
     const baseSession = await this.getOrCreateDefaultSession(agent, db);
@@ -1006,12 +1101,12 @@ export class AgentExecutor {
       providerEnvOverrides,
       model: agent.model,
       reasoningEffort: agent.reasoningEffort,
-      sessionId: persistedRow?.providerSessionId ?? undefined,
+      sessionId: providerSessionId,
       createdAtMs: persistedRow?.createdAt ?? Date.now(),
       ...(persistedRow ? { lastRunCompletedAtMs: persistedRow.lastActiveAt } : {}),
     };
     this.channelSessions.set(scope.cacheKey, session);
-    this.conversationHistory?.ensureActiveSession(agent.name);
+    this.conversationHistory?.ensureActiveSession(agent.name, scope.chatId);
     return session;
   }
 
@@ -1123,6 +1218,8 @@ export class AgentExecutor {
     this.agentQueuedTaskCount.clear();
     this.inFlightRuns.clear();
     this.abortGenerationByAgent.clear();
+    this.abortGenerationByScopeKey.clear();
+    this.sessionAbortScopeKeyByCacheKey.clear();
     this.pendingSessionRefresh.clear();
     this.pendingSessionContextReload.clear();
   }

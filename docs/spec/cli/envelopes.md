@@ -13,24 +13,26 @@ Sends an envelope to an agent or channel.
 
 Flags:
 - `--to <address>` (required)
-  - `agent:<name>`
+  - `agent:<name>:new` (create a fresh agent private chat context)
+  - `agent:<name>:<chat-id>` (send into an existing agent chat context)
   - `team:<name>` (broadcast fan-out)
   - `team:<name>:<agent>` (single target in team chat scope)
   - `channel:<adapter>:<chat-id>`
 - `--text <text>` or `--text -` (stdin) or `--text-file <path>`
 - `--attachment <path>` (repeatable)
 - `--reply-to <envelope-id>` (optional; adds thread context for agent↔agent envelopes; for channel destinations, also replies/quotes the referenced channel envelope when possible)
-- `--interrupt-now` (optional; only for single-agent destinations: `to=agent:<name>` or `to=team:<name>:<agent>`; immediately interrupts current work and prioritizes this envelope)
+- `--interrupt-now` (optional; only for single-agent destinations: `to=agent:<name>:new`, `to=agent:<name>:<chat-id>`, or `to=team:<name>:<agent>`; immediately interrupts current work and prioritizes this envelope)
 - `--parse-mode <mode>` (optional; channel destinations only; `plain|markdownv2|html`)
 - `--deliver-at <time>` (ISO 8601 or relative: `+2h`, `+30m`, `+1Y2M`, `-15m`; units: `Y/M/D/h/m/s`)
 
 Notes:
 - Sender identity is derived from the authenticated **agent token**.
 - Admin tokens cannot send envelopes via `hiboss envelope send`; to message an agent as a human/boss, send via a channel adapter (e.g., Telegram).
-- Sending to `agent:<name>` fails fast if the agent does not exist (`NOT_FOUND`) or the address is invalid (`INVALID_PARAMS`).
+- Sending to `agent:<name>:new` / `agent:<name>:<chat-id>` fails fast if the target agent does not exist (`NOT_FOUND`) or the address is invalid (`INVALID_PARAMS`).
+- Bare `agent:<name>` is rejected for `envelope.send`; use `agent:<name>:new` or `agent:<name>:<chat-id>`.
 - Sending to `team:<name>` fans out one envelope per team member (sender excluded).
 - Sending to `team:<name>:<agent>` validates team membership and sends one envelope.
-- `--interrupt-now` is only supported for single-agent destinations (`agent:<name>` and `team:<name>:<agent>`).
+- `--interrupt-now` is only supported for single-agent destinations (`agent:<name>:new`, `agent:<name>:<chat-id>`, and `team:<name>:<agent>`).
 - `--interrupt-now` and `--deliver-at` are mutually exclusive.
 - `team:<name>` broadcast rejects `--interrupt-now`.
 - Cron schedules cannot use team destinations (enforced by `cron.create`).

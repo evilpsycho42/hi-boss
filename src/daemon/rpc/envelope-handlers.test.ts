@@ -151,7 +151,7 @@ test("envelope.send rejects non-boolean interruptNow", async () => {
     () =>
       handlers["envelope.send"]({
         token: sender.token,
-        to: "agent:target",
+        to: "agent:target:new",
         text: "hello",
         interruptNow: "true",
       } as unknown as Record<string, unknown>),
@@ -170,7 +170,7 @@ test("envelope.send rejects interruptNow with deliverAt", async () => {
     () =>
       handlers["envelope.send"]({
         token: sender.token,
-        to: "agent:target",
+        to: "agent:target:new",
         text: "hello",
         interruptNow: true,
         deliverAt: "+1m",
@@ -229,7 +229,7 @@ test("envelope.send interruptNow aborts work and creates priority envelope", asy
   const handlers = createEnvelopeHandlers(ctx);
   const result = (await handlers["envelope.send"]({
     token: sender.token,
-    to: "agent:target",
+    to: "agent:target:new",
     text: "urgent",
     interruptNow: true,
   })) as { id: string; interruptedWork: boolean; priorityApplied: boolean };
@@ -247,7 +247,28 @@ test("envelope.send interruptNow aborts work and creates priority envelope", asy
   assert.equal(result.priorityApplied, true);
 });
 
-test("envelope.send stamps chatScope for agent DM using canonical sorted names", async () => {
+test("envelope.send rejects legacy plain agent destination without chat target", async () => {
+  const sender = makeAgent("bob");
+  const target = makeAgent("alice");
+  const ctx = makeContext({
+    sender,
+    knownAgents: [sender, target],
+  });
+  const handlers = createEnvelopeHandlers(ctx);
+
+  await assertRpcError(
+    () =>
+      handlers["envelope.send"]({
+        token: sender.token,
+        to: "agent:alice",
+        text: "hello",
+      }),
+    RPC_ERRORS.INVALID_PARAMS,
+    "agent destinations must use agent:<name>:new or agent:<name>:<chat-id>"
+  );
+});
+
+test("envelope.send stamps chatScope for agent:new with generated chat id", async () => {
   const sender = makeAgent("bob");
   const target = makeAgent("alice");
   let routedInput: CreateEnvelopeInput | null = null;
@@ -273,13 +294,49 @@ test("envelope.send stamps chatScope for agent DM using canonical sorted names",
 
   await handlers["envelope.send"]({
     token: sender.token,
-    to: "agent:alice",
+    to: "agent:alice:new",
     text: "hello",
   });
 
   assert.notEqual(routedInput, null);
   const metadata = (routedInput as unknown as CreateEnvelopeInput).metadata as Record<string, unknown> | undefined;
-  assert.equal(metadata?.chatScope, "agent-dm:alice:bob");
+  assert.equal(typeof metadata?.chatScope, "string");
+  assert.equal(String(metadata?.chatScope).startsWith("agent-chat-"), true);
+});
+
+test("envelope.send stamps chatScope from explicit agent chat id", async () => {
+  const sender = makeAgent("bob");
+  const target = makeAgent("alice");
+  let routedInput: CreateEnvelopeInput | null = null;
+  const ctx = makeContext({
+    sender,
+    knownAgents: [sender, target],
+    routeEnvelope: async (input) => {
+      routedInput = input;
+      return {
+        id: "env-chat-id",
+        from: input.from,
+        to: input.to,
+        fromBoss: false,
+        content: input.content,
+        priority: input.priority,
+        status: "pending",
+        createdAt: Date.now(),
+        metadata: input.metadata,
+      };
+    },
+  });
+  const handlers = createEnvelopeHandlers(ctx);
+
+  await handlers["envelope.send"]({
+    token: sender.token,
+    to: "agent:alice:chat-42",
+    text: "hello",
+  });
+
+  assert.notEqual(routedInput, null);
+  const metadata = (routedInput as unknown as CreateEnvelopeInput).metadata as Record<string, unknown> | undefined;
+  assert.equal(metadata?.chatScope, "chat-42");
 });
 
 test("envelope.send team mention stamps team chatScope", async () => {

@@ -14,6 +14,7 @@ import {
   ensureAgentInternalSpaceLayout,
   readAgentInternalDailyMemorySnapshot,
   readAgentInternalMemorySnapshot,
+  readAgentInternalSessionHandoffSnapshot,
 } from "../shared/internal-space.js";
 
 /**
@@ -35,6 +36,10 @@ export interface InstructionContext {
   boss?: {
     name?: string;
     adapterIds?: Record<string, string>;
+  };
+  sessionHandoffConfig?: {
+    recentDays: number;
+    perSessionMaxChars: number;
   };
 }
 
@@ -81,6 +86,9 @@ export function generateSystemInstructions(ctx: InstructionContext): string {
     spaceContext.daily = "";
     spaceContext.dailyFence = "```";
     spaceContext.dailyError = ensured.error;
+    spaceContext.sessionHandoffs = "";
+    spaceContext.sessionHandoffsFence = "```";
+    spaceContext.sessionHandoffsError = ensured.error;
   } else {
     const snapshot = readAgentInternalMemorySnapshot({ hibossDir, agentName: agent.name });
     if (snapshot.ok) {
@@ -102,6 +110,25 @@ export function generateSystemInstructions(ctx: InstructionContext): string {
       spaceContext.daily = "";
       spaceContext.dailyFence = "```";
       spaceContext.dailyError = dailySnapshot.error;
+    }
+
+    const sessionHandoffSnapshot = readAgentInternalSessionHandoffSnapshot({
+      hibossDir,
+      agentName: agent.name,
+      recentDays: ctx.sessionHandoffConfig?.recentDays,
+      perSessionMaxChars: ctx.sessionHandoffConfig?.perSessionMaxChars,
+    });
+    spaceContext.sessionHandoffRecentDays = ctx.sessionHandoffConfig?.recentDays ?? spaceContext.sessionHandoffRecentDays;
+    spaceContext.sessionHandoffPerSessionMaxChars =
+      ctx.sessionHandoffConfig?.perSessionMaxChars ?? spaceContext.sessionHandoffPerSessionMaxChars;
+    if (sessionHandoffSnapshot.ok) {
+      spaceContext.sessionHandoffs = sessionHandoffSnapshot.note;
+      spaceContext.sessionHandoffsFence = chooseFence(sessionHandoffSnapshot.note);
+      spaceContext.sessionHandoffsError = "";
+    } else {
+      spaceContext.sessionHandoffs = "";
+      spaceContext.sessionHandoffsFence = "```";
+      spaceContext.sessionHandoffsError = sessionHandoffSnapshot.error;
     }
   }
 

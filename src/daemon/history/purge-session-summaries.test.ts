@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { purgeSessionSummaryFields } from "./purge-session-summaries.js";
+import { DEFAULT_HISTORY_CHAT_DIR } from "./chat-scope-path.js";
 import { SESSION_FILE_VERSION } from "./types.js";
 
 function writeJson(filePath: string, payload: unknown): void {
@@ -16,8 +17,24 @@ test("purgeSessionSummaryFields removes summary field from history files", () =>
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "hiboss-summary-purge-test-"));
   try {
     const agentsDir = path.join(root, "agents");
-    const target = path.join(agentsDir, "alpha", "internal_space", "history", "2026-02-27", "s1.json");
-    const untouched = path.join(agentsDir, "beta", "internal_space", "history", "2026-02-27", "s2.json");
+    const target = path.join(
+      agentsDir,
+      "alpha",
+      "internal_space",
+      "history",
+      "2026-02-27",
+      DEFAULT_HISTORY_CHAT_DIR,
+      "s1.json",
+    );
+    const untouched = path.join(
+      agentsDir,
+      "beta",
+      "internal_space",
+      "history",
+      "2026-02-27",
+      "chat-1",
+      "s2.json",
+    );
 
     writeJson(target, {
       version: SESSION_FILE_VERSION,

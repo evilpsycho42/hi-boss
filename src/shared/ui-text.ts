@@ -2,7 +2,7 @@ import type { OneshotType } from "../envelope/types.js";
 import type { UiLocale } from "./ui-locale.js";
 
 interface TelegramCommandDescription {
-  command: "new" | "status" | "trace" | "provider" | "abort" | "isolated" | "clone" | "sessions" | "session";
+  command: "login" | "new" | "status" | "trace" | "provider" | "abort" | "isolated" | "clone" | "sessions" | "session";
   description: string;
 }
 
@@ -12,6 +12,14 @@ interface UiTextBundle {
   };
   channel: {
     accessDenied: string;
+    loginRequired: string;
+    loginUsage: string;
+    loginOk(params: {
+      tokenPrefix: string;
+      fromBoss: boolean;
+      userName: string;
+      role: "admin" | "user";
+    }): string;
     agentNotFound: string;
     sessionRefreshRequested: string;
     sessionSwitchInvalidId: string;
@@ -41,6 +49,16 @@ const EN_TEXT: UiTextBundle = {
   },
   channel: {
     accessDenied: "error: Access denied",
+    loginRequired: "error: Login required. Use /login <token>",
+    loginUsage: "Usage: /login <token>",
+    loginOk: ({ tokenPrefix, fromBoss, userName, role }) =>
+      [
+        "login: ok",
+        `user-name: ${userName}`,
+        `role: ${role}`,
+        `token-prefix: ${tokenPrefix}`,
+        `from-boss: ${fromBoss ? "true" : "false"}`,
+      ].join("\n"),
     agentNotFound: "error: Agent not found",
     sessionRefreshRequested: "Session refresh requested.",
     sessionSwitchInvalidId: "error: Invalid session id",
@@ -61,6 +79,7 @@ const EN_TEXT: UiTextBundle = {
   },
   telegram: {
     commandDescriptions: [
+      { command: "login", description: "Bind chat token for this bot" },
       { command: "new", description: "Start a new session" },
       { command: "status", description: "Show agent status" },
       { command: "trace", description: "Show current run trace" },
@@ -84,6 +103,16 @@ const ZH_CN_TEXT: UiTextBundle = {
   },
   channel: {
     accessDenied: "error: 没有权限",
+    loginRequired: "error: 需要先登录，请先执行 /login <token>",
+    loginUsage: "用法: /login <token>",
+    loginOk: ({ tokenPrefix, fromBoss, userName, role }) =>
+      [
+        "login: ok",
+        `user-name: ${userName}`,
+        `role: ${role}`,
+        `token-prefix: ${tokenPrefix}`,
+        `from-boss: ${fromBoss ? "true" : "false"}`,
+      ].join("\n"),
     agentNotFound: "error: 未找到对应 Agent",
     sessionRefreshRequested: "已请求刷新会话。",
     sessionSwitchInvalidId: "error: 会话 ID 无效",
@@ -104,6 +133,7 @@ const ZH_CN_TEXT: UiTextBundle = {
   },
   telegram: {
     commandDescriptions: [
+      { command: "login", description: "绑定当前聊天 token" },
       { command: "new", description: "开启新会话" },
       { command: "status", description: "查看 Agent 状态" },
       { command: "trace", description: "查看当前 run trace" },

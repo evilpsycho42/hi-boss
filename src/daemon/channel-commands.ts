@@ -396,12 +396,23 @@ export function createChannelCommandHandler(params: {
     }
 
     if (c.command === "abort" && typeof c.agentName === "string" && c.agentName) {
-      const cancelledRun = params.executor.abortCurrentRun(c.agentName, `${c.adapterType ?? "telegram"}:/abort`);
-      const clearedPendingCount = params.db.markDuePendingNonCronEnvelopesDoneForAgent(c.agentName, {
-        reason: "abort-clear",
-        origin: "internal",
-        outcome: "cleared-by-abort-command",
-      });
+      const adapterType = c.adapterType ?? "telegram";
+      const cancelledRun = params.executor.abortCurrentRunForChannel(
+        c.agentName,
+        adapterType,
+        c.chatId,
+        `${adapterType}:/abort`
+      );
+      const clearedPendingCount = params.db.markDuePendingNonCronEnvelopesDoneForAgentChannel(
+        c.agentName,
+        adapterType,
+        c.chatId,
+        {
+          reason: "abort-clear",
+          origin: "internal",
+          outcome: "cleared-by-abort-command",
+        }
+      );
       const lines = [
         ui.channel.abortOk,
         `agent-name: ${c.agentName}`,

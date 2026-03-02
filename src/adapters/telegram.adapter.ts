@@ -1,7 +1,6 @@
 import { Telegraf } from "telegraf";
 import type {
   ChatAdapter,
-  ChannelMessage,
   ChannelMessageHandler,
   MessageContent,
   ChannelCommandHandler,
@@ -26,19 +25,12 @@ import type { UiLocale } from "../shared/ui-locale.js";
 import { getUiText } from "../shared/ui-text.js";
 import { SESSIONS_CALLBACK_PREFIX } from "../shared/session-callbacks.js";
 
-/** Milliseconds to wait for additional album parts before flushing. */
-const MEDIA_GROUP_DEBOUNCE_MS = 500;
 /** Telegram typing status expires quickly; refresh every few seconds while active. */
 const TELEGRAM_TYPING_HEARTBEAT_MS = 4500;
 /** Prevent noisy logs if chat action repeatedly fails (e.g., chat blocked). */
 const TELEGRAM_TYPING_ERROR_THROTTLE_MS = 60_000;
 /**
  * Telegram adapter for the chat bot.
- *
- * Media groups (albums): When users send multiple images/videos together,
- * Telegram delivers each as a separate message sharing a `media_group_id`.
- * We buffer these for a short debounce window and emit a single combined
- * ChannelMessage with all attachments and the caption (if any).
  */
 export class TelegramAdapter implements ChatAdapter {
   readonly platform = "telegram";
@@ -49,10 +41,6 @@ export class TelegramAdapter implements ChatAdapter {
   private stopped = false;
   private started = false;
 
-  /** Buffered ChannelMessages keyed by media_group_id, waiting to be merged. */
-  private mediaGroupBuffer = new Map<string, ChannelMessage[]>();
-  /** Debounce timers keyed by media_group_id. */
-  private mediaGroupTimers = new Map<string, ReturnType<typeof setTimeout>>();
   /** Active typing heartbeat timers keyed by chat id. */
   private typingTimers = new Map<string, ReturnType<typeof setInterval>>();
   /** Guards against overlapping chat-action calls per chat id. */
@@ -294,61 +282,8 @@ export class TelegramAdapter implements ChatAdapter {
       ctx,
       mediaDir: this.mediaDir,
     });
-
-    // Check for media_group_id (albums)
-    const raw = ctx.message as unknown as { media_group_id?: string };
-    const groupId = raw.media_group_id;
-
-    if (groupId) {
-      // Buffer this message; debounce before flushing
-      let buffer = this.mediaGroupBuffer.get(groupId);
-      if (!buffer) {
-        buffer = [];
-        this.mediaGroupBuffer.set(groupId, buffer);
-      }
-      buffer.push(message);
-
-      // Reset the debounce timer for this group
-      const existing = this.mediaGroupTimers.get(groupId);
-      if (existing) clearTimeout(existing);
-
-      this.mediaGroupTimers.set(
-        groupId,
-        setTimeout(() => this.flushMediaGroup(groupId), MEDIA_GROUP_DEBOUNCE_MS),
-      );
-      return;
-    }
-
-    // Non-album message: dispatch immediately
     for (const handler of this.handlers) {
       await handler(message);
-    }
-  }
-
-  /**
-   * Merge buffered album messages into a single ChannelMessage and dispatch.
-   */
-  private async flushMediaGroup(groupId: string): Promise<void> {
-    this.mediaGroupTimers.delete(groupId);
-    const messages = this.mediaGroupBuffer.get(groupId);
-    this.mediaGroupBuffer.delete(groupId);
-    if (!messages || messages.length === 0) return;
-
-    // Use the first message as the base (lowest message_id = earliest)
-    messages.sort((a, b) => Number(a.id) - Number(b.id));
-    const merged = { ...messages[0] };
-
-    // Combine text: use the caption from whichever message has it
-    const textSource = messages.find((m) => m.content.text);
-    const allAttachments = messages.flatMap((m) => m.content.attachments ?? []);
-
-    merged.content = {
-      text: textSource?.content.text,
-      attachments: allAttachments.length > 0 ? allAttachments : undefined,
-    };
-
-    for (const handler of this.handlers) {
-      await handler(merged);
     }
   }
 
@@ -478,9 +413,6 @@ export class TelegramAdapter implements ChatAdapter {
   async stop(): Promise<void> {
     this.stopped = true;
     this.started = false;
-    for (const timer of this.mediaGroupTimers.values()) clearTimeout(timer);
-    this.mediaGroupTimers.clear();
-    this.mediaGroupBuffer.clear();
     for (const timer of this.typingTimers.values()) clearInterval(timer);
     this.typingTimers.clear();
     this.typingInFlight.clear();

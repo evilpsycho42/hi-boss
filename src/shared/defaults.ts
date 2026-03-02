@@ -2,7 +2,6 @@ import * as os from "os";
 import * as path from "path";
 import type { PermissionPolicy } from "./permissions.js";
 import type { UserPermissionPolicy } from "./user-permissions.js";
-import { INTERNAL_VERSION } from "./version.js";
 
 // ==================== Hi-Boss Paths ====================
 
@@ -27,6 +26,9 @@ export function getDefaultMediaDir(): string {
 export const DEFAULT_MEMORY_LONGTERM_MAX_CHARS = 12_000 as const;
 export const DEFAULT_MEMORY_SHORTTERM_PER_DAY_MAX_CHARS = 4_000 as const;
 export const DEFAULT_MEMORY_SHORTTERM_DAYS = 2 as const;
+export const DEFAULT_SESSION_HANDOFF_RECENT_DAYS = 3 as const;
+export const DEFAULT_SESSION_HANDOFF_PER_SESSION_MAX_CHARS = 24_000 as const;
+export const DEFAULT_SESSION_HANDOFF_MAX_RETRIES = 3 as const;
 
 // ==================== Agent Defaults ====================
 
@@ -77,7 +79,6 @@ export function getDefaultSetupWorkspace(): string {
 // ==================== Permissions ====================
 
 export const DEFAULT_PERMISSION_POLICY: PermissionPolicy = {
-  version: INTERNAL_VERSION,
   operations: {
     // Envelope operations (agents)
     "envelope.send": "restricted",
@@ -126,23 +127,5 @@ export const DEFAULT_PERMISSION_POLICY: PermissionPolicy = {
 };
 
 export const DEFAULT_USER_PERMISSION_POLICY: UserPermissionPolicy = {
-  version: INTERNAL_VERSION,
-  roles: {
-    boss: {
-      allow: ["channel.command.*", "channel.message.send"],
-    },
-    operator: {
-      allow: ["channel.command.status", "channel.command.sessions", "channel.message.send"],
-    },
-    viewer: {
-      allow: ["channel.command.status"],
-    },
-    blocked: {
-      allow: [],
-    },
-  },
-  bindings: [],
-  defaults: {
-    unmappedUserRole: "blocked",
-  },
+  tokens: [],
 };

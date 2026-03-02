@@ -30,6 +30,9 @@ Tables (high level):
 - `adapter_boss_ids_<adapter-type>`: comma-separated boss identity list (e.g., `adapter_boss_ids_telegram`)
 - `runtime_session_concurrency_per_agent`: per-agent session concurrency limit
 - `runtime_session_concurrency_global`: global session concurrency limit
+- `runtime_session_handoff_recent_days`: handoff injection day window
+- `runtime_session_handoff_per_session_max_chars`: handoff injection char budget per session
+- `runtime_session_handoff_max_retries`: async handoff generation retry limit
 
 ## Key invariants
 

@@ -7,6 +7,7 @@ import test from "node:test";
 import { ConversationHistory } from "./conversation-history.js";
 import { closeActiveSession, closeSessionByPath } from "./session-close.js";
 import { readSessionFile } from "./session-file-io.js";
+import { getSessionMarkdownPath, readSessionMarkdownFile } from "./session-markdown-file-io.js";
 
 async function withTempAgentsDir(run: (agentsDir: string) => Promise<void> | void): Promise<void> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "hiboss-session-close-test-"));
@@ -30,6 +31,11 @@ test("closeSessionByPath sets endedAtMs", async () => {
     const session = readSessionFile(filePath!);
     assert.ok(session);
     assert.equal(session?.endedAtMs, endedAtMs);
+
+    const markdown = readSessionMarkdownFile(getSessionMarkdownPath(filePath!));
+    assert.ok(markdown);
+    assert.equal(markdown?.frontmatter.handoffStatus, "pending");
+    assert.notEqual(markdown?.frontmatter.endedAt, "");
   });
 });
 

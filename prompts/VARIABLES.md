@@ -23,10 +23,15 @@ Notes:
 | `internalSpace.daily` | string | Snapshot of recent `{{hiboss.dir}}/agents/{{agent.name}}/internal_space/memories/YYYY-MM-DD.md` files (or empty) |
 | `internalSpace.dailyFence` | string | Markdown code fence delimiter for `internalSpace.daily` (e.g., ``` or ````) |
 | `internalSpace.dailyError` | string | Daily memory snapshot error message (or empty) |
+| `internalSpace.sessionHandoffs` | string | Snapshot of recent session handoffs from `{{hiboss.dir}}/agents/{{agent.name}}/internal_space/history/**/<session-id>.md` (or empty) |
+| `internalSpace.sessionHandoffsFence` | string | Markdown code fence delimiter for `internalSpace.sessionHandoffs` (e.g., ``` or ````) |
+| `internalSpace.sessionHandoffsError` | string | Session handoff snapshot error message (or empty) |
 | `internalSpace.longtermMaxChars` | number | Truncation limit (chars) for injected `internal_space/MEMORY.md` snapshot |
 | `internalSpace.dailyRecentFiles` | number | How many recent daily memory files are injected (newest-first by filename) |
 | `internalSpace.dailyPerFileMaxChars` | number | Truncation limit (chars) per injected daily file |
 | `internalSpace.dailyMaxChars` | number | Truncation limit (chars) for the combined injected daily snapshot |
+| `internalSpace.sessionHandoffRecentDays` | number | How many recent history date directories are scanned for handoff injection |
+| `internalSpace.sessionHandoffPerSessionMaxChars` | number | Truncation limit (chars) per injected session handoff item |
 | `environment.time` | string | Current time formatted in boss timezone offset (ISO 8601) |
 | `environment.bossTimezone` | string | Boss timezone (IANA) used for displayed timestamps |
 | `environment.daemonTimezone` | string | Daemon host timezone (IANA) used by shell commands |
@@ -90,6 +95,7 @@ Notes:
 | `envelopes[].deliverAt.present` | boolean | Whether deliver-at is present |
 | `envelopes[].deliverAt.iso` | string | Deliver-at formatted in boss timezone offset (ISO 8601) (or empty) |
 | `envelopes[].cronId` | string | Cron schedule id (short id) if this envelope was created by a cron schedule (or empty) |
+| `envelopes[].chatScope` | string | Agent chat id/session scope for agent-origin routing (or empty) |
 | `envelopes[].content.text` | string | Text content (or `(none)`) |
 | `envelopes[].content.attachments` | array | Attachment objects |
 | `envelopes[].content.attachments[].type` | string | one of: `image`, `video`, `audio`, `file` |

@@ -2,7 +2,7 @@
  * Session history types — per-session JSON file schema.
  *
  * Layout:
- *   {{agentsDir}}/<agent>/internal_space/history/YYYY-MM-DD/<sessionId>.json
+ *   {{agentsDir}}/<agent>/internal_space/history/YYYY-MM-DD/<chat-id>/<sessionId>.json
  */
 
 import type { Envelope, EnvelopeOrigin, EnvelopeStatus } from "../../envelope/types.js";

@@ -58,13 +58,14 @@ Permission note:
 - Sending to `channel:<adapter>:...` is only allowed if the sending agent is bound to that adapter type (enforced in `envelope.send`).
 
 Interrupt-now note:
-- `hiboss envelope send --interrupt-now --to agent:<name>` is a priority mode that interrupts the target agent’s current/queued work and creates the new envelope with higher queue priority.
+- `hiboss envelope send --interrupt-now --to agent:<name>:new|<chat-id>` is a priority mode that interrupts the target agent’s current/queued work and creates the new envelope with higher queue priority.
 - Existing unread pending envelopes are preserved; no queue-clear is performed.
 - `--interrupt-now` is mutually exclusive with `--deliver-at`.
 
 Chat scope note:
 - Agent-origin sends stamp `envelope.metadata.chatScope` for session routing:
-  - DM: `agent-dm:<sorted-agent-a>:<sorted-agent-b>`
+  - New agent chat: generated `agent-chat-...` (via `agent:<name>:new`)
+  - Existing agent chat: caller-provided `<chat-id>` (via `agent:<name>:<chat-id>`)
   - Team: `team:<team-name>`
 - Executor resolves agent-origin envelopes with `chatScope` through `channel_session_bindings` with `adapter_type="internal"`.
 - Agent-origin envelopes without `chatScope` continue to use default per-agent scope (backward compatibility).

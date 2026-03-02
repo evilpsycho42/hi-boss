@@ -1,37 +1,31 @@
-import { INTERNAL_VERSION } from "./version.js";
+import { AGENT_NAME_ERROR_MESSAGE, isValidAgentName } from "./validation.js";
 
-export interface UserPermissionRoleDefinition {
-  allow: string[];
-}
+export type UserPermissionRole = "admin" | "user";
 
 export interface UserPermissionBinding {
   adapterType: string;
+  uid: string;
+}
+
+export interface UserPermissionUser {
+  name: string;
   token: string;
-  userId?: string;
-  username?: string;
-  role: string;
+  role: UserPermissionRole;
+  agents?: string[];
+  bindings?: UserPermissionBinding[];
 }
 
 export interface UserPermissionPolicy {
-  version: typeof INTERNAL_VERSION;
-  roles: Record<string, UserPermissionRoleDefinition>;
-  bindings: UserPermissionBinding[];
-  defaults: {
-    unmappedUserRole: string;
-  };
-}
-
-export interface UserPermissionPrincipal {
-  adapterType: string;
-  channelUserId?: string;
-  channelUsername?: string;
+  tokens: UserPermissionUser[];
 }
 
 export interface UserPermissionDecision {
   allowed: boolean;
-  role: string;
   token?: string;
-  action: string;
+  role?: UserPermissionRole;
+  userName?: string;
+  targetAgentName: string;
+  fromBoss: boolean;
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -42,23 +36,11 @@ function fail(fieldPath: string, message: string): never {
   throw new Error(`Invalid user permission policy (${fieldPath}): ${message}`);
 }
 
-function normalizeRole(raw: string): string {
-  return raw.trim().toLowerCase();
-}
-
-function normalizeAdapterType(raw: string): string {
-  return raw.trim().toLowerCase();
-}
-
-function normalizeUsername(raw: string): string {
-  return raw.trim().replace(/^@/, "").toLowerCase();
-}
-
-function normalizeActionPattern(raw: string): string {
-  return raw.trim().toLowerCase();
-}
-
 function normalizeToken(raw: string): string {
+  return raw.trim().toLowerCase();
+}
+
+function normalizeAgentName(raw: string): string {
   return raw.trim().toLowerCase();
 }
 
@@ -66,213 +48,157 @@ function isValidToken(token: string): boolean {
   return /^[0-9a-f]{32}$/.test(token);
 }
 
-function isValidActionPattern(value: string): boolean {
-  if (!value) return false;
-  if (value === "*") return true;
-
-  const segments = value.split(".");
-  if (segments.length < 1) return false;
-
-  for (let index = 0; index < segments.length; index++) {
-    const segment = segments[index]!;
-    if (segment === "*") {
-      // Wildcards are supported only as the last segment (e.g. channel.command.*)
-      return index === segments.length - 1;
-    }
-    if (!/^[a-z0-9-]+$/.test(segment)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-function parseRoles(raw: unknown): UserPermissionPolicy["roles"] {
-  if (!isObject(raw)) {
-    fail("roles", "must be an object");
-  }
-
-  const roles: UserPermissionPolicy["roles"] = {};
-  const seen = new Set<string>();
-
-  for (const [rawRoleName, rawRoleDef] of Object.entries(raw)) {
-    const roleName = normalizeRole(rawRoleName);
-    if (!roleName) {
-      fail("roles", "role name must not be empty");
-    }
-    if (seen.has(roleName)) {
-      fail(`roles.${rawRoleName}`, "duplicate role name");
-    }
-    seen.add(roleName);
-
-    if (!isObject(rawRoleDef)) {
-      fail(`roles.${rawRoleName}`, "must be an object");
-    }
-
-    const allowRaw = rawRoleDef.allow;
-    if (!Array.isArray(allowRaw)) {
-      fail(`roles.${rawRoleName}.allow`, "must be an array");
-    }
-
-    const allow: string[] = [];
-    const patternSeen = new Set<string>();
-    for (let index = 0; index < allowRaw.length; index++) {
-      const value = allowRaw[index];
-      if (typeof value !== "string") {
-        fail(`roles.${rawRoleName}.allow[${index}]`, "must be a string");
-      }
-      const pattern = normalizeActionPattern(value);
-      if (!isValidActionPattern(pattern)) {
-        fail(`roles.${rawRoleName}.allow[${index}]`, "must be a valid action pattern");
-      }
-      if (patternSeen.has(pattern)) continue;
-      patternSeen.add(pattern);
-      allow.push(pattern);
-    }
-
-    roles[roleName] = { allow };
-  }
-
-  if (Object.keys(roles).length < 1) {
-    fail("roles", "must define at least one role");
-  }
-  if (!roles.boss) {
-    fail("roles.boss", "role 'boss' is required");
-  }
-
-  return roles;
-}
-
-function parseBindings(raw: unknown, roles: UserPermissionPolicy["roles"]): UserPermissionBinding[] {
+function parseBindings(raw: unknown, fieldPath: string): UserPermissionBinding[] {
   if (raw === undefined || raw === null) {
     return [];
   }
   if (!Array.isArray(raw)) {
-    fail("bindings", "must be an array");
+    fail(fieldPath, "must be an array");
   }
 
   const bindings: UserPermissionBinding[] = [];
-  const userIdKeys = new Set<string>();
-  const usernameKeys = new Set<string>();
+  const seen = new Set<string>();
+  for (let index = 0; index < raw.length; index++) {
+    const value = raw[index];
+    if (!isObject(value)) {
+      fail(`${fieldPath}[${index}]`, "must be an object");
+    }
+    const adapterTypeRaw = typeof value["adapter-type"] === "string"
+      ? value["adapter-type"]
+      : typeof value.adapterType === "string"
+        ? value.adapterType
+        : "";
+    const adapterType = adapterTypeRaw.trim().toLowerCase();
+    if (!adapterType) {
+      fail(`${fieldPath}[${index}].adapter-type`, "is required");
+    }
+
+    const uid = typeof value.uid === "string"
+      ? value.uid.trim().replace(/^@/, "").toLowerCase()
+      : "";
+    if (!uid) {
+      fail(`${fieldPath}[${index}].uid`, "is required");
+    }
+
+    const key = `${adapterType}\u0000${uid}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    bindings.push({ adapterType, uid });
+  }
+  return bindings;
+}
+
+function parseAgentNames(raw: unknown, fieldPath: string): string[] {
+  if (!Array.isArray(raw)) {
+    fail(fieldPath, "must be an array");
+  }
+
+  const names: string[] = [];
+  const seen = new Set<string>();
+
+  for (let index = 0; index < raw.length; index++) {
+    const value = raw[index];
+    if (typeof value !== "string") {
+      fail(`${fieldPath}[${index}]`, "must be a string");
+    }
+
+    const normalized = normalizeAgentName(value);
+    if (!normalized) {
+      fail(`${fieldPath}[${index}]`, "must not be empty");
+    }
+    if (normalized === "*") {
+      fail(`${fieldPath}[${index}]`, "user role must list concrete agent names");
+    }
+
+    if (!isValidAgentName(normalized)) {
+      fail(`${fieldPath}[${index}]`, AGENT_NAME_ERROR_MESSAGE);
+    }
+
+    if (seen.has(normalized)) continue;
+    seen.add(normalized);
+    names.push(normalized);
+  }
+
+  if (names.length < 1) {
+    fail(fieldPath, "must contain at least one agent name");
+  }
+
+  return names;
+}
+
+function parseUsers(raw: unknown): UserPermissionUser[] {
+  if (!Array.isArray(raw)) {
+    fail("tokens", "must be an array");
+  }
+
+  const users: UserPermissionUser[] = [];
+  const tokenKeys = new Set<string>();
 
   for (let index = 0; index < raw.length; index++) {
     const item = raw[index];
     if (!isObject(item)) {
-      fail(`bindings[${index}]`, "must be an object");
+      fail(`tokens[${index}]`, "must be an object");
     }
 
-    const adapterTypeRaw =
-      typeof item["adapter-type"] === "string"
-        ? item["adapter-type"]
-        : typeof item.adapterType === "string"
-          ? item.adapterType
-          : "";
-    const adapterType = normalizeAdapterType(adapterTypeRaw);
-    if (!adapterType) {
-      fail(`bindings[${index}].adapter-type`, "is required");
-    }
-
-    const roleRaw = typeof item.role === "string" ? item.role : "";
-    const role = normalizeRole(roleRaw);
-    if (!role) {
-      fail(`bindings[${index}].role`, "is required");
-    }
-    if (!roles[role]) {
-      fail(`bindings[${index}].role`, `unknown role '${roleRaw}'`);
+    const name = typeof item.name === "string" ? item.name.trim() : "";
+    if (!name) {
+      fail(`tokens[${index}].name`, "is required");
     }
 
     const tokenRaw = typeof item.token === "string" ? item.token : "";
     const token = normalizeToken(tokenRaw);
     if (!token) {
-      fail(`bindings[${index}].token`, "is required");
+      fail(`tokens[${index}].token`, "is required");
     }
     if (!isValidToken(token)) {
-      fail(`bindings[${index}].token`, "must be 32 lowercase hex characters");
+      fail(`tokens[${index}].token`, "must be 32 lowercase hex characters");
+    }
+    if (tokenKeys.has(token)) {
+      fail(`tokens[${index}].token`, "duplicate token");
     }
 
-    const userIdRaw =
-      typeof item["user-id"] === "string"
-        ? item["user-id"]
-        : typeof item.userId === "string"
-          ? item.userId
-          : "";
-    const userId = userIdRaw.trim();
-    const usernameRaw = typeof item.username === "string" ? item.username : "";
-    const username = normalizeUsername(usernameRaw);
-
-    if (!userId && !username) {
-      fail(`bindings[${index}]`, "must include user-id or username");
+    const roleRaw = typeof item.role === "string" ? item.role.trim().toLowerCase() : "";
+    if (roleRaw !== "admin" && roleRaw !== "user") {
+      fail(`tokens[${index}].role`, "must be admin or user");
     }
 
-    if (userId) {
-      const key = `${adapterType}\u0000${userId}`;
-      if (userIdKeys.has(key)) {
-        fail(`bindings[${index}].user-id`, "duplicate binding for adapter-type + user-id");
+    const bindings = parseBindings(item.bindings, `tokens[${index}].bindings`);
+
+    if (roleRaw === "admin") {
+      if (item.agents !== undefined && item.agents !== null) {
+        fail(`tokens[${index}].agents`, "must not be set when role is admin");
       }
-      userIdKeys.add(key);
+      users.push({
+        name,
+        token,
+        role: "admin",
+        ...(bindings.length > 0 ? { bindings } : {}),
+      });
+    } else {
+      const agents = parseAgentNames(item.agents, `tokens[${index}].agents`);
+      users.push({
+        name,
+        token,
+        role: "user",
+        agents,
+        ...(bindings.length > 0 ? { bindings } : {}),
+      });
     }
-    if (username) {
-      const key = `${adapterType}\u0000${username}`;
-      if (usernameKeys.has(key)) {
-        fail(`bindings[${index}].username`, "duplicate binding for adapter-type + username");
-      }
-      usernameKeys.add(key);
-    }
 
-    bindings.push({
-      adapterType,
-      token,
-      ...(userId ? { userId } : {}),
-      ...(username ? { username } : {}),
-      role,
-    });
+    tokenKeys.add(token);
   }
 
-  return bindings;
-}
-
-function parseDefaults(
-  raw: unknown,
-  roles: UserPermissionPolicy["roles"]
-): UserPermissionPolicy["defaults"] {
-  if (!isObject(raw)) {
-    fail("defaults", "must be an object");
-  }
-
-  const rawRole =
-    typeof raw["unmapped-user-role"] === "string"
-      ? raw["unmapped-user-role"]
-      : typeof raw.unmappedUserRole === "string"
-        ? raw.unmappedUserRole
-        : "";
-  const unmappedUserRole = normalizeRole(rawRole);
-  if (!unmappedUserRole) {
-    fail("defaults.unmapped-user-role", "is required");
-  }
-  if (!roles[unmappedUserRole]) {
-    fail("defaults.unmapped-user-role", `unknown role '${rawRole}'`);
-  }
-
-  return { unmappedUserRole };
+  return users;
 }
 
 export function parseUserPermissionPolicyFromObject(parsed: unknown): UserPermissionPolicy {
   if (!isObject(parsed)) {
     fail("root", "must be an object");
   }
-  if (parsed.version !== INTERNAL_VERSION) {
-    fail("version", `expected ${INTERNAL_VERSION}`);
-  }
-
-  const roles = parseRoles(parsed.roles);
-  const bindings = parseBindings(parsed.bindings, roles);
-  const defaults = parseDefaults(parsed.defaults, roles);
+  const users = parseUsers(parsed.tokens);
 
   return {
-    version: INTERNAL_VERSION,
-    roles,
-    bindings,
-    defaults,
+    tokens: users,
   };
 }
 
@@ -287,61 +213,45 @@ export function parseUserPermissionPolicy(json: string): UserPermissionPolicy {
   return parseUserPermissionPolicyFromObject(parsed);
 }
 
-function actionMatches(pattern: string, action: string): boolean {
-  if (pattern === "*") return true;
-  if (pattern.endsWith(".*")) {
-    const prefix = pattern.slice(0, -2);
-    return action === prefix || action.startsWith(`${prefix}.`);
-  }
-  return pattern === action;
+export function resolveUserPermissionUserByToken(
+  policy: UserPermissionPolicy,
+  tokenRaw: string
+): UserPermissionUser | undefined {
+  const token = normalizeToken(tokenRaw);
+  if (!token) return undefined;
+  return policy.tokens.find((user) => user.token === token);
 }
 
-export function resolveUserPermissionRole(
+export function evaluateUserPermissionByToken(
   policy: UserPermissionPolicy,
-  principal: UserPermissionPrincipal
-): { role: string; token?: string } {
-
-  const adapterType = normalizeAdapterType(principal.adapterType);
-  const userId = typeof principal.channelUserId === "string" ? principal.channelUserId.trim() : "";
-  const username =
-    typeof principal.channelUsername === "string"
-      ? normalizeUsername(principal.channelUsername)
-      : "";
-
-  if (userId) {
-    const matchedById = policy.bindings.find(
-      (binding) => binding.adapterType === adapterType && binding.userId === userId
-    );
-    if (matchedById) return { role: matchedById.role, token: matchedById.token };
-  }
-
-  if (username) {
-    const matchedByUsername = policy.bindings.find(
-      (binding) => binding.adapterType === adapterType && binding.username === username
-    );
-    if (matchedByUsername) return { role: matchedByUsername.role, token: matchedByUsername.token };
-  }
-
-  return { role: policy.defaults.unmappedUserRole };
-}
-
-export function evaluateUserPermission(
-  policy: UserPermissionPolicy,
-  principal: UserPermissionPrincipal,
-  actionRaw: string
+  tokenRaw: string,
+  targetAgentNameRaw: string
 ): UserPermissionDecision {
-  const action = normalizeActionPattern(actionRaw);
-  const { role, token } = resolveUserPermissionRole(policy, principal);
-  const roleDef = policy.roles[role];
-  if (!roleDef) {
-    return { allowed: false, role, token, action };
+  const targetAgentName = normalizeAgentName(targetAgentNameRaw);
+  const user = resolveUserPermissionUserByToken(policy, tokenRaw);
+
+  if (!user) {
+    return { allowed: false, targetAgentName, fromBoss: false };
   }
 
-  const allowed = roleDef.allow.some((pattern) => actionMatches(pattern, action));
+  if (user.role === "admin") {
+    return {
+      allowed: true,
+      token: user.token,
+      role: user.role,
+      userName: user.name,
+      targetAgentName,
+      fromBoss: true,
+    };
+  }
+
+  const allowed = user.agents?.includes(targetAgentName) ?? false;
   return {
     allowed,
-    role,
-    token,
-    action,
+    token: user.token,
+    role: user.role,
+    userName: user.name,
+    targetAgentName,
+    fromBoss: false,
   };
 }

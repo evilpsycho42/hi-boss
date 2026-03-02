@@ -8,17 +8,21 @@ import { INTERNAL_VERSION } from "./version.js";
 function buildSettingsJson(extra: Record<string, unknown>): string {
   return JSON.stringify({
     version: INTERNAL_VERSION,
-    boss: {
-      name: "boss",
-      timezone: "UTC",
-    },
-    admin: {
-      token: "1234567890abcdef",
-    },
-    telegram: {
-      "boss-ids": ["boss_user"],
-    },
-    "permission-policy": DEFAULT_PERMISSION_POLICY,
+    timezone: "UTC",
+    "permission-policy": DEFAULT_PERMISSION_POLICY.operations,
+    tokens: [
+      {
+        name: "Ethan",
+        token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        role: "admin",
+        bindings: [
+          {
+            "adapter-type": "telegram",
+            uid: "ethanelift",
+          },
+        ],
+      },
+    ],
     agents: [
       {
         name: "nex",
@@ -57,49 +61,144 @@ function buildSettingsJson(extra: Record<string, unknown>): string {
 test("parseSettingsJson accepts valid user-permission-policy", () => {
   const settings = parseSettingsJson(
     buildSettingsJson({
-      "user-permission-policy": {
-        version: INTERNAL_VERSION,
-        roles: {
-          boss: { allow: ["channel.command.*", "channel.message.send"] },
-          operator: { allow: ["channel.command.status"] },
+      tokens: [
+        {
+          name: "Ethan",
+          token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          role: "admin",
         },
-        bindings: [
-          {
-            "adapter-type": "telegram",
-            "user-id": "u-1",
-            token: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            role: "operator",
-          },
-        ],
-        defaults: {
-          "unmapped-user-role": "operator",
+        {
+          name: "LPC",
+          token: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          role: "user",
+          agents: ["nex"],
+          bindings: [
+            {
+              "adapter-type": "telegram",
+              uid: "lpcfjx",
+            },
+          ],
+        },
+      ],
+    })
+  );
+
+  assert.equal(settings.tokens[1]?.token, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+  assert.equal(settings.tokens[1]?.role, "user");
+  assert.deepEqual(settings.tokens[1]?.agents, ["nex"]);
+  assert.equal(settings.tokens[1]?.bindings?.[0]?.uid, "lpcfjx");
+});
+
+test("parseSettingsJson rejects invalid tokens policy", () => {
+  assert.throws(
+    () =>
+      parseSettingsJson(
+        buildSettingsJson({
+          tokens: [
+            {
+              name: "Ethan",
+              token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              role: "admin",
+            },
+            {
+              name: "Bad",
+              token: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+              role: "user",
+            },
+          ],
+        })
+      ),
+    /tokens/i
+  );
+});
+
+test("parseSettingsJson accepts runtime deployment config", () => {
+  const settings = parseSettingsJson(
+    buildSettingsJson({
+      runtime: {
+        "session-concurrency": {
+          "per-agent": 4,
+          global: 16,
+        },
+        deployment: {
+          mode: "docker",
+          "output-dir": "/hiboss/services/hiboss-daemon",
         },
       },
     })
   );
 
-  assert.equal(settings.userPermissionPolicy.defaults.unmappedUserRole, "operator");
-  assert.equal(settings.userPermissionPolicy.bindings[0]?.userId, "u-1");
-  assert.equal(settings.userPermissionPolicy.bindings[0]?.token, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+  assert.equal(settings.runtime?.deployment?.mode, "docker");
+  assert.equal(settings.runtime?.deployment?.outputDir, "/hiboss/services/hiboss-daemon");
 });
 
-test("parseSettingsJson rejects invalid user-permission-policy", () => {
+test("parseSettingsJson accepts runtime session handoff config", () => {
+  const settings = parseSettingsJson(
+    buildSettingsJson({
+      runtime: {
+        "session-handoff": {
+          "recent-days": 5,
+          "per-session-max-chars": 24000,
+          "max-retries": 4,
+        },
+      },
+    }),
+  );
+
+  assert.equal(settings.runtime?.sessionHandoff?.recentDays, 5);
+  assert.equal(settings.runtime?.sessionHandoff?.perSessionMaxChars, 24000);
+  assert.equal(settings.runtime?.sessionHandoff?.maxRetries, 4);
+});
+
+test("parseSettingsJson rejects invalid runtime session handoff config", () => {
   assert.throws(
     () =>
       parseSettingsJson(
         buildSettingsJson({
-          "user-permission-policy": {
-            version: INTERNAL_VERSION,
-            roles: {
-              boss: { allow: ["channel.command.*"] },
+          runtime: {
+            "session-handoff": {
+              "recent-days": 0,
             },
-            bindings: [],
-            defaults: {
-              "unmapped-user-role": "missing-role",
+          },
+        }),
+      ),
+    /runtime\.session-handoff\.recent-days/i,
+  );
+});
+
+test("parseSettingsJson rejects runtime deployment with relative output-dir", () => {
+  assert.throws(
+    () =>
+      parseSettingsJson(
+        buildSettingsJson({
+          runtime: {
+            deployment: {
+              mode: "docker",
+              "output-dir": "services/hiboss-daemon",
             },
           },
         })
       ),
-    /user-permission-policy/i
+    /runtime\.deployment\.output-dir/i
   );
+});
+
+test("parseSettingsJson accepts global providerCli claude env", () => {
+  const settings = parseSettingsJson(
+    buildSettingsJson({
+      providerCli: {
+        claude: {
+          env: {
+            ANTHROPIC_BASE_URL: "https://cch.ethanelift.com",
+            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+            CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS: "1",
+          },
+        },
+      },
+    })
+  );
+
+  assert.equal(settings.providerCli?.claude?.env?.ANTHROPIC_BASE_URL, "https://cch.ethanelift.com");
+  assert.equal(settings.providerCli?.claude?.env?.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC, "1");
+  assert.equal(settings.providerCli?.claude?.env?.CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS, "1");
 });

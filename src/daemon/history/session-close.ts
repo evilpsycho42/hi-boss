@@ -1,12 +1,13 @@
 /**
  * Session close helpers.
  *
- * Session close is intentionally summary-free. We only mark endedAtMs so
- * session lifecycle bookkeeping remains correct.
+ * Session close marks endedAtMs and updates markdown handoff state so
+ * asynchronous summary/handoff generation can run later.
  */
 
 import type { ConversationHistory } from "./conversation-history.js";
 import { closeSessionFile } from "./session-file-io.js";
+import { markSessionMarkdownClosedBySessionJsonPath } from "./session-markdown-file-io.js";
 import { errorMessage, logEvent } from "../../shared/daemon-log.js";
 
 export function closeSessionByPath(params: {
@@ -16,6 +17,10 @@ export function closeSessionByPath(params: {
 }): void {
   const endedAtMs = params.endedAtMs ?? Date.now();
   closeSessionFile(params.filePath, endedAtMs);
+  markSessionMarkdownClosedBySessionJsonPath({
+    sessionJsonPath: params.filePath,
+    endedAtMs,
+  });
   logEvent("info", "session-closed", {
     "agent-name": params.agentName,
     "file-path": params.filePath,

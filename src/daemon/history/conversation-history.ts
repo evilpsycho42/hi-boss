@@ -2,7 +2,7 @@
  * Conversation history — appends envelope lifecycle events to per-session JSON files.
  *
  * Layout:
- *   {{agentsDir}}/<agent>/internal_space/history/YYYY-MM-DD/<sessionId>.json
+ *   {{agentsDir}}/<agent>/internal_space/history/YYYY-MM-DD/<chat-id>/<sessionId>.json
  *
  * Each session is a self-contained JSON file with an events array.
  * Session IDs are 8-char hex short IDs (UUID-based).
@@ -18,11 +18,23 @@ import { logEvent, errorMessage } from "../../shared/daemon-log.js";
 import { formatShortId } from "../../shared/id-format.js";
 import type { SessionStatusChangeInput, SessionHistoryEvent } from "./types.js";
 import {
+  DEFAULT_HISTORY_CHAT_DIR,
+  normalizeHistoryChatDir,
+  resolveEnvelopeChatId,
+} from "./chat-scope-path.js";
+import {
   createSessionFile,
   appendEvent,
   readSessionFile,
   listSessionFiles,
 } from "./session-file-io.js";
+import {
+  appendSessionMarkdownConversation,
+  createSessionMarkdownFile,
+  ensureSessionMarkdownForJson,
+  extractEnvelopeContentText,
+  getSessionMarkdownPath,
+} from "./session-markdown-file-io.js";
 
 export interface ConversationHistoryOptions {
   agentsDir: string;
@@ -32,11 +44,12 @@ export interface ConversationHistoryOptions {
 export class ConversationHistory {
   private agentsDir: string;
   private timezone: string;
-
   /** Current session ID per agent. */
   private activeSessionIds: Map<string, string> = new Map();
   /** Date directory string (YYYY-MM-DD) for each agent's active session. */
   private activeSessionDates: Map<string, string> = new Map();
+  /** Chat directory string for each agent's active session. */
+  private activeSessionChatDirs: Map<string, string> = new Map();
   /** Per-agent write serialization to prevent concurrent JSON read-modify-write corruption. */
   private fileLocks: Map<string, Promise<void>> = new Map();
 
@@ -77,7 +90,7 @@ export class ConversationHistory {
         envelope,
       };
 
-      this.appendEventForAgents(participants, event);
+      this.appendEventForAgents(participants, event, envelope);
     } catch (err) {
       logEvent("error", "history-append-failed", {
         "envelope-id": params.envelope.id,
@@ -102,7 +115,7 @@ export class ConversationHistory {
         outcome: input.outcome,
       };
 
-      this.appendEventForAgents(participants, event);
+      this.appendEventForAgents(participants, event, input.envelope);
     } catch (err) {
       logEvent("error", "history-status-append-failed", {
         "envelope-id": input.envelope.id,
@@ -115,15 +128,22 @@ export class ConversationHistory {
    * Start a new history session for an agent. Returns the new session ID.
    * Called by the executor when creating a new session.
    */
-  startSession(agentName: string): string {
+  startSession(agentName: string, chatId?: string): string {
     try {
       const sessionId = formatShortId(crypto.randomUUID());
       const now = Date.now();
       const dateStr = this.getDateString(now);
+      const chatDir = normalizeHistoryChatDir(chatId);
 
-      const filePath = this.buildSessionFilePath(agentName, dateStr, sessionId);
+      const filePath = this.buildSessionFilePath(agentName, dateStr, chatDir, sessionId);
       createSessionFile({
         filePath,
+        sessionId,
+        agentName,
+        startedAtMs: now,
+      });
+      createSessionMarkdownFile({
+        filePath: getSessionMarkdownPath(filePath),
         sessionId,
         agentName,
         startedAtMs: now,
@@ -131,6 +151,7 @@ export class ConversationHistory {
 
       this.activeSessionIds.set(agentName, sessionId);
       this.activeSessionDates.set(agentName, dateStr);
+      this.activeSessionChatDirs.set(agentName, chatDir);
 
       return sessionId;
     } catch (err) {
@@ -142,6 +163,7 @@ export class ConversationHistory {
       const fallbackId = formatShortId(crypto.randomUUID());
       this.activeSessionIds.set(agentName, fallbackId);
       this.activeSessionDates.set(agentName, this.getDateString(Date.now()));
+      this.activeSessionChatDirs.set(agentName, DEFAULT_HISTORY_CHAT_DIR);
       return fallbackId;
     }
   }
@@ -156,8 +178,13 @@ export class ConversationHistory {
   /**
    * Get the full file path for a session.
    */
-  getSessionFilePath(agentName: string, sessionId: string, dateStr: string): string {
-    return this.buildSessionFilePath(agentName, dateStr, sessionId);
+  getSessionFilePath(agentName: string, sessionId: string, dateStr: string, chatId?: string): string {
+    return this.buildSessionFilePath(
+      agentName,
+      dateStr,
+      normalizeHistoryChatDir(chatId),
+      sessionId,
+    );
   }
 
   /**
@@ -165,10 +192,7 @@ export class ConversationHistory {
    * Returns null if no active session.
    */
   getCurrentSessionFilePath(agentName: string): string | null {
-    const sessionId = this.activeSessionIds.get(agentName);
-    const dateStr = this.activeSessionDates.get(agentName);
-    if (!sessionId || !dateStr) return null;
-    return this.buildSessionFilePath(agentName, dateStr, sessionId);
+    return this.getActiveSessionFilePath(agentName);
   }
 
   /**
@@ -177,33 +201,59 @@ export class ConversationHistory {
   clearActiveSession(agentName: string): void {
     this.activeSessionIds.delete(agentName);
     this.activeSessionDates.delete(agentName);
+    this.activeSessionChatDirs.delete(agentName);
   }
 
   // ── Internals ──
 
-  private appendEventForAgents(agentNames: string[], event: SessionHistoryEvent): void {
+  private appendEventForAgents(
+    agentNames: string[],
+    event: SessionHistoryEvent,
+    envelopeForScope?: Envelope,
+  ): void {
+    const preferredChatId = envelopeForScope ? resolveEnvelopeChatId(envelopeForScope) : null;
     for (const agentName of agentNames) {
       if (!this.activeSessionIds.has(agentName)) {
-        this.ensureActiveSession(agentName);
+        this.ensureActiveSession(agentName, preferredChatId);
+      } else {
+        this.promoteActiveSessionChatDir(agentName, normalizeHistoryChatDir(preferredChatId));
       }
-
-      const sessionId = this.activeSessionIds.get(agentName)!;
-      const dateStr = this.activeSessionDates.get(agentName)!;
-      const filePath = this.buildSessionFilePath(agentName, dateStr, sessionId);
-
+      const filePath = this.getActiveSessionFilePath(agentName);
+      if (!filePath) continue;
       this.withFileLock(agentName, () => {
         appendEvent(filePath, event);
+        if (event.type === "envelope-created") {
+          const session = readSessionFile(filePath);
+          if (session) {
+            ensureSessionMarkdownForJson({
+              sessionJsonPath: filePath,
+              session,
+            });
+          }
+          appendSessionMarkdownConversation(getSessionMarkdownPath(filePath), {
+            timestampMs: event.timestampMs,
+            from: event.envelope.from,
+            to: event.envelope.to,
+            content: extractEnvelopeContentText(event.envelope),
+          });
+        }
       });
     }
   }
 
-  private buildSessionFilePath(agentName: string, dateStr: string, sessionId: string): string {
+  private buildSessionFilePath(
+    agentName: string,
+    dateStr: string,
+    chatDir: string,
+    sessionId: string,
+  ): string {
     return path.join(
       this.agentsDir,
       agentName,
       "internal_space",
       "history",
       dateStr,
+      chatDir,
       `${sessionId}.json`,
     );
   }
@@ -228,23 +278,27 @@ export class ConversationHistory {
 
         for (const dateDir of dateDirs) {
           const dateDirPath = path.join(historyDir, dateDir);
-          const sessionIds = listSessionFiles(dateDirPath);
-          if (sessionIds.length === 0) continue;
+          const sessionCandidates = this.listSessionCandidates(dateDirPath);
+          if (sessionCandidates.length === 0) continue;
 
-          let latestSession: { id: string; startedAtMs: number } | null = null;
-          for (const sid of sessionIds) {
-            const filePath = path.join(dateDirPath, `${sid}.json`);
-            const session = readSessionFile(filePath);
+          let latestSession: { id: string; startedAtMs: number; chatDir: string } | null = null;
+          for (const candidate of sessionCandidates) {
+            const session = readSessionFile(candidate.filePath);
             if (!session) continue;
             if (session.endedAtMs !== null) continue;
             if (!latestSession || session.startedAtMs > latestSession.startedAtMs) {
-              latestSession = { id: sid, startedAtMs: session.startedAtMs };
+              latestSession = {
+                id: candidate.id,
+                startedAtMs: session.startedAtMs,
+                chatDir: candidate.chatDir,
+              };
             }
           }
 
           if (latestSession) {
             this.activeSessionIds.set(agentName, latestSession.id);
             this.activeSessionDates.set(agentName, dateDir);
+            this.activeSessionChatDirs.set(agentName, latestSession.chatDir);
             return true;
           }
         }
@@ -263,10 +317,13 @@ export class ConversationHistory {
    * Ensure the agent has an active history session (recover from disk or create new).
    * Called by the executor before processing envelopes.
    */
-  ensureActiveSession(agentName: string): void {
+  ensureActiveSession(agentName: string, chatId?: string | null): void {
+    const preferredChatDir = normalizeHistoryChatDir(chatId);
     if (!this.recoverSession(agentName)) {
-      this.startSession(agentName);
+      this.startSession(agentName, chatId ?? undefined);
+      return;
     }
+    this.promoteActiveSessionChatDir(agentName, preferredChatDir);
   }
 
   /**
@@ -274,6 +331,41 @@ export class ConversationHistory {
    */
   getActiveAgentNames(): string[] {
     return [...this.activeSessionIds.keys()];
+  }
+
+  private listSessionCandidates(dateDirPath: string): Array<{
+    id: string;
+    filePath: string;
+    chatDir: string;
+  }> {
+    const candidates: Array<{ id: string; filePath: string; chatDir: string }> = [];
+
+    let entries: string[] = [];
+    try {
+      entries = fs.readdirSync(dateDirPath);
+    } catch {
+      return candidates;
+    }
+
+    for (const entry of entries) {
+      const fullPath = path.join(dateDirPath, entry);
+      let stat: fs.Stats;
+      try {
+        stat = fs.statSync(fullPath);
+      } catch {
+        continue;
+      }
+      if (!stat.isDirectory()) continue;
+      for (const sessionId of listSessionFiles(fullPath)) {
+        candidates.push({
+          id: sessionId,
+          filePath: path.join(fullPath, `${sessionId}.json`),
+          chatDir: entry,
+        });
+      }
+    }
+
+    return candidates;
   }
 
   /**
@@ -298,6 +390,65 @@ export class ConversationHistory {
         this.fileLocks.delete(agentName);
       }
     });
+  }
+
+  private getActiveSessionFilePath(agentName: string): string | null {
+    const sessionId = this.activeSessionIds.get(agentName);
+    const dateStr = this.activeSessionDates.get(agentName);
+    if (!sessionId || !dateStr) return null;
+
+    const chatDir = this.activeSessionChatDirs.get(agentName) ?? DEFAULT_HISTORY_CHAT_DIR;
+    return this.buildSessionFilePath(agentName, dateStr, chatDir, sessionId);
+  }
+
+  private promoteActiveSessionChatDir(agentName: string, preferredChatDir: string): void {
+    if (preferredChatDir === DEFAULT_HISTORY_CHAT_DIR) return;
+
+    const sessionId = this.activeSessionIds.get(agentName);
+    const dateStr = this.activeSessionDates.get(agentName);
+    if (!sessionId || !dateStr) return;
+
+    const currentChatDir = this.activeSessionChatDirs.get(agentName) ?? DEFAULT_HISTORY_CHAT_DIR;
+    if (currentChatDir === preferredChatDir) return;
+    if (currentChatDir !== DEFAULT_HISTORY_CHAT_DIR) return;
+
+    const currentPath = this.getActiveSessionFilePath(agentName);
+    if (!currentPath || !fs.existsSync(currentPath)) return;
+
+    const targetPath = this.buildSessionFilePath(agentName, dateStr, preferredChatDir, sessionId);
+    if (currentPath === targetPath) {
+      this.activeSessionChatDirs.set(agentName, preferredChatDir);
+      return;
+    }
+    if (fs.existsSync(targetPath)) {
+      logEvent("warn", "history-session-chat-dir-promote-conflict", {
+        "agent-name": agentName,
+        "session-id": sessionId,
+        from: currentPath,
+        to: targetPath,
+      });
+      return;
+    }
+
+    try {
+      fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+      fs.renameSync(currentPath, targetPath);
+      const currentMarkdownPath = getSessionMarkdownPath(currentPath);
+      const targetMarkdownPath = getSessionMarkdownPath(targetPath);
+      if (fs.existsSync(currentMarkdownPath)) {
+        fs.mkdirSync(path.dirname(targetMarkdownPath), { recursive: true });
+        fs.renameSync(currentMarkdownPath, targetMarkdownPath);
+      }
+      this.activeSessionChatDirs.set(agentName, preferredChatDir);
+    } catch (err) {
+      logEvent("warn", "history-session-chat-dir-promote-failed", {
+        "agent-name": agentName,
+        "session-id": sessionId,
+        from: currentPath,
+        to: targetPath,
+        error: errorMessage(err),
+      });
+    }
   }
 
   private resolveParticipantAgentNames(envelope: Envelope): string[] {

@@ -46,15 +46,7 @@ export function purgeSessionSummaryFields(params: { agentsDir: string }): void {
     );
 
     for (const dateDir of dateDirs) {
-      let files: string[] = [];
-      try {
-        files = fs
-          .readdirSync(dateDir)
-          .filter((name) => name.endsWith(".json"))
-          .map((name) => path.join(dateDir, name));
-      } catch {
-        continue;
-      }
+      const files = listDateSessionFiles(dateDir);
 
       for (const filePath of files) {
         scanned += 1;
@@ -85,4 +77,46 @@ export function purgeSessionSummaryFields(params: { agentsDir: string }): void {
       "files-cleaned": cleaned,
     });
   }
+}
+
+function listDateSessionFiles(dateDir: string): string[] {
+  let entries: string[] = [];
+  try {
+    entries = fs.readdirSync(dateDir);
+  } catch {
+    return [];
+  }
+
+  const files: string[] = [];
+  for (const entry of entries) {
+    const entryPath = path.join(dateDir, entry);
+    let stat: fs.Stats;
+    try {
+      stat = fs.statSync(entryPath);
+    } catch {
+      continue;
+    }
+
+    if (!stat.isDirectory()) continue;
+
+    let subEntries: string[] = [];
+    try {
+      subEntries = fs.readdirSync(entryPath);
+    } catch {
+      continue;
+    }
+    for (const subEntry of subEntries) {
+      if (!subEntry.endsWith(".json")) continue;
+      const subPath = path.join(entryPath, subEntry);
+      try {
+        if (fs.statSync(subPath).isFile()) {
+          files.push(subPath);
+        }
+      } catch {
+        // skip unreadable files
+      }
+    }
+  }
+
+  return files;
 }

@@ -1,5 +1,8 @@
 envelope-id: {{ envelope.idShort }}
 from: {{ envelope.from }}
+{% if envelope.chatScope %}
+chat: {{ envelope.chatScope }}
+{% endif %}
 {% if envelope.senderLine %}
 sender: {{ envelope.senderLine }}
 {% endif %}

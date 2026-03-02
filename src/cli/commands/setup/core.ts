@@ -8,20 +8,27 @@ import { setupAgentHome } from "../../../agent/home-setup.js";
 import type { SetupCheckResult } from "../../../daemon/ipc/types.js";
 import type { SetupConfig } from "./types.js";
 import { generateToken } from "../../../agent/auth.js";
-import { DEFAULT_PERMISSION_POLICY, DEFAULT_USER_PERMISSION_POLICY } from "../../../shared/defaults.js";
+import {
+  DEFAULT_PERMISSION_POLICY,
+  DEFAULT_SESSION_CONCURRENCY_GLOBAL,
+  DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
+} from "../../../shared/defaults.js";
 import { SETTINGS_VERSION, type Settings } from "../../../shared/settings.js";
 import { getSettingsPath, writeSettingsFileAtomic } from "../../../shared/settings-io.js";
 import { syncSettingsToDb } from "../../../daemon/settings-sync.js";
+import { parseUserPermissionPolicy } from "../../../shared/user-permissions.js";
+import {
+  ensureDockerDeploymentFiles,
+  getDefaultDockerDeploymentOutputDir,
+} from "./deployment-files.js";
 
 export interface SetupUserInfoStatus {
   bossName?: string;
   bossTimezone?: string;
-  telegramBossId?: string;
   hasAdminToken: boolean;
   missing: {
     bossName: boolean;
     bossTimezone: boolean;
-    telegramBossId: boolean;
     adminToken: boolean;
   };
 }
@@ -38,24 +45,26 @@ export interface SetupStatus {
   userInfo: SetupUserInfoStatus;
 }
 
-function isNumericPrincipal(raw: string): boolean {
-  return /^[0-9]+$/.test(raw);
-}
-
 function buildUserInfoStatus(db: HiBossDatabase): SetupUserInfoStatus {
   const bossName = (db.getBossName() ?? "").trim();
   const bossTimezone = (db.getConfig("boss_timezone") ?? "").trim();
-  const telegramBossId = (db.getAdapterBossIds("telegram")[0] ?? "").trim();
-  const hasAdminToken = Boolean((db.getConfig("admin_token_hash") ?? "").trim());
+  const hasAdminToken = (() => {
+    const raw = (db.getConfig("user_permission_policy") ?? "").trim();
+    if (!raw) return false;
+    try {
+      const policy = parseUserPermissionPolicy(raw);
+      return policy.tokens.some((item) => item.role === "admin");
+    } catch {
+      return false;
+    }
+  })();
   return {
     bossName: bossName || undefined,
     bossTimezone: bossTimezone || undefined,
-    telegramBossId: telegramBossId || undefined,
     hasAdminToken,
     missing: {
       bossName: bossName.length === 0,
       bossTimezone: bossTimezone.length === 0,
-      telegramBossId: telegramBossId.length === 0,
       adminToken: !hasAdminToken,
     },
   };
@@ -72,7 +81,6 @@ function buildEmptySetupStatus(): SetupStatus {
       missing: {
         bossName: true,
         bossTimezone: true,
-        telegramBossId: true,
         adminToken: true,
       },
     },
@@ -222,27 +230,39 @@ async function executeSetupDirect(config: SetupConfig): Promise<{
 
     const settings: Settings = {
       version: SETTINGS_VERSION,
-      boss: {
-        name: config.bossName,
-        timezone: config.bossTimezone,
+      timezone: config.bossTimezone,
+      permissionPolicy: {
+        operations: {
+          ...DEFAULT_PERMISSION_POLICY.operations,
+        },
       },
-      admin: {
-        token: config.adminToken,
-      },
-      telegram: {
-        bossIds: config.adapter.adapterBossIds,
-      },
-      permissionPolicy: DEFAULT_PERMISSION_POLICY,
-      userPermissionPolicy: {
-        ...DEFAULT_USER_PERMISSION_POLICY,
-        bindings: userTokens.map((item) => ({
-          adapterType: config.adapter.adapterType,
-          ...(isNumericPrincipal(item.principal)
-            ? { userId: item.principal }
-            : { username: item.principal }),
-          token: item.token,
-          role: "boss",
+      tokens: [
+        {
+          name: config.bossName,
+          token: config.adminToken.toLowerCase(),
+          role: "admin",
+        },
+        ...userTokens.map((item) => ({
+          name: item.principal,
+          token: item.token.toLowerCase(),
+          role: "admin" as const,
+          bindings: [
+            {
+              adapterType: config.adapter.adapterType,
+              uid: item.principal,
+            },
+          ],
         })),
+      ],
+      runtime: {
+        sessionConcurrency: {
+          perAgent: DEFAULT_SESSION_CONCURRENCY_PER_AGENT,
+          global: DEFAULT_SESSION_CONCURRENCY_GLOBAL,
+        },
+        deployment: {
+          mode: "docker",
+          outputDir: getDefaultDockerDeploymentOutputDir(daemonConfig.dataDir),
+        },
       },
       agents: [
         {
@@ -278,6 +298,12 @@ async function executeSetupDirect(config: SetupConfig): Promise<{
         },
       ],
     };
+
+    ensureDockerDeploymentFiles({
+      hibossDir: daemonConfig.dataDir,
+      outputDir: settings.runtime?.deployment?.outputDir ?? getDefaultDockerDeploymentOutputDir(daemonConfig.dataDir),
+      adminToken: config.adminToken,
+    });
 
     await writeSettingsFileAtomic(daemonConfig.dataDir, settings);
     syncSettingsToDb(db, settings);

@@ -23,11 +23,17 @@ Per agent:
     2026-02-11.md
     2026-02-10.md
     ...
+  history/                      # session history (json + markdown companion)
+    2026-03-03/
+      <chat-id>/
+        <session-id>.json
+        <session-id>.md
 ```
 
 Notes:
 - `internal_space/` is included in provider CLI `--add-dir`, so agents can read/write these files during work.
 - `memories/` is append-friendly and safe to prune/archive later.
+- `history/<date>/<chat-id>/<session-id>.md` stores per-session conversation records and frontmatter handoff metadata.
 - Hi-Boss ensures the internal space layout exists during setup and at session start. If `MEMORY.md` is missing, it is created as an empty file.
 
 ## Memory tiers
@@ -71,13 +77,14 @@ Rules:
 
 - Agents may append to today’s daily file during work.
 - Updating `MEMORY.md` is manual and best-effort (when the agent learns something stable/reusable).
-- Hi-Boss does not implement an automated “reflection/consolidation” task in v1.
+- Session handoff generation (`summary` + `handoff`) is automated on session close (best-effort, async, with retries).
 
 ## Prompt injection (current behavior)
 
 On each new session, Hi-Boss injects:
 1. A truncated snapshot of `internal_space/MEMORY.md` (long-term), then
-2. A truncated snapshot of recent daily memory (latest **N** files).
+2. A truncated snapshot of recent daily memory (latest **N** files), then
+3. Session handoff snapshots from recent history markdown files (`summary + handoff + session-id + file path`).
 
 This keeps “always-on” memory small while still providing a short recency window.
 If no daily files exist yet, the injected daily snapshot is empty.
@@ -91,6 +98,8 @@ These defaults are chosen to keep prompt cost predictable:
 - **Recent daily injected max (combined):** ~8,000 chars (per-day max × days)
 - **Recent daily per-day injected max:** ~4,000 chars
 - **Recent daily window:** last **2** days/files
+- **Session handoff window:** last **3** history date directories (configurable)
+- **Session handoff per-session max:** ~24,000 chars per session (configurable)
 
 Enforcement:
 - Injection is truncated when limits are exceeded and a visible truncation marker is appended to the injected snapshot.
@@ -101,5 +110,6 @@ Enforcement:
 If envelopes are treated as disposable, a recovery-capable backup only needs:
 - `internal_space/MEMORY.md`
 - `internal_space/memories/*.md`
+- `internal_space/history/**/*.md`
 
 Everything else (SQLite queue/audit, vector stores, indexes) is rebuildable runtime state.

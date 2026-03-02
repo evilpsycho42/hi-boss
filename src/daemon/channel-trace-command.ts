@@ -68,7 +68,7 @@ export function handleTraceCommand(params: {
     lines.push(`updated-at: ${formatUnixMsAsTimeZoneOffset(liveTrace.completedAt, tz)}`);
     lines.push(`entry-count: ${liveTrace.entries.length}`);
     const maxEntries = 20;
-    const shown = liveTrace.entries.slice(0, maxEntries);
+    const shown = liveTrace.entries.slice(-maxEntries);
     lines.push(`entries-displayed: ${shown.length}`);
     lines.push(`entries-truncated: ${liveTrace.entries.length > shown.length ? "true" : "false"}`);
 
@@ -119,7 +119,7 @@ export function handleTraceCommand(params: {
   lines.push(`completed-at: ${formatUnixMsAsTimeZoneOffset(trace.completedAt, tz)}`);
   lines.push(`entry-count: ${trace.entries.length}`);
   const maxEntries = 20;
-  const shown = trace.entries.slice(0, maxEntries);
+  const shown = trace.entries.slice(-maxEntries);
   lines.push(`entries-displayed: ${shown.length}`);
   lines.push(`entries-truncated: ${trace.entries.length > shown.length ? "true" : "false"}`);
   if (trace.error) {

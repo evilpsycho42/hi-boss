@@ -14,16 +14,20 @@ import type {
   MessageContent,
   SendMessageOptions,
 } from "../../adapters/types.js";
-import { INTERNAL_VERSION } from "../../shared/version.js";
 import { HiBossDatabase } from "../db/database.js";
 import { ChannelBridge } from "./channel-bridge.js";
+
+const CHANNEL_BATCH_WAIT_MS = 350;
 
 class TestAdapter implements ChatAdapter {
   readonly platform = "telegram";
   private messageHandler: ChannelMessageHandler | null = null;
   private commandHandler: ChannelCommandHandler | null = null;
+  readonly sentMessages: Array<{ chatId: string; content: MessageContent }> = [];
 
-  async sendMessage(_chatId: string, _content: MessageContent, _options?: SendMessageOptions): Promise<void> {}
+  async sendMessage(chatId: string, content: MessageContent, _options?: SendMessageOptions): Promise<void> {
+    this.sentMessages.push({ chatId, content });
+  }
   onMessage(handler: ChannelMessageHandler): void {
     this.messageHandler = handler;
   }
@@ -44,10 +48,6 @@ class TestAdapter implements ChatAdapter {
       return await this.commandHandler(command);
     }
   }
-
-  getCommandHandler(): ChannelCommandHandler | null {
-    return this.commandHandler;
-  }
 }
 
 function withTempDb(run: (db: HiBossDatabase) => Promise<void> | void): Promise<void> {
@@ -62,36 +62,30 @@ function withTempDb(run: (db: HiBossDatabase) => Promise<void> | void): Promise<
     });
 }
 
-test("channel bridge stamps channelSessionId at ingest and does not drift owner to non-boss users", async () => {
+async function waitForChannelBatchFlush(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, CHANNEL_BATCH_WAIT_MS));
+}
+
+test("channel bridge requires /login token before routing channel messages", async () => {
   await withTempDb(async (db) => {
     db.registerAgent({ name: "nex", provider: "codex" });
     db.createBinding("nex", "telegram", "bot-token");
     db.setConfig(
       "user_permission_policy",
       JSON.stringify({
-        version: INTERNAL_VERSION,
-        roles: {
-          boss: { allow: ["channel.command.*", "channel.message.send"] },
-          operator: { allow: ["channel.message.send"] },
-          blocked: { allow: [] },
-        },
-        bindings: [
+        tokens: [
           {
-            "adapter-type": "telegram",
-            username: "boss_user",
+            name: "Ethan",
             token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            role: "boss",
+            role: "admin",
           },
           {
-            "adapter-type": "telegram",
-            "user-id": "member-2",
+            name: "LPC",
             token: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            role: "operator",
+            role: "user",
+            agents: ["nex"],
           },
         ],
-        defaults: {
-          "unmapped-user-role": "blocked",
-        },
       })
     );
 
@@ -110,87 +104,150 @@ test("channel bridge stamps channelSessionId at ingest and does not drift owner 
     await adapter.emitMessage({
       id: "m1",
       platform: "telegram",
-      channelUser: { id: "boss-1", username: "boss_user", displayName: "Boss" },
+      channelUser: { id: "user-1", username: "alice", displayName: "Alice" },
       chat: { id: "chat-1", name: "group-1" },
-      content: { text: "hello" },
+      content: { text: "hello before login" },
       raw: {},
     });
+    assert.equal(envelopes.length, 0);
+    assert.equal(adapter.sentMessages.length, 1);
+    assert.match(adapter.sentMessages[0]!.content.text!, /login/i);
+
+    const login = await adapter.emitCommand({
+      command: "login",
+      args: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      chatId: "chat-1",
+      channelUserId: "any-user",
+      channelUsername: "any-name",
+    });
+    assert.match((login as ChannelCommandResponse | undefined)?.text ?? "", /login:\s*ok/i);
+
+    await adapter.emitMessage({
+      id: "m2",
+      platform: "telegram",
+      channelUser: { id: "any-user", username: "bob", displayName: "Bob" },
+      chat: { id: "chat-1", name: "group-1" },
+      content: { text: "hello after login" },
+      raw: {},
+    });
+    await waitForChannelBatchFlush();
 
     assert.equal(envelopes.length, 1);
     const firstMeta = envelopes[0]?.metadata;
     const firstSessionId = typeof firstMeta?.channelSessionId === "string" ? firstMeta.channelSessionId : null;
     assert.ok(firstSessionId);
 
-    const bindingAfterBoss = db.getChannelSessionBinding("nex", "telegram", "chat-1");
-    assert.equal(bindingAfterBoss?.ownerUserId, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-
-    await adapter.emitMessage({
-      id: "m2",
-      platform: "telegram",
-      channelUser: { id: "member-2", username: "alice", displayName: "Alice" },
-      chat: { id: "chat-1", name: "group-1" },
-      content: { text: "follow-up" },
-      raw: {},
-    });
-
-    assert.equal(envelopes.length, 2);
-    const secondMeta = envelopes[1]?.metadata;
-    const secondSessionId = typeof secondMeta?.channelSessionId === "string" ? secondMeta.channelSessionId : null;
-    assert.equal(secondSessionId, firstSessionId);
-
-    const bindingAfterMember = db.getChannelSessionBinding("nex", "telegram", "chat-1");
-    assert.equal(bindingAfterMember?.ownerUserId, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+    const binding = db.getChannelSessionBinding("nex", "telegram", "chat-1");
+    assert.equal(binding?.ownerUserId, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
   });
 });
 
-test("channel bridge enforces user-permission-policy for command and message entry points", async () => {
+test("channel bridge batches same-chat messages within 200ms into one envelope", async () => {
   await withTempDb(async (db) => {
     db.registerAgent({ name: "nex", provider: "codex" });
     db.createBinding("nex", "telegram", "bot-token");
     db.setConfig(
       "user_permission_policy",
       JSON.stringify({
-        version: INTERNAL_VERSION,
-        roles: {
-          boss: { allow: ["channel.command.*", "channel.message.send"] },
-          operator: { allow: ["channel.command.status", "channel.message.send"] },
-          blocked: { allow: [] },
-        },
-        bindings: [
+        tokens: [
           {
-            "adapter-type": "telegram",
-            "user-id": "op-1",
-            token: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            role: "operator",
-          },
-          {
-            "adapter-type": "telegram",
-            "user-id": "blocked-1",
+            name: "LPC",
             token: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            role: "blocked",
-          },
-          {
-            "adapter-type": "telegram",
-            username: "boss_user",
-            token: "cccccccccccccccccccccccccccccccc",
-            role: "boss",
+            role: "user",
+            agents: ["nex"],
           },
         ],
-        defaults: {
-          "unmapped-user-role": "blocked",
-        },
+      })
+    );
+    db.setChannelUserAuth({
+      adapterType: "telegram",
+      channelUserId: "tg-u-1",
+      token: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    });
+
+    const envelopes: Array<{
+      content: { text?: string; attachments?: Array<{ source: string }> };
+      metadata?: Record<string, unknown>;
+    }> = [];
+    const router = {
+      registerAdapter: () => undefined,
+      routeEnvelope: async (payload: {
+        content: { text?: string; attachments?: Array<{ source: string }> };
+        metadata?: Record<string, unknown>;
+      }) => {
+        envelopes.push(payload);
+      },
+    } as any;
+
+    const bridge = new ChannelBridge(router, db, {} as any);
+    const adapter = new TestAdapter();
+    bridge.connect(adapter, "bot-token");
+
+    await adapter.emitMessage({
+      id: "m1",
+      platform: "telegram",
+      channelUser: { id: "tg-u-1", username: "alice", displayName: "Alice" },
+      chat: { id: "chat-1", name: "group-1" },
+      content: { text: "hello" },
+      raw: {},
+    });
+    await adapter.emitMessage({
+      id: "m2",
+      platform: "telegram",
+      channelUser: { id: "tg-u-1", username: "alice", displayName: "Alice" },
+      chat: { id: "chat-1", name: "group-1" },
+      content: {
+        text: "world",
+        attachments: [{ source: "/tmp/test.png", filename: "test.png" }],
+      },
+      raw: {},
+    });
+
+    await waitForChannelBatchFlush();
+
+    assert.equal(envelopes.length, 1);
+    assert.equal(envelopes[0]?.content.text, "hello\nworld");
+    assert.equal(envelopes[0]?.content.attachments?.length, 1);
+    assert.equal(envelopes[0]?.metadata?.channelMessageId, "m2");
+    assert.deepEqual(envelopes[0]?.metadata?.channelMessageIds, ["m1", "m2"]);
+  });
+});
+
+test("channel bridge authorizes commands by logged-in token agent scope", async () => {
+  await withTempDb(async (db) => {
+    db.registerAgent({ name: "nex", provider: "codex" });
+    db.createBinding("nex", "telegram", "bot-token");
+    db.setConfig(
+      "user_permission_policy",
+      JSON.stringify({
+        tokens: [
+          {
+            name: "LPC",
+            token: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            role: "user",
+            agents: ["nex"],
+          },
+          {
+            name: "Nope",
+            token: "dddddddddddddddddddddddddddddddd",
+            role: "user",
+            agents: ["kai"],
+          },
+          {
+            name: "Ethan",
+            token: "cccccccccccccccccccccccccccccccc",
+            role: "admin",
+          },
+        ],
       })
     );
 
     let commandCalls = 0;
     let lastUserToken: string | undefined;
     let lastFromBoss: boolean | undefined;
-    const routedEnvelopes: unknown[] = [];
     const router = {
       registerAdapter: () => undefined,
-      routeEnvelope: async (payload: unknown) => {
-        routedEnvelopes.push(payload);
-      },
+      routeEnvelope: async (_payload: unknown) => undefined,
     } as any;
 
     const bridge = new ChannelBridge(router, db, {} as any);
@@ -203,60 +260,125 @@ test("channel bridge enforces user-permission-policy for command and message ent
     });
     bridge.connect(adapter, "bot-token");
 
-    const allowed = await adapter.emitCommand({
+    const beforeLogin = await adapter.emitCommand({
       command: "status",
       args: "",
       chatId: "chat-1",
-      channelUserId: "op-1",
+      channelUserId: "tg-u-1",
       channelUsername: "alice",
     });
-    assert.equal((allowed as ChannelCommandResponse | undefined)?.text, "command-ok");
-    assert.equal(commandCalls, 1);
-    assert.equal(lastUserToken, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
-    assert.equal(lastFromBoss, false);
+    assert.equal((beforeLogin as ChannelCommandResponse | undefined)?.text, "error: Login required. Use /login <token>");
+    assert.equal(commandCalls, 0);
 
-    const denied = await adapter.emitCommand({
+    const otherUserLogin = await adapter.emitCommand({
+      command: "login",
+      args: "dddddddddddddddddddddddddddddddd",
+      chatId: "chat-1",
+      channelUserId: "tg-u-2",
+      channelUsername: "blocked",
+    });
+    assert.match((otherUserLogin as ChannelCommandResponse | undefined)?.text ?? "", /login:\s*ok/i);
+    assert.equal(commandCalls, 0);
+
+    const deniedAfterOtherUserLogin = await adapter.emitCommand({
       command: "abort",
       args: "",
       chatId: "chat-1",
-      channelUserId: "op-1",
+      channelUserId: "tg-u-2",
+      channelUsername: "blocked",
+    });
+    assert.equal((deniedAfterOtherUserLogin as ChannelCommandResponse | undefined)?.text, "error: Access denied");
+    assert.equal(commandCalls, 0);
+
+    const okLogin = await adapter.emitCommand({
+      command: "login",
+      args: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      chatId: "chat-1",
+      channelUserId: "tg-u-3",
       channelUsername: "alice",
     });
-    assert.equal((denied as ChannelCommandResponse | undefined)?.text, "error: Access denied");
+    assert.match((okLogin as ChannelCommandResponse | undefined)?.text ?? "", /login:\s*ok/i);
+
+    const allowedAfterLogin = await adapter.emitCommand({
+      command: "abort",
+      args: "",
+      chatId: "chat-1",
+      channelUserId: "tg-u-3",
+      channelUsername: "alice",
+    });
+    assert.equal((allowedAfterLogin as ChannelCommandResponse | undefined)?.text, "command-ok");
     assert.equal(commandCalls, 1);
+    assert.equal(lastUserToken, "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+    assert.equal(lastFromBoss, false);
+
+    const bossLogin = await adapter.emitCommand({
+      command: "login",
+      args: "cccccccccccccccccccccccccccccccc",
+      chatId: "chat-1",
+      channelUserId: "tg-u-5",
+      channelUsername: "boss_user",
+    });
+    assert.match((bossLogin as ChannelCommandResponse | undefined)?.text ?? "", /from-boss:\s*true/i);
 
     const bossAllowed = await adapter.emitCommand({
       command: "abort",
       args: "",
       chatId: "chat-1",
-      channelUserId: "boss-1",
+      channelUserId: "tg-u-5",
       channelUsername: "boss_user",
     });
     assert.equal((bossAllowed as ChannelCommandResponse | undefined)?.text, "command-ok");
     assert.equal(commandCalls, 2);
     assert.equal(lastUserToken, "cccccccccccccccccccccccccccccccc");
     assert.equal(lastFromBoss, true);
+  });
+});
 
-    await adapter.emitMessage({
-      id: "m-blocked",
-      platform: "telegram",
-      channelUser: { id: "blocked-1", username: "blocked", displayName: "Blocked" },
-      chat: { id: "chat-1", name: "group-1" },
-      content: { text: "denied message" },
-      raw: {},
-    });
-    assert.equal(routedEnvelopes.length, 0);
+test("channel bridge resolves auth by channel username fallback", async () => {
+  await withTempDb(async (db) => {
+    db.registerAgent({ name: "molbot", provider: "codex" });
+    db.createBinding("molbot", "telegram", "bot-token");
+    db.setConfig(
+      "user_permission_policy",
+      JSON.stringify({
+        tokens: [
+          {
+            name: "PolyU_CLC",
+            token: "ce00e8e768d3ff9e155f7e69153cd541",
+            role: "user",
+            agents: ["molbot"],
+          },
+        ],
+      })
+    );
 
-    await adapter.emitMessage({
-      id: "m-allowed",
-      platform: "telegram",
-      channelUser: { id: "op-1", username: "alice", displayName: "Alice" },
-      chat: { id: "chat-1", name: "group-1" },
-      content: { text: "allowed message" },
-      raw: {},
+    db.setChannelUserAuth({
+      adapterType: "telegram",
+      channelUsername: "polyu_clc",
+      token: "ce00e8e768d3ff9e155f7e69153cd541",
     });
-    assert.equal(routedEnvelopes.length, 1);
-    const binding = db.getChannelSessionBinding("nex", "telegram", "chat-1");
-    assert.equal(binding?.ownerUserId, "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+
+    let commandCalls = 0;
+    const router = {
+      registerAdapter: () => undefined,
+      routeEnvelope: async (_payload: unknown) => undefined,
+    } as any;
+    const bridge = new ChannelBridge(router, db, {} as any);
+    const adapter = new TestAdapter();
+    bridge.setCommandHandler(async (_cmd) => {
+      commandCalls += 1;
+      return { text: "command-ok" };
+    });
+    bridge.connect(adapter, "bot-token");
+
+    const response = await adapter.emitCommand({
+      command: "status",
+      args: "",
+      chatId: "chat-1",
+      channelUserId: "6441950931",
+      channelUsername: "PolyU_CLC",
+    });
+    assert.equal((response as ChannelCommandResponse | undefined)?.text, "command-ok");
+    assert.equal(commandCalls, 1);
   });
 });

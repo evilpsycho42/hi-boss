@@ -29,6 +29,28 @@ async function isSocketAcceptingConnections(socketPath: string): Promise<boolean
   });
 }
 
+function chmodSocketBestEffort(socketPath: string): void {
+  try {
+    fs.chmodSync(socketPath, 0o600);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (
+      code === "EACCES" ||
+      code === "EPERM" ||
+      code === "ENOTSUP" ||
+      code === "EOPNOTSUPP" ||
+      code === "EROFS"
+    ) {
+      logEvent("warn", "ipc-socket-chmod-skipped", {
+        "socket-path": socketPath,
+        code: code ?? "UNKNOWN",
+      });
+      return;
+    }
+    throw err;
+  }
+}
+
 /**
  * Unix Domain Socket JSON-RPC 2.0 server.
  */
@@ -78,9 +100,13 @@ export class IpcServer {
       this.server.on("error", reject);
 
       this.server.listen(this.socketPath, () => {
-        // Set socket permissions (owner only)
-        fs.chmodSync(this.socketPath, 0o600);
-        resolve();
+        try {
+          // Set socket permissions (owner only) when supported by filesystem.
+          chmodSocketBestEffort(this.socketPath);
+          resolve();
+        } catch (err) {
+          reject(err);
+        }
       });
     });
   }
