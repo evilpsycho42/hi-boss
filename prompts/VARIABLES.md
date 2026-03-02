@@ -81,6 +81,7 @@ Notes:
 | `envelopes[].inReplyTo.text` | string | Replied-to text excerpt (or `(none)`) |
 | `envelopes[].fromBoss` | boolean | Boss flag |
 | `envelopes[].isGroup` | boolean | Whether message is from a group chat |
+| `envelopes[].isStartCommand` | boolean | Whether text begins with `/start` (Telegram-style start command) |
 | `envelopes[].groupName` | string | Group name (or empty for direct/agent messages) |
 | `envelopes[].authorName` | string | Sender display name without boss marker (or empty) |
 | `envelopes[].authorLine` | string | Sender with `[boss]` suffix for group messages (or empty) |

@@ -223,6 +223,12 @@ function buildInReplyTo(metadata: unknown): InReplyToPrompt | undefined {
   };
 }
 
+function isStartCommandText(text: string | undefined): boolean {
+  if (!text) return false;
+  const trimmed = text.trim();
+  return /^\/start(?:@\w+)?(?:\s|$)/i.test(trimmed);
+}
+
 export function buildSystemPromptContext(params: {
   agent: Agent;
   agentToken: string;
@@ -401,6 +407,7 @@ export function buildTurnPromptContext(params: {
       fromName: semantic?.fromName ?? "",
       fromBoss: env.fromBoss,
       isGroup: semantic?.isGroup ?? false,
+      isStartCommand: isStartCommandText(env.content.text),
       groupName: semantic?.groupName ?? "",
       authorName: semantic?.authorName ?? "",
       authorLine,

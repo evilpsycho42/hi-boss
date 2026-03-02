@@ -4,6 +4,9 @@ from: {{ envelope.from }}
 sender: {{ envelope.senderLine }}
 {% endif %}
 created-at: {{ envelope.createdAt.iso }}
+{% if envelope.isStartCommand %}
+channel-command: start
+{% endif %}
 {% if envelope.deliverAt.present %}
 deliver-at: {{ envelope.deliverAt.iso }}
 {% endif %}
