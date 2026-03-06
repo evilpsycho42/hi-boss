@@ -47,6 +47,18 @@ Reactions:
 
 - `reaction.set`
 
+Work items:
+
+- `work-item.list`
+- `work-item.get`
+- `work-item.update`
+
+Projects:
+
+- `project.list`
+- `project.get`
+- `project.select-leader`
+
 Cron:
 
 - `cron.create`

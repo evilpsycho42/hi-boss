@@ -11,6 +11,19 @@ Canonical mapping (selected):
 - `envelope.deliverAt` → SQLite `deliver_at` → `--deliver-at` → `deliver-at:`
 - `envelope.createdAt` → SQLite `created_at` → `created-at:`
 - `envelope.fromBoss` → SQLite `from_boss` → `[boss]` suffix in rendered sender lines
+- `envelope.metadata.workItemId` → `--work-item-id` → `work-item-id:`
+- `workItem.state` → SQLite `work_items.state` → `--state` (work-item commands) → `work-item-state:`
+- `workItem.title` → SQLite `work_items.title` → `--title` (work-item update) → `work-item-title:`
+- `workItem.projectId` → SQLite `work_items.project_id` → daemon-derived project context key
+- `workItem.projectRoot` → SQLite `work_items.project_root` → inferred `project-root:` routing hint when available
+- `workItem.orchestratorAgent` → SQLite `work_items.orchestrator_agent` → orchestrator authority binding
+- `workItem.channelAllowlist[]` → SQLite `work_item_channel_allowlist.channel_address` → `--add-channel/--remove-channel` → `work-item-channel-allowlist:`
+- `workItem.channelAllowlistStrict` → SQLite `work_item_channel_policies.strict_allowlist` → inferred policy behavior for `envelope.send`
+- `workItem.specialists[]` → SQLite `work_item_specialists.agent_name` → delegated specialist membership
+- `project.id` → SQLite `projects.id` → `--id` / `--project-id` (project commands) → `project-id:`
+- `project.root` → SQLite `projects.root` → project workspace boundary for leader selection
+- `project.speakerAgent` → SQLite `projects.speaker_agent` → `project-speaker-agent:`
+- `project.leaders[]` → SQLite `project_leaders.agent_name` (+ `capabilities_json`, `active`) → `project-leaders:`
 - `config.bossTimezone` → SQLite `config.boss_timezone` → setup `boss-timezone` → `boss-timezone:`
 
 Derived (not stored):
@@ -73,6 +86,9 @@ Command flags:
 - `created-at:` (always; boss timezone offset)
 - `deliver-at:` (optional; shown when present, in boss timezone offset)
 - `cron-id:` (optional; shown when present; short id derived from the internal cron schedule UUID)
+- `work-item-id:` (optional)
+- `work-item-state:` (optional)
+- `work-item-title:` (optional)
 
 **Reply/quote keys** (only when the incoming channel message is a reply)
 - `in-reply-to-from-name:` (optional)
@@ -133,6 +149,148 @@ Notes:
 `hiboss cron enable|disable|delete` print:
 - `success: true|false`
 - `cron-id: <cron-id>` (short id; derived from the internal cron schedule UUID)
+
+### CLI Output (Work Items)
+
+`hiboss work-item list|get|update` print parseable key-value output:
+
+- `work-item-id:`
+- `work-item-state:`
+- `work-item-title:` (`(none)` when empty)
+- `work-item-channel-allowlist:` (comma-separated channel addresses or `(none)`)
+- `created-at:` (boss timezone offset)
+- `updated-at:` (boss timezone offset or `(none)`)
+
+`hiboss work-item list` prints:
+- `no-work-items: true` when empty
+
+### CLI Output (Projects)
+
+`hiboss project list|get` print parseable key-value output:
+
+- `project-id:`
+- `project-name:`
+- `project-root:`
+- `project-speaker-agent:`
+- `project-main-group-channel:` (`(none)` when empty)
+- `project-leaders:` (comma-separated agent names or `(none)`)
+- `created-at:` (boss timezone offset)
+- `updated-at:` (boss timezone offset or `(none)`)
+
+`hiboss project list` prints:
+- `no-projects: true` when empty
+
+`hiboss project select-leader` prints:
+- `project-id:`
+- `required-capabilities:` (comma-separated or `(none)`)
+- `candidate-count:`
+- `selected-agent:` (or `(none)`)
+- `selected-agent-health:` (`ok|unknown|error` or `(none)`)
+- `selected-agent-busy:` (`true|false` or `(none)`)
+- `selected-capabilities:` (comma-separated or `(none)`)
+- `candidate-<n>:` (`agent=<name>; health=<health>; busy=<true|false>; capabilities=<csv-or-(none)>`)
+
+---
+
+## Work Item
+
+A work item is a persistent orchestration record.
+
+### Storage (Code ↔ SQLite)
+
+Table: `work_items` (see `src/daemon/db/schema.ts`)
+
+| Code (TypeScript) | SQLite column | Notes |
+|-------------------|---------------|-------|
+| `workItem.id` | `id` | Primary key (normalized id) |
+| `workItem.state` | `state` | `new\|triaged\|in-progress\|awaiting-user\|blocked\|done\|archived` |
+| `workItem.title` | `title` | Nullable |
+| `workItem.projectId` | `project_id` | Nullable project context id |
+| `workItem.projectRoot` | `project_root` | Nullable absolute project root |
+| `workItem.orchestratorAgent` | `orchestrator_agent` | Nullable orchestrator agent name |
+| `workItem.mainGroupChannel` | `main_group_channel` | Nullable main intake/report channel address |
+| `workItem.requirementGroupChannel` | `requirement_group_channel` | Nullable requirement discussion channel address |
+| `workItem.createdAt` | `created_at` | Unix epoch ms (UTC) |
+| `workItem.updatedAt` | `updated_at` | Unix epoch ms (UTC) (nullable) |
+
+Table: `work_item_channel_allowlist` (see `src/daemon/db/schema.ts`)
+
+| Code (TypeScript) | SQLite column | Notes |
+|-------------------|---------------|-------|
+| `workItem.id` | `work_item_id` | FK to `work_items.id` |
+| `workItem.channelAllowlist[]` | `channel_address` | `channel:<adapter>:<chat-id>` |
+| n/a | `created_by_agent` | Agent name that added this entry |
+| n/a | `created_at` | Unix epoch ms (UTC) |
+
+Table: `work_item_channel_policies` (see `src/daemon/db/schema.ts`)
+
+| Code (TypeScript) | SQLite column | Notes |
+|-------------------|---------------|-------|
+| `workItem.id` | `work_item_id` | FK to `work_items.id` |
+| `workItem.channelAllowlistStrict` | `strict_allowlist` | `0/1`; strict mode for channel boundary checks |
+| n/a | `updated_at` | Unix epoch ms (UTC) |
+
+Table: `work_item_specialists` (see `src/daemon/db/schema.ts`)
+
+| Code (TypeScript) | SQLite column | Notes |
+|-------------------|---------------|-------|
+| `workItem.id` | `work_item_id` | FK to `work_items.id` |
+| `workItem.specialists[]` | `agent_name` | Delegated specialist agent name |
+| `workItem.specialist.capability` | `capability` | Optional capability tag |
+| n/a | `assigned_by` | Delegating agent name |
+| n/a | `assigned_at` | Unix epoch ms (UTC) |
+
+Table: `work_item_transitions` (see `src/daemon/db/schema.ts`)
+
+| Code (TypeScript) | SQLite column | Notes |
+|-------------------|---------------|-------|
+| `workItemTransition.id` | `id` | UUID |
+| `workItem.id` | `work_item_id` | FK to `work_items.id` |
+| `workItemTransition.fromState` | `from_state` | Nullable (`none -> initial`) |
+| `workItemTransition.toState` | `to_state` | Destination lifecycle state |
+| `workItemTransition.actor` | `actor` | Optional actor name |
+| `workItemTransition.reason` | `reason` | Optional reason tag |
+| `workItemTransition.createdAt` | `created_at` | Unix epoch ms (UTC) |
+
+### CLI
+
+Command flags:
+- `hiboss work-item ...`: `docs/spec/cli/work-items.md`
+
+---
+
+## Project
+
+A project is a project-scoped orchestration view used to bind workspace, speaker, and candidate leaders.
+
+### Storage (Code ↔ SQLite)
+
+Table: `projects` (see `src/daemon/db/schema.ts`)
+
+| Code (TypeScript) | SQLite column | Notes |
+|-------------------|---------------|-------|
+| `project.id` | `id` | Primary key (normalized id) |
+| `project.name` | `name` | Human-readable project display name |
+| `project.root` | `root` | Absolute project root (unique) |
+| `project.speakerAgent` | `speaker_agent` | Orchestrator/speaker agent name |
+| `project.mainGroupChannel` | `main_group_channel` | Nullable main intake/report channel address |
+| `project.createdAt` | `created_at` | Unix epoch ms (UTC) |
+| `project.updatedAt` | `updated_at` | Unix epoch ms (UTC) (nullable) |
+
+Table: `project_leaders` (see `src/daemon/db/schema.ts`)
+
+| Code (TypeScript) | SQLite column | Notes |
+|-------------------|---------------|-------|
+| `project.id` | `project_id` | FK to `projects.id` |
+| `projectLeader.agentName` | `agent_name` | Leader agent name |
+| `projectLeader.capabilities[]` | `capabilities_json` | JSON string array (nullable) |
+| `projectLeader.active` | `active` | `0/1`; leader eligibility flag |
+| `projectLeader.updatedAt` | `updated_at` | Unix epoch ms (UTC) |
+
+### CLI
+
+Command flags:
+- `hiboss project ...`: `docs/spec/cli/projects.md`
 
 ---
 
@@ -334,3 +492,5 @@ Command flags:
 The current shapes live in:
 - `src/envelope/types.ts`
 - `src/agent/types.ts`
+- `src/shared/work-item.ts`
+- `src/shared/project.ts`
