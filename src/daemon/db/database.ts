@@ -191,10 +191,34 @@ export class HiBossDatabase {
   }
 
   private initSchema(): void {
+    this.preflightLegacyWorkItemSchema();
     this.db.exec(SCHEMA_SQL);
     this.migrateWorkItemSchema();
     this.assertSchemaCompatible();
     this.reconcileStaleAgentRunsOnStartup();
+  }
+
+  private preflightLegacyWorkItemSchema(): void {
+    const hasWorkItems = this.db
+      .prepare("SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'work_items' LIMIT 1")
+      .get() as { found: number } | undefined;
+    if (!hasWorkItems) return;
+
+    const info = this.db.prepare("PRAGMA table_info(work_items)").all() as Array<{ name: string }>;
+    if (info.length === 0) return;
+
+    const existing = new Set(info.map((column) => column.name));
+    const maybeAddColumn = (column: string, type: "TEXT" | "INTEGER"): void => {
+      if (existing.has(column)) return;
+      this.db.exec(`ALTER TABLE work_items ADD COLUMN ${column} ${type}`);
+      existing.add(column);
+    };
+
+    maybeAddColumn("project_id", "TEXT");
+    maybeAddColumn("project_root", "TEXT");
+    maybeAddColumn("orchestrator_agent", "TEXT");
+    maybeAddColumn("main_group_channel", "TEXT");
+    maybeAddColumn("requirement_group_channel", "TEXT");
   }
 
   private migrateWorkItemSchema(): void {
@@ -432,6 +456,11 @@ export class HiBossDatabase {
     this.db.prepare("DELETE FROM agent_bindings").run();
     this.db.prepare("DELETE FROM agent_runs").run();
     this.db.prepare("DELETE FROM agents").run();
+  }
+
+  clearProjectCatalogState(): void {
+    this.db.prepare("DELETE FROM project_leaders").run();
+    this.db.prepare("DELETE FROM projects").run();
   }
 
   // ==================== Agent Operations ====================

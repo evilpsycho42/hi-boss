@@ -7,6 +7,7 @@ import { setupAgentHome } from "../../../agent/home-setup.js";
 import type {
   SetupDeclarativeConfig,
   SetupDeclarativeAgentConfig,
+  SetupDeclarativeProjectConfig,
   SetupReconcileResult,
 } from "./types.js";
 import type { AgentRole } from "../../../shared/agent-role.js";
@@ -23,6 +24,7 @@ import {
 import { getDaemonIanaTimeZone, isValidIanaTimeZone } from "../../../shared/timezone.js";
 import { getSpeakerBindingIntegrity } from "../../../shared/speaker-binding-invariant.js";
 import { isPermissionLevel } from "../../../shared/permissions.js";
+import { SUPPORTED_ADAPTER_TYPES } from "../../../adapters/registry.js";
 
 function ensureBossProfileFile(hibossDir: string): void {
   try {
@@ -54,7 +56,9 @@ function buildDefaultDeclarativeConfig(): SetupDeclarativeConfig {
     version: 2,
     bossName: getDefaultSetupBossName(),
     bossTimezone: getDaemonIanaTimeZone(),
-    telegramBossId: "",
+    adapterBossIds: {
+      telegram: "",
+    },
     agents: [
       {
         name: DEFAULT_SETUP_AGENT_NAME,
@@ -84,6 +88,7 @@ function buildDefaultDeclarativeConfig(): SetupDeclarativeConfig {
         bindings: [],
       },
     ],
+    projects: [],
   };
 }
 
@@ -98,6 +103,23 @@ export async function exportSetupConfig(): Promise<SetupDeclarativeConfig> {
   const db = new HiBossDatabase(dbPath);
   try {
     const allBindings = db.listBindings();
+    const requiredAdapterTypes = new Set(allBindings.map((binding) => binding.adapterType));
+    const adapterBossIds: Record<string, string> = {};
+    for (const adapterType of SUPPORTED_ADAPTER_TYPES) {
+      const bossId = (db.getAdapterBossId(adapterType) ?? "").trim();
+      if (bossId) {
+        adapterBossIds[adapterType] = bossId;
+      }
+    }
+    for (const adapterType of requiredAdapterTypes) {
+      if (adapterBossIds[adapterType]) {
+        continue;
+      }
+      const bossId = (db.getAdapterBossId(adapterType) ?? "").trim();
+      if (bossId) {
+        adapterBossIds[adapterType] = bossId;
+      }
+    }
     const bindingCountByAgent = new Map<string, number>();
     for (const binding of allBindings) {
       bindingCountByAgent.set(binding.agentName, (bindingCountByAgent.get(binding.agentName) ?? 0) + 1);
@@ -138,12 +160,32 @@ export async function exportSetupConfig(): Promise<SetupDeclarativeConfig> {
         };
       });
 
+    const projects = db
+      .listProjects({ limit: 2000 })
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map<SetupDeclarativeProjectConfig>((project) => ({
+        id: project.id,
+        name: project.name,
+        root: project.root,
+        speakerAgent: project.speakerAgent,
+        mainGroupChannel: project.mainGroupChannel,
+        leaders: (project.leaders ?? [])
+          .slice()
+          .sort((a, b) => a.agentName.localeCompare(b.agentName))
+          .map((leader) => ({
+            agentName: leader.agentName,
+            capabilities: leader.capabilities.length > 0 ? leader.capabilities : undefined,
+            active: leader.active,
+          })),
+      }));
+
     if (agents.length === 0) {
       return {
         ...buildDefaultDeclarativeConfig(),
         bossName: (db.getBossName() ?? "").trim() || getDefaultSetupBossName(),
         bossTimezone: (db.getConfig("boss_timezone") ?? "").trim() || getDaemonIanaTimeZone(),
-        telegramBossId: (db.getAdapterBossId("telegram") ?? "").trim(),
+        adapterBossIds,
+        projects,
       };
     }
 
@@ -151,8 +193,9 @@ export async function exportSetupConfig(): Promise<SetupDeclarativeConfig> {
       version: 2,
       bossName: (db.getBossName() ?? "").trim() || getDefaultSetupBossName(),
       bossTimezone: (db.getConfig("boss_timezone") ?? "").trim() || getDaemonIanaTimeZone(),
-      telegramBossId: (db.getAdapterBossId("telegram") ?? "").trim(),
+      adapterBossIds,
       agents,
+      projects,
     };
   } finally {
     db.close();
@@ -172,8 +215,12 @@ function assertDeclarativeConfig(config: SetupDeclarativeConfig): void {
     throw new Error("Invalid setup config (boss-timezone must be a valid IANA timezone)");
   }
 
-  if (!config.telegramBossId.trim()) {
-    throw new Error("Invalid setup config (telegram.adapter-boss-id is required)");
+  if (
+    typeof config.adapterBossIds !== "object" ||
+    config.adapterBossIds === null ||
+    Array.isArray(config.adapterBossIds)
+  ) {
+    throw new Error("Invalid setup config (adapters must be an object)");
   }
 
   if (!Array.isArray(config.agents) || config.agents.length === 0) {
@@ -182,6 +229,7 @@ function assertDeclarativeConfig(config: SetupDeclarativeConfig): void {
 
   const normalizedRoles = new Set<string>();
   const seenNames = new Set<string>();
+  const roleByAgentName = new Map<string, AgentRole>();
   const allBindings: Array<{ agentName: string; adapterType: string; adapterToken: string }> = [];
   const adapterIdentitySet = new Set<string>();
 
@@ -199,6 +247,7 @@ function assertDeclarativeConfig(config: SetupDeclarativeConfig): void {
       throw new Error(`Invalid setup config (duplicate agent name): ${trimmedName}`);
     }
     seenNames.add(lowered);
+    roleByAgentName.set(lowered, agent.role);
 
     if (!AGENT_ROLES.includes(agent.role)) {
       throw new Error("Invalid setup config (agent.role must be speaker or leader)");
@@ -275,6 +324,91 @@ function assertDeclarativeConfig(config: SetupDeclarativeConfig): void {
       `Invalid setup config (duplicate speaker binding): ${duplicate.adapterType} token reused by ${duplicate.speakers.join(", ")}`
     );
   }
+
+  const requiredAdapterTypes = new Set(allBindings.map((binding) => binding.adapterType));
+  for (const adapterType of requiredAdapterTypes) {
+    const adapterBossIdRaw = config.adapterBossIds[adapterType];
+    const adapterBossId = typeof adapterBossIdRaw === "string" ? adapterBossIdRaw.trim() : "";
+    if (!adapterBossId) {
+      throw new Error(`Invalid setup config (${adapterType}.adapter-boss-id is required)`);
+    }
+  }
+
+  if (config.projects === undefined) {
+    return;
+  }
+  if (!Array.isArray(config.projects)) {
+    throw new Error("Invalid setup config (projects must be an array when provided)");
+  }
+
+  const seenProjectIds = new Set<string>();
+  const seenProjectRoots = new Set<string>();
+  for (const project of config.projects) {
+    const projectId = project.id.trim();
+    if (!projectId) {
+      throw new Error("Invalid setup config (project.id is required)");
+    }
+
+    const normalizedProjectId = projectId.toLowerCase();
+    if (seenProjectIds.has(normalizedProjectId)) {
+      throw new Error(`Invalid setup config (duplicate project id): ${projectId}`);
+    }
+    seenProjectIds.add(normalizedProjectId);
+
+    if (!project.name.trim()) {
+      throw new Error(`Invalid setup config (project.name is required for '${projectId}')`);
+    }
+
+    const projectRoot = project.root.trim();
+    if (!projectRoot || !path.isAbsolute(projectRoot)) {
+      throw new Error(`Invalid setup config (project.root for '${projectId}' must be an absolute path)`);
+    }
+    const normalizedRoot = process.platform === "linux" ? projectRoot : projectRoot.toLowerCase();
+    if (seenProjectRoots.has(normalizedRoot)) {
+      throw new Error(`Invalid setup config (duplicate project root): ${projectRoot}`);
+    }
+    seenProjectRoots.add(normalizedRoot);
+
+    const speakerName = project.speakerAgent.trim();
+    const speakerRole = roleByAgentName.get(speakerName.toLowerCase());
+    if (speakerRole !== "speaker") {
+      throw new Error(
+        `Invalid setup config (project.speaker-agent for '${projectId}' must reference an existing speaker agent)`
+      );
+    }
+
+    if (!Array.isArray(project.leaders)) {
+      throw new Error(`Invalid setup config (project.leaders for '${projectId}' must be an array)`);
+    }
+
+    const seenProjectLeaderNames = new Set<string>();
+    for (const leader of project.leaders) {
+      const leaderName = leader.agentName.trim();
+      if (!leaderName) {
+        throw new Error(`Invalid setup config (project.leader.agent-name for '${projectId}' is required)`);
+      }
+      const normalizedLeaderName = leaderName.toLowerCase();
+      if (seenProjectLeaderNames.has(normalizedLeaderName)) {
+        throw new Error(`Invalid setup config (duplicate project leader '${leaderName}' for '${projectId}')`);
+      }
+      seenProjectLeaderNames.add(normalizedLeaderName);
+
+      const leaderRole = roleByAgentName.get(normalizedLeaderName);
+      if (leaderRole !== "leader") {
+        throw new Error(
+          `Invalid setup config (project leader '${leaderName}' for '${projectId}' must reference an existing leader agent)`
+        );
+      }
+
+      if (leader.capabilities !== undefined) {
+        if (!Array.isArray(leader.capabilities) || leader.capabilities.some((capability) => !capability.trim())) {
+          throw new Error(
+            `Invalid setup config (project leader capabilities for '${projectId}' must be non-empty strings)`
+          );
+        }
+      }
+    }
+  }
 }
 
 function requireSetupMutationToken(token: string): string {
@@ -289,6 +423,8 @@ export async function reconcileSetupConfig(params: {
   config: SetupDeclarativeConfig;
   token: string;
   dryRun: boolean;
+  sourcePath?: string;
+  sourceFingerprint?: string;
 }): Promise<SetupReconcileResult> {
   assertDeclarativeConfig(params.config);
 
@@ -348,10 +484,28 @@ export async function reconcileSetupConfig(params: {
 
     const generatedAgentTokens = db.runInTransaction(() => {
       db.clearSetupManagedState();
+      if (params.config.projects !== undefined) {
+        db.clearProjectCatalogState();
+      }
       db.setBossName(params.config.bossName.trim());
       db.setConfig("boss_timezone", params.config.bossTimezone.trim());
-      db.setAdapterBossId("telegram", params.config.telegramBossId.trim().replace(/^@/, ""));
+      for (const [adapterType, rawBossId] of Object.entries(params.config.adapterBossIds)) {
+        const normalizedBossId = rawBossId.trim();
+        if (!normalizedBossId) {
+          continue;
+        }
+        db.setAdapterBossId(
+          adapterType,
+          adapterType === "telegram" ? normalizedBossId.replace(/^@/, "") : normalizedBossId
+        );
+      }
       db.setBossToken(token);
+      if (typeof params.sourcePath === "string" && params.sourcePath.trim()) {
+        db.setConfig("setup_config_file", params.sourcePath.trim());
+      }
+      if (typeof params.sourceFingerprint === "string" && params.sourceFingerprint.trim()) {
+        db.setConfig("setup_config_fingerprint", params.sourceFingerprint.trim());
+      }
 
       const tokens: Array<{ name: string; role: AgentRole; token: string }> = [];
       for (const agent of params.config.agents) {
@@ -376,6 +530,28 @@ export async function reconcileSetupConfig(params: {
 
         for (const binding of agent.bindings) {
           db.createBinding(agent.name.trim(), binding.adapterType.trim(), binding.adapterToken.trim());
+        }
+      }
+
+      if (params.config.projects !== undefined) {
+        for (const project of params.config.projects) {
+          const projectId = project.id.trim();
+          db.upsertProject({
+            id: projectId,
+            name: project.name.trim(),
+            root: project.root.trim(),
+            speakerAgent: project.speakerAgent.trim(),
+            mainGroupChannel: project.mainGroupChannel?.trim() || undefined,
+          });
+
+          for (const leader of project.leaders) {
+            db.upsertProjectLeader({
+              projectId,
+              agentName: leader.agentName.trim(),
+              capabilities: (leader.capabilities ?? []).map((capability) => capability.trim()),
+              active: leader.active ?? true,
+            });
+          }
         }
       }
 

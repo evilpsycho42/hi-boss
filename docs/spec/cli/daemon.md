@@ -11,6 +11,7 @@ Log behavior:
 - A new empty `~/hiboss/.daemon/daemon.log` is created for the new daemon process.
 
 Flags:
+- `--config-file <path>`: optional. Reconcile setup from the given config file before daemon start and persist this file as the startup auto-load source.
 - `--debug`: Include debug-only fields in `daemon.log` (IDs + token usage).
 
 Debug-only fields:
@@ -32,6 +33,9 @@ Output (human-oriented):
   - `log-file: <path>` (shown for general startup failures; omitted for incomplete-setup guidance)
 
 Validation and fail-fast checks:
+- If startup auto-load source exists (`config.setup_config_file`), daemon start attempts setup reconcile before process spawn.
+- Startup auto-load skips reconcile when stored config fingerprint matches the current file fingerprint.
+- If startup auto-load source exists but file is missing, daemon start warns and continues without reconcile.
 - Setup must be complete.
 - Daemon requires role coverage: at least `1 speaker` and `1 leader`.
 - Every `speaker` must have at least one adapter binding.

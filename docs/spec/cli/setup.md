@@ -75,6 +75,9 @@ Behavior:
 - Agent tokens are regenerated on apply and printed once.
 - Existing agent directories are not removed automatically.
 - Daemon must be stopped before apply.
+- Successful apply stores startup auto-load metadata:
+  - `config.setup_config_file` (absolute path)
+  - `config.setup_config_fingerprint` (sha256 of normalized config file content)
 
 Token semantics:
 - If boss token hash already exists, `--token` must verify against stored boss token.
@@ -86,12 +89,17 @@ Top-level fields:
 
 Required:
 - `version: 2`
-- `telegram.adapter-boss-id`
+- `adapters.<adapter-type>.adapter-boss-id` (for each adapter type used by speaker bindings)
 - `agents[]`
 
 Optional (defaults applied if omitted):
 - `boss-name` (default: OS username)
 - `boss-timezone` (default: daemon host timezone; IANA)
+- `projects[]` (optional; project catalog + leader membership to reconcile)
+
+Backward compatibility:
+- Legacy `telegram.adapter-boss-id` is still accepted during config parse.
+- Export always writes canonical `adapters.<adapter-type>.adapter-boss-id` and may also include `telegram.adapter-boss-id` for compatibility.
 
 Forbidden:
 - `boss-token`
@@ -121,11 +129,32 @@ Optional (defaults applied if omitted):
 - `adapter-type`
 - `adapter-token`
 
+`projects[]` fields:
+
+Required per project:
+- `id`
+- `name`
+- `root` (absolute path)
+- `speaker-agent` (must reference an existing `speaker` agent in `agents[]`)
+- `leaders[]` (array; may be empty)
+
+Optional per project:
+- `main-group-channel`
+
+`projects[].leaders[]` fields:
+- `agent-name` (required; must reference an existing `leader` agent in `agents[]`)
+- `capabilities` (optional string array)
+- `active` (optional boolean; default `true`)
+
 Invariants:
 - At least one `speaker` and one `leader`.
 - Every `speaker` has at least one binding.
 - Adapter token identity (`adapter-type` + `adapter-token`) must be unique across agents.
+- For each adapter type used by bindings, `adapters.<adapter-type>.adapter-boss-id` is required.
 - For current adapter support, telegram token format must be valid when `adapter-type=telegram`.
+- Project roots must be absolute paths and unique within one config.
+- Project ids must be unique within one config.
+- Project speaker/leader references must point to existing agents with matching roles.
 
 ### Example (Version 2)
 
@@ -134,8 +163,13 @@ Invariants:
   "version": 2,
   "boss-name": "your-name",
   "boss-timezone": "Asia/Shanghai",
-  "telegram": {
-    "adapter-boss-id": "your_telegram_username"
+  "adapters": {
+    "telegram": {
+      "adapter-boss-id": "your_telegram_username"
+    },
+    "feishu": {
+      "adapter-boss-id": "ou_xxx"
+    }
   },
   "agents": [
     {
@@ -173,6 +207,22 @@ Invariants:
       "permission-level": "standard",
       "bindings": []
     }
+  ],
+  "projects": [
+    {
+      "id": "prj-6f8c0f6fbc67",
+      "name": "hiboos-workspace",
+      "root": "/Users/jijianming/Project/hiboos-workspace",
+      "speaker-agent": "nex",
+      "main-group-channel": "channel:feishu:oc_main_xxx",
+      "leaders": [
+        {
+          "agent-name": "kai",
+          "capabilities": ["implementation", "review"],
+          "active": true
+        }
+      ]
+    }
   ]
 }
 ```
@@ -203,12 +253,15 @@ Setup config apply writes to `{{HIBOSS_DIR}}/.daemon/hiboss.db`.
 Core mappings:
 - `boss-name` → `config.boss_name`
 - `boss-timezone` → `config.boss_timezone`
-- `telegram.adapter-boss-id` → `config.adapter_boss_id_telegram` (stored without `@`)
+- `adapters.<type>.adapter-boss-id` → `config.adapter_boss_id_<type>`
 - `agents[]` → `agents` rows
 - `agents[].bindings[]` → `agent_bindings` rows
+- `projects[]` → `projects` rows
+- `projects[].leaders[]` → `project_leaders` rows
 
 Additional effects:
 - Boss token hash set/updated from CLI `--token`.
 - Setup-managed rows are rebuilt from desired config on apply.
 - Run audit rows in `agent_runs` are cleared on apply.
 - `config.setup_completed = "true"` is set after successful apply.
+- `config.setup_config_file` and `config.setup_config_fingerprint` are updated from the applied file.

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
@@ -14,6 +15,7 @@ import { resolveToken } from "../../token.js";
 import type {
   SetupDeclarativeAgentConfig,
   SetupDeclarativeConfig,
+  SetupDeclarativeProjectConfig,
   SetupPermissionLevel,
   SetupReasoningEffort,
 } from "./types.js";
@@ -24,9 +26,10 @@ interface SetupConfigFileV2 {
   version: 2;
   "boss-name"?: string;
   "boss-timezone"?: string;
-  telegram: {
+  telegram?: {
     "adapter-boss-id": string;
   };
+  adapters?: Record<string, { "adapter-boss-id": string }>;
   agents: Array<{
     name: string;
     role: "speaker" | "leader";
@@ -47,6 +50,99 @@ interface SetupConfigFileV2 {
       "adapter-token": string;
     }>;
   }>;
+  projects?: Array<{
+    id: string;
+    name?: string;
+    root: string;
+    "speaker-agent": string;
+    "main-group-channel"?: string;
+    leaders: Array<{
+      "agent-name": string;
+      capabilities?: string[];
+      active?: boolean;
+    }>;
+  }>;
+}
+
+export interface LoadedSetupConfigFile {
+  filePath: string;
+  json: string;
+  config: SetupDeclarativeConfig;
+  fingerprint: string;
+}
+
+export function computeSetupConfigFingerprint(json: string): string {
+  const normalized = json.replace(/\r\n/g, "\n").trim();
+  return createHash("sha256").update(normalized).digest("hex");
+}
+
+export async function loadSetupConfigFile(configFile: string): Promise<LoadedSetupConfigFile> {
+  const filePath = path.resolve(process.cwd(), configFile);
+  let json: string;
+  try {
+    json = await fs.promises.readFile(filePath, "utf-8");
+  } catch (err) {
+    throw new Error(`Failed to read setup config file: ${(err as Error).message}`);
+  }
+
+  let config: SetupDeclarativeConfig;
+  try {
+    config = parseSetupConfigFileV2(json);
+  } catch (err) {
+    throw new Error((err as Error).message);
+  }
+
+  return {
+    filePath,
+    json,
+    config,
+    fingerprint: computeSetupConfigFingerprint(json),
+  };
+}
+
+function parseAdapterBossIds(raw: Record<string, unknown>): Record<string, string> {
+  const result: Record<string, string> = {};
+
+  const adaptersRaw = raw.adapters;
+  if (adaptersRaw !== undefined) {
+    if (!isPlainObject(adaptersRaw)) {
+      throw new Error("Invalid setup config (adapters must be an object)");
+    }
+    for (const [adapterType, adapterConfig] of Object.entries(adaptersRaw)) {
+      if (!isPlainObject(adapterConfig)) {
+        throw new Error(`Invalid setup config (adapters.${adapterType} must be object)`);
+      }
+      const adapterBossId =
+        typeof adapterConfig["adapter-boss-id"] === "string"
+          ? adapterConfig["adapter-boss-id"].trim()
+          : "";
+      if (!adapterBossId) {
+        throw new Error(`Invalid setup config (${adapterType}.adapter-boss-id is required)`);
+      }
+      result[adapterType] = adapterType === "telegram" ? adapterBossId.replace(/^@/, "") : adapterBossId;
+    }
+  }
+
+  const telegramRaw = raw.telegram;
+  if (telegramRaw !== undefined) {
+    if (!isPlainObject(telegramRaw)) {
+      throw new Error("Invalid setup config (telegram must be an object when provided)");
+    }
+    const adapterBossId =
+      typeof telegramRaw["adapter-boss-id"] === "string" ? telegramRaw["adapter-boss-id"].trim() : "";
+    if (!adapterBossId) {
+      throw new Error("Invalid setup config (telegram.adapter-boss-id is required)");
+    }
+    if (!result.telegram) {
+      result.telegram = adapterBossId.replace(/^@/, "");
+    }
+  }
+
+  if (Object.keys(result).length === 0) {
+    throw new Error("Invalid setup config (at least one adapters.<type>.adapter-boss-id is required)");
+  }
+
+  return result;
 }
 
 function parseSetupPermissionLevel(raw: unknown): SetupPermissionLevel | undefined {
@@ -151,6 +247,110 @@ function parseBindings(raw: unknown, agentName: string): SetupDeclarativeAgentCo
   });
 }
 
+function parseProjectLeaders(raw: unknown, projectId: string): SetupDeclarativeProjectConfig["leaders"] {
+  if (!Array.isArray(raw)) {
+    throw new Error(`Invalid setup config (project.leaders for '${projectId}' must be an array)`);
+  }
+
+  const seen = new Set<string>();
+  return raw.map((item, index) => {
+    if (!isPlainObject(item)) {
+      throw new Error(`Invalid setup config (project.leaders[${index}] for '${projectId}' must be object)`);
+    }
+
+    const agentName = typeof item["agent-name"] === "string" ? item["agent-name"].trim() : "";
+    if (!agentName) {
+      throw new Error(`Invalid setup config (project.leaders[${index}].agent-name for '${projectId}' is required)`);
+    }
+    const normalizedName = agentName.toLowerCase();
+    if (seen.has(normalizedName)) {
+      throw new Error(`Invalid setup config (duplicate project leader '${agentName}' for '${projectId}')`);
+    }
+    seen.add(normalizedName);
+
+    let capabilities: string[] | undefined;
+    if (item.capabilities !== undefined) {
+      if (!Array.isArray(item.capabilities) || item.capabilities.some((value) => typeof value !== "string")) {
+        throw new Error(
+          `Invalid setup config (project.leaders[${index}].capabilities for '${projectId}' must be string array)`
+        );
+      }
+      capabilities = Array.from(
+        new Set(
+          item.capabilities
+            .map((value) => value.trim())
+            .filter((value) => value.length > 0)
+        )
+      );
+    }
+
+    let active: boolean | undefined;
+    if (item.active !== undefined) {
+      if (typeof item.active !== "boolean") {
+        throw new Error(`Invalid setup config (project.leaders[${index}].active for '${projectId}' must be boolean)`);
+      }
+      active = item.active;
+    }
+
+    return {
+      agentName,
+      capabilities,
+      active,
+    };
+  });
+}
+
+function parseProjects(raw: unknown): SetupDeclarativeProjectConfig[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) {
+    throw new Error("Invalid setup config (projects must be an array when provided)");
+  }
+
+  const seenProjectIds = new Set<string>();
+  return raw.map((item, index) => {
+    if (!isPlainObject(item)) {
+      throw new Error(`Invalid setup config (projects[${index}] must be object)`);
+    }
+
+    const id = typeof item.id === "string" ? item.id.trim() : "";
+    if (!id) {
+      throw new Error(`Invalid setup config (projects[${index}].id is required)`);
+    }
+    const normalizedId = id.toLowerCase();
+    if (seenProjectIds.has(normalizedId)) {
+      throw new Error(`Invalid setup config (duplicate projects id): ${id}`);
+    }
+    seenProjectIds.add(normalizedId);
+
+    const root = typeof item.root === "string" ? item.root.trim() : "";
+    if (!root || !path.isAbsolute(root)) {
+      throw new Error(`Invalid setup config (projects[${index}].root must be absolute path)`);
+    }
+
+    const speakerAgent = typeof item["speaker-agent"] === "string" ? item["speaker-agent"].trim() : "";
+    if (!speakerAgent) {
+      throw new Error(`Invalid setup config (projects[${index}].speaker-agent is required)`);
+    }
+
+    const nameRaw = typeof item.name === "string" ? item.name.trim() : "";
+    const name = nameRaw || path.basename(root) || id;
+
+    const mainGroupChannel =
+      typeof item["main-group-channel"] === "string" && item["main-group-channel"].trim().length > 0
+        ? item["main-group-channel"].trim()
+        : undefined;
+
+    return {
+      id,
+      name,
+      root,
+      speakerAgent,
+      mainGroupChannel,
+      leaders: parseProjectLeaders(item.leaders, id),
+    };
+  });
+}
+
 function parseSetupConfigFileV2(json: string): SetupDeclarativeConfig {
   let parsed: unknown;
   try {
@@ -196,16 +396,7 @@ function parseSetupConfigFileV2(json: string): SetupDeclarativeConfig {
     throw new Error("Invalid setup config (boss-timezone must be a valid IANA timezone)");
   }
 
-  const telegramRaw = parsed.telegram;
-  if (!isPlainObject(telegramRaw)) {
-    throw new Error("Invalid setup config (telegram is required)");
-  }
-  const adapterBossIdRaw =
-    typeof telegramRaw["adapter-boss-id"] === "string" ? telegramRaw["adapter-boss-id"].trim() : "";
-  if (!adapterBossIdRaw) {
-    throw new Error("Invalid setup config (telegram.adapter-boss-id is required)");
-  }
-  const telegramBossId = adapterBossIdRaw.replace(/^@/, "");
+  const adapterBossIds = parseAdapterBossIds(parsed);
 
   const agentsRaw = parsed.agents;
   if (!Array.isArray(agentsRaw) || agentsRaw.length === 0) {
@@ -269,8 +460,9 @@ function parseSetupConfigFileV2(json: string): SetupDeclarativeConfig {
     version: 2,
     bossName,
     bossTimezone,
-    telegramBossId,
+    adapterBossIds,
     agents,
+    projects: parseProjects(parsed.projects),
   };
 }
 
@@ -287,22 +479,16 @@ export interface ConfigFileSetupOptions {
 export async function runConfigFileSetup(options: ConfigFileSetupOptions): Promise<void> {
   console.log("\n⚡ Running setup from config file...\n");
 
-  const filePath = path.resolve(process.cwd(), options.configFile);
-  let json: string;
-  try {
-    json = await fs.promises.readFile(filePath, "utf-8");
-  } catch (err) {
-    console.error(`❌ Failed to read setup config file: ${(err as Error).message}\n`);
-    process.exit(1);
-  }
+  const loaded = await (async () => {
+    try {
+      return await loadSetupConfigFile(options.configFile);
+    } catch (err) {
+      console.error(`❌ ${(err as Error).message}\n`);
+      process.exit(1);
+    }
+  })();
 
-  let config: SetupDeclarativeConfig;
-  try {
-    config = parseSetupConfigFileV2(json);
-  } catch (err) {
-    console.error(`❌ ${(err as Error).message}\n`);
-    process.exit(1);
-  }
+  const config = loaded.config;
 
   const token = (() => {
     try {
@@ -318,6 +504,8 @@ export async function runConfigFileSetup(options: ConfigFileSetupOptions): Promi
       config,
       token,
       dryRun: Boolean(options.dryRun),
+      sourcePath: loaded.filePath,
+      sourceFingerprint: loaded.fingerprint,
     });
 
     if (result.dryRun) {

@@ -48,12 +48,28 @@ export interface SetupDeclarativeAgentConfig extends SetupAgentConfig {
   bindings: SetupBindingConfig[];
 }
 
+export interface SetupDeclarativeProjectLeaderConfig {
+  agentName: string;
+  capabilities?: string[];
+  active?: boolean;
+}
+
+export interface SetupDeclarativeProjectConfig {
+  id: string;
+  name: string;
+  root: string;
+  speakerAgent: string;
+  mainGroupChannel?: string;
+  leaders: SetupDeclarativeProjectLeaderConfig[];
+}
+
 export interface SetupDeclarativeConfig {
   version: 2;
   bossName: string;
   bossTimezone: string;
-  telegramBossId: string;
+  adapterBossIds: Record<string, string>;
   agents: SetupDeclarativeAgentConfig[];
+  projects?: SetupDeclarativeProjectConfig[];
 }
 
 export interface SetupDryRunDiff {

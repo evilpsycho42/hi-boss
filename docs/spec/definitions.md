@@ -24,7 +24,11 @@ Canonical mapping (selected):
 - `project.root` → SQLite `projects.root` → project workspace boundary for leader selection
 - `project.speakerAgent` → SQLite `projects.speaker_agent` → `project-speaker-agent:`
 - `project.leaders[]` → SQLite `project_leaders.agent_name` (+ `capabilities_json`, `active`) → `project-leaders:`
+- `setupConfig.projects[]` → `setup --config-file` declarative input → SQLite `projects`
+- `setupConfig.projects[].leaders[]` → `setup --config-file` declarative input → SQLite `project_leaders`
 - `config.bossTimezone` → SQLite `config.boss_timezone` → setup `boss-timezone` → `boss-timezone:`
+- `config.setupConfigFile` → SQLite `config.setup_config_file` → daemon-start startup config auto-load source
+- `config.setupConfigFingerprint` → SQLite `config.setup_config_fingerprint` → daemon-start auto-load skip check
 
 Derived (not stored):
 - `daemon-timezone:` is computed from the daemon host (`Intl.DateTimeFormat().resolvedOptions().timeZone`) and printed by setup for operator clarity.

@@ -3,11 +3,14 @@ import * as path from "path";
 import * as fs from "fs";
 import { fileURLToPath } from "url";
 import { getDefaultConfig, isDaemonRunning, getSocketPath } from "../../daemon/daemon.js";
+import { HiBossDatabase } from "../../daemon/db/database.js";
 import { IpcClient } from "../ipc-client.js";
 import { authorizeCliOperation } from "../authz.js";
 import { resolveToken } from "../token.js";
 import { formatUnixMsAsTimeZoneOffset } from "../../shared/time.js";
 import { getDaemonTimeContext } from "../time-context.js";
+import { loadSetupConfigFile } from "./setup/config-file.js";
+import { reconcileSetupConfig } from "./setup/declarative.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -21,6 +24,7 @@ interface DaemonStatusResult {
 export interface StartDaemonOptions {
   token?: string;
   debug?: boolean;
+  configFile?: string;
 }
 
 export interface StopDaemonOptions {
@@ -120,14 +124,115 @@ function readDaemonStartFailureMessage(logPath: string): string | null {
   return null;
 }
 
+interface PersistedSetupConfigState {
+  setupComplete: boolean;
+  configFilePath?: string;
+  configFingerprint?: string;
+}
+
+function readPersistedSetupConfigState(dbPath: string): PersistedSetupConfigState {
+  if (!fs.existsSync(dbPath)) {
+    return { setupComplete: false };
+  }
+
+  const db = new HiBossDatabase(dbPath);
+  try {
+    const setupComplete = db.isSetupComplete();
+    const configFilePath = (db.getConfig("setup_config_file") ?? "").trim() || undefined;
+    const configFingerprint = (db.getConfig("setup_config_fingerprint") ?? "").trim() || undefined;
+    return {
+      setupComplete,
+      configFilePath,
+      configFingerprint,
+    };
+  } finally {
+    db.close();
+  }
+}
+
+function persistSetupConfigTracking(dbPath: string, filePath: string, fingerprint: string): void {
+  if (!fs.existsSync(dbPath)) {
+    return;
+  }
+
+  const db = new HiBossDatabase(dbPath);
+  try {
+    db.setConfig("setup_config_file", filePath);
+    db.setConfig("setup_config_fingerprint", fingerprint);
+  } finally {
+    db.close();
+  }
+}
+
+async function autoApplySetupConfigBeforeStart(params: {
+  token: string;
+  explicitConfigFile?: string;
+  daemonDir: string;
+}): Promise<void> {
+  const dbPath = path.join(params.daemonDir, "hiboss.db");
+  const persisted = readPersistedSetupConfigState(dbPath);
+  const explicitConfigFile = params.explicitConfigFile?.trim() ?? "";
+  const requestedConfigPath = explicitConfigFile
+    ? path.resolve(process.cwd(), explicitConfigFile)
+    : persisted.configFilePath;
+
+  if (!requestedConfigPath) {
+    return;
+  }
+
+  if (!fs.existsSync(requestedConfigPath)) {
+    if (explicitConfigFile) {
+      throw new Error(`Setup config file not found: ${requestedConfigPath}`);
+    }
+    console.warn(`warning: persisted setup config file is missing, skipping auto-load: ${requestedConfigPath}`);
+    return;
+  }
+
+  const loaded = await loadSetupConfigFile(requestedConfigPath);
+  const isExplicit = explicitConfigFile.length > 0;
+
+  if (!isExplicit && persisted.setupComplete && !persisted.configFingerprint) {
+    persistSetupConfigTracking(dbPath, loaded.filePath, loaded.fingerprint);
+    console.log(`Setup config tracking initialized: ${loaded.filePath}`);
+    return;
+  }
+
+  if (persisted.setupComplete && persisted.configFingerprint && persisted.configFingerprint === loaded.fingerprint) {
+    console.log(`Setup config unchanged, skip auto-apply: ${loaded.filePath}`);
+    return;
+  }
+
+  const result = await reconcileSetupConfig({
+    config: loaded.config,
+    token: params.token,
+    dryRun: false,
+    sourcePath: loaded.filePath,
+    sourceFingerprint: loaded.fingerprint,
+  });
+
+  console.log(
+    `Setup config applied before daemon start (${isExplicit ? "provided" : "persisted"}): ${loaded.filePath}`
+  );
+  if (result.generatedAgentTokens.length > 0) {
+    console.log(`generated-agent-token-count: ${result.generatedAgentTokens.length}`);
+    for (const tokenInfo of result.generatedAgentTokens) {
+      console.log(`agent-name: ${tokenInfo.name}`);
+      console.log(`agent-role: ${tokenInfo.role}`);
+      console.log(`agent-token: ${tokenInfo.token}`);
+    }
+    console.log("warning: agent tokens changed due to setup reconcile; update your token storage.");
+  }
+}
+
 /**
  * Start the daemon.
  */
 export async function startDaemon(options: StartDaemonOptions = {}): Promise<void> {
   const config = getDefaultConfig();
+  let token = "";
 
   try {
-    const token = resolveToken(options.token);
+    token = resolveToken(options.token);
     authorizeCliOperation("daemon.start", token);
   } catch (err) {
     console.error("error:", (err as Error).message);
@@ -145,6 +250,17 @@ export async function startDaemon(options: StartDaemonOptions = {}): Promise<voi
   if (await isDaemonRunning(config)) {
     console.log("Daemon is already running");
     return;
+  }
+
+  try {
+    await autoApplySetupConfigBeforeStart({
+      token,
+      explicitConfigFile: options.configFile,
+      daemonDir: config.daemonDir,
+    });
+  } catch (err) {
+    console.error("error:", (err as Error).message);
+    process.exit(1);
   }
 
   rotateDaemonLogOnStart(config.daemonDir);

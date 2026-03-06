@@ -68,9 +68,17 @@ daemon
   .command("start")
   .description("Start the daemon")
   .option("--token <token>", "Token (defaults to HIBOSS_TOKEN)")
+  .option(
+    "--config-file <path>",
+    "Apply/reconcile setup config before start and record it for auto-load"
+  )
   .option("--debug", "Include debug fields in daemon.log")
   .action((options) => {
-    startDaemon({ token: options.token, debug: Boolean(options.debug) });
+    startDaemon({
+      token: options.token,
+      configFile: options.configFile,
+      debug: Boolean(options.debug),
+    });
   });
 
 daemon
